@@ -1,0 +1,16 @@
+{
+  "name": "Advanced Education",
+  "short_name": "Advanced Ed",
+  "start_url": "/Advanced-Education/",
+  "scope": "/Advanced-Education/",
+  "display": "standalone",
+  "background_color": "#F4F7FB",
+  "theme_color": "#001B3D",
+  "icons": [
+    {
+      "src": "/Advanced-Education/assets/images/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
