@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Image,
   ImageBackground,
   Pressable,
@@ -82,6 +80,618 @@ const CHILD_PROFILE = {
   medicalAlerts: ['Peanut Allergy', 'Asthma', 'EpiPen Required'],
 };
 
+const MOCK_NOTIFICATIONS = [
+  {
+    title: 'Camp Reminder',
+    message: 'Water Day is Friday at 1:00 PM.',
+    time: '1:00 PM',
+    category: 'Camp',
+    read: false,
+  },
+  {
+    title: 'Pickup Alert',
+    message: 'Mia was checked in today at 8:12 AM with Ms. Sarah.',
+    time: '8:12 AM',
+    category: 'Pickup',
+    read: false,
+  },
+  {
+    title: 'Billing Notice',
+    message: 'Your weekly balance is current.',
+    time: 'Today',
+    category: 'Billing',
+    read: true,
+  },
+  {
+    title: 'Daily Note',
+    message: 'Mia had a great day and participated in group activities.',
+    time: 'Yesterday',
+    category: 'Daily',
+    read: true,
+  },
+];
+
+const NOTIFICATION_CATEGORY_THEMES = {
+  Camp: {
+    accent: COLORS.warning,
+    soft: COLORS.softOrange,
+    border: '#FDE68A',
+  },
+  Pickup: {
+    accent: COLORS.blue,
+    soft: COLORS.softBlue,
+    border: '#BFD1FF',
+  },
+  Billing: {
+    accent: COLORS.success,
+    soft: COLORS.softGreen,
+    border: '#BBF7D0',
+  },
+  Daily: {
+    accent: '#7C5CFF',
+    soft: COLORS.softPurple,
+    border: '#D8C7FF',
+  },
+};
+
+function getNotificationTheme(category) {
+  return NOTIFICATION_CATEGORY_THEMES[category] || NOTIFICATION_CATEGORY_THEMES.Pickup;
+}
+
+const BEFORE_AFTER_WEEKLY_HOURS = [
+  { day: 'Monday', hours: '8.5 hrs' },
+  { day: 'Tuesday', hours: '9.0 hrs' },
+  { day: 'Wednesday', hours: '8.0 hrs' },
+  { day: 'Thursday', hours: '7.5 hrs' },
+  { day: 'Friday', hours: '0.0 hrs' },
+];
+
+const AUTHORIZED_PICKUPS_TODAY = [
+  { name: 'Avery Parent', relationship: 'Parent' },
+  { name: 'Susan Carter', relationship: 'Grandmother' },
+  { name: 'David Carter', relationship: 'Uncle' },
+];
+
+function BeforeAfterCareScreen({ onBack, onLogout }) {
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.beforeAfterHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Before & After Care</Text>
+          </View>
+
+          <View style={styles.beforeAfterHeroMain}>
+            <View style={styles.beforeAfterHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Mia Carter</Text>
+              <View style={styles.beforeAfterHeroTag}>
+                <Text style={styles.beforeAfterHeroTagText}>View Only</Text>
+              </View>
+            </View>
+
+            <View style={styles.parentHeroPhotoWrap}>
+              <Image
+                source={HEADER_PHOTO}
+                resizeMode="cover"
+                style={styles.parentHeroPhoto}
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Current Status</Text>
+              <View style={styles.beforeAfterStatusPill}>
+                <Text style={styles.beforeAfterStatusPillText}>Checked In</Text>
+              </View>
+            </View>
+
+            <View style={styles.beforeAfterStatusList}>
+              <View style={styles.beforeAfterStatusRow}>
+                <Text style={styles.beforeAfterStatusLabel}>Check In Time</Text>
+                <Text style={styles.beforeAfterStatusValue}>7:12 AM</Text>
+              </View>
+              <View style={styles.beforeAfterStatusRow}>
+                <Text style={styles.beforeAfterStatusLabel}>Staff Member</Text>
+                <Text style={styles.beforeAfterStatusValue}>Ms. Sarah</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Today&apos;s Schedule</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Daily routine</Text>
+            </View>
+
+            <View style={styles.beforeAfterScheduleList}>
+              <View style={styles.beforeAfterScheduleRow}>
+                <Text style={styles.beforeAfterScheduleLabel}>Arrival Time</Text>
+                <Text style={styles.beforeAfterScheduleValue}>7:12 AM</Text>
+              </View>
+              <View style={styles.beforeAfterScheduleRow}>
+                <Text style={styles.beforeAfterScheduleLabel}>School Dismissal Time</Text>
+                <Text style={styles.beforeAfterScheduleValue}>3:15 PM</Text>
+              </View>
+              <View style={styles.beforeAfterScheduleRow}>
+                <Text style={styles.beforeAfterScheduleLabel}>Pickup Time</Text>
+                <Text style={styles.beforeAfterScheduleValue}>5:45 PM</Text>
+              </View>
+              <View style={styles.beforeAfterScheduleNotes}>
+                <Text style={styles.beforeAfterScheduleLabel}>Notes</Text>
+                <Text style={styles.beforeAfterScheduleNoteText}>
+                  Mia has a regular after care schedule today.
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Weekly Hours</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>This week</Text>
+            </View>
+
+            <View style={styles.beforeAfterHoursList}>
+              {BEFORE_AFTER_WEEKLY_HOURS.map((entry) => (
+                <View key={entry.day} style={styles.beforeAfterHoursRow}>
+                  <Text style={styles.beforeAfterHoursDay}>{entry.day}</Text>
+                  <Text style={styles.beforeAfterHoursValue}>{entry.hours}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.beforeAfterTotalRow}>
+              <Text style={styles.beforeAfterTotalLabel}>Weekly Total</Text>
+              <Text style={styles.beforeAfterTotalValue}>33.0 Hours</Text>
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Billing Preview</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Estimate</Text>
+            </View>
+
+            <Text style={styles.beforeAfterBillingAmount}>$198.00</Text>
+            <Text style={styles.beforeAfterBillingNote}>
+              Final billing is generated by Advanced Education at the end of the week.
+            </Text>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Authorized Pickup Today</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>3 people</Text>
+            </View>
+
+            <View style={styles.beforeAfterPickupList}>
+              {AUTHORIZED_PICKUPS_TODAY.map((person) => (
+                <View key={person.name} style={styles.beforeAfterPickupRow}>
+                  <View style={styles.beforeAfterPickupAvatar}>
+                    <Text style={styles.beforeAfterPickupAvatarText}>
+                      {person.name.charAt(0)}
+                    </Text>
+                  </View>
+                  <View style={styles.beforeAfterPickupTextBlock}>
+                    <Text style={styles.beforeAfterPickupName}>{person.name}</Text>
+                    <Text style={styles.beforeAfterPickupRelationship}>
+                      {person.relationship}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const SUMMER_CAMP_EVENTS = [
+  'Water Day — Friday at 1:00 PM',
+  'Field Trip — Next Tuesday',
+  'Art Project — Wednesday Morning',
+];
+
+const SUMMER_CAMP_NOTES = [
+  'Bring towel and water bottle for Water Day.',
+  'Wear sneakers for outdoor games.',
+  'Blue Group will meet near the playground.',
+];
+
+const SUMMER_CAMP_PHOTOS = ['Photo 1', 'Photo 2', 'Photo 3'];
+
+function SummerCampScreen({ onBack, onLogout }) {
+  const childTheme = getChildGroupTheme(CHILD_PROFILE.group);
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.summerCampHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Summer Camp</Text>
+          </View>
+
+          <View style={styles.summerCampHeroMain}>
+            <View style={styles.summerCampHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Mia Carter</Text>
+              <View
+                style={[
+                  styles.childProfileGroupBadge,
+                  {
+                    backgroundColor: childTheme.soft,
+                    borderColor: childTheme.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.childProfileGroupBadgeText,
+                    { color: childTheme.accent },
+                  ]}
+                >
+                  Blue Group
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.parentHeroPhotoWrap}>
+              <Image
+                source={HEADER_PHOTO}
+                resizeMode="cover"
+                style={styles.parentHeroPhoto}
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Camp Status</Text>
+            </View>
+
+            <View
+              style={styles.summerCampStatusHeaderRow}
+            >
+              <View
+                style={[
+                  styles.childProfileGroupBadge,
+                  {
+                    backgroundColor: childTheme.soft,
+                    borderColor: childTheme.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.childProfileGroupBadgeText,
+                    { color: childTheme.accent },
+                  ]}
+                >
+                  Blue Group
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.childProfileGroupBadge,
+                  { backgroundColor: childTheme.accent },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.childProfileGroupBadgeText,
+                    { color: COLORS.white },
+                  ]}
+                >
+                  Checked In
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.summerCampStatusList}>
+              <View style={styles.summerCampStatusRow}>
+                <Text style={styles.summerCampStatusLabel}>Counselor</Text>
+                <Text style={styles.summerCampStatusValue}>Ms. Sarah</Text>
+              </View>
+              <View style={styles.summerCampStatusRow}>
+                <Text style={styles.summerCampStatusLabel}>Checked In Confirmed</Text>
+                <Text style={styles.summerCampStatusValue}>9:15 AM</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Today&apos;s Camp Schedule</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Blue Group</Text>
+            </View>
+
+            <View style={styles.summerCampScheduleList}>
+              <View style={styles.summerCampScheduleRow}>
+                <Text style={styles.summerCampScheduleLabel}>Morning Activity</Text>
+                <Text style={styles.summerCampScheduleValue}>Outdoor Games</Text>
+              </View>
+              <View style={styles.summerCampScheduleRow}>
+                <Text style={styles.summerCampScheduleLabel}>Lunch</Text>
+                <Text style={styles.summerCampScheduleValue}>12:00 PM</Text>
+              </View>
+              <View style={styles.summerCampScheduleRow}>
+                <Text style={styles.summerCampScheduleLabel}>Afternoon Activity</Text>
+                <Text style={styles.summerCampScheduleValue}>Water Play</Text>
+              </View>
+              <View style={styles.summerCampScheduleRow}>
+                <Text style={styles.summerCampScheduleLabel}>Pickup Window</Text>
+                <Text style={styles.summerCampScheduleValue}>4:00 PM - 5:30 PM</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Upcoming Camp Events</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>This week</Text>
+            </View>
+
+            <View style={styles.summerCampEventList}>
+              {SUMMER_CAMP_EVENTS.map((event) => (
+                <View key={event} style={styles.summerCampEventRow}>
+                  <View style={[styles.summerCampEventDot, { backgroundColor: childTheme.accent }]} />
+                  <Text style={styles.summerCampEventText}>{event}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Camp Notes</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>View only</Text>
+            </View>
+
+            <View style={styles.summerCampNoteList}>
+              {SUMMER_CAMP_NOTES.map((note) => (
+                <View key={note} style={styles.summerCampNoteRow}>
+                  <View style={[styles.summerCampNoteMarker, { backgroundColor: childTheme.accent }]} />
+                  <Text style={styles.summerCampNoteText}>{note}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Camp Photos Preview</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Mock cards</Text>
+            </View>
+
+            <View style={styles.summerCampPhotoGrid}>
+              {SUMMER_CAMP_PHOTOS.map((label) => (
+                <View key={label} style={[styles.summerCampPhotoCard, { borderColor: childTheme.border }]}>
+                  <View style={[styles.summerCampPhotoThumb, { backgroundColor: childTheme.soft }]}>
+                    <Text style={[styles.summerCampPhotoThumbText, { color: childTheme.accent }]}>Blue Group</Text>
+                  </View>
+                  <Text style={styles.summerCampPhotoLabel}>{label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const CHILD_TIMELINE_ITEMS = [
+  {
+    time: '8:12 AM',
+    title: 'Checked In',
+    message: 'Mia was checked in with Ms. Sarah.',
+  },
+  {
+    time: '9:15 AM',
+    title: 'Camp Group Confirmed',
+    message: 'Mia was confirmed present in Blue Group.',
+  },
+  {
+    time: '10:30 AM',
+    title: 'Daily Note',
+    message: 'Mia participated in outdoor games.',
+  },
+  {
+    time: '12:00 PM',
+    title: 'Lunch',
+    message: 'Mia ate lunch with her group.',
+  },
+  {
+    time: '1:00 PM',
+    title: 'Camp Activity',
+    message: 'Water Play activity started.',
+  },
+  {
+    time: '4:35 PM',
+    title: 'Pickup',
+    message: 'Scheduled pickup window is open.',
+  },
+];
+
+function ChildTimelineScreen({ onBack, onLogout }) {
+  const childTheme = getChildGroupTheme(CHILD_PROFILE.group);
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.timelineHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Child Timeline</Text>
+          </View>
+
+          <View style={styles.timelineHeroMain}>
+            <View style={styles.timelineHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Mia Carter</Text>
+              <View
+                style={[
+                  styles.childProfileGroupBadge,
+                  {
+                    backgroundColor: childTheme.soft,
+                    borderColor: childTheme.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.childProfileGroupBadgeText,
+                    { color: childTheme.accent },
+                  ]}
+                >
+                  Blue Group
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.parentHeroPhotoWrap}>
+              <Image
+                source={HEADER_PHOTO}
+                resizeMode="cover"
+                style={styles.parentHeroPhoto}
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.timelineIntroCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Today&apos;s Timeline</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Blue Group</Text>
+            </View>
+            <Text style={styles.timelineIntroText}>
+              A simple view of Mia&apos;s day.
+            </Text>
+          </View>
+
+          <View style={styles.timelineList}>
+            {CHILD_TIMELINE_ITEMS.map((item, index) => (
+              <View key={item.time} style={styles.timelineRow}>
+                <View style={styles.timelineTimeColumn}>
+                  <Text style={styles.timelineTime}>{item.time}</Text>
+                </View>
+
+                <View style={styles.timelineTrackColumn}>
+                  <View style={styles.timelineDot} />
+                  {index < CHILD_TIMELINE_ITEMS.length - 1 ? (
+                    <View style={styles.timelineLine} />
+                  ) : null}
+                </View>
+
+                <View style={styles.timelineCard}>
+                  <Text style={styles.timelineCardTitle}>{item.title}</Text>
+                  <Text style={styles.timelineCardMessage}>{item.message}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
 const CHILD_GROUP_THEMES = {
   'Blue Group': {
     accent: '#0F62FE',
@@ -132,7 +742,6 @@ const OWNER_MODULES = [
 
 const OFFICIAL_LOGO = require('./assets/images/logo.png');
 const HEADER_PHOTO = require('./assets/images/header_kids.jpg');
-const PLAYGROUND_IMAGE = require('./assets/images/playground.png');
 
 function ScreenShell({ children, title, subtitle, badge, titleMaxWidth }) {
   const hasHeroCopy = Boolean(title || subtitle || badge);
@@ -278,31 +887,154 @@ function ActionButtonCard({ accent, title, value, note, onPress, outline = false
   );
 }
 
-function HomeCard({ title, value, note, accent, onPress }) {
-  const accentStyles = {
-    blue: styles.homeAccentBlue,
-    green: styles.homeAccentGreen,
-    orange: styles.homeAccentOrange,
-    purple: styles.homeAccentPurple,
-  };
+function NotificationCard({ item }) {
+  const theme = getNotificationTheme(item.category);
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.homeCard,
-        pressed && styles.pressedTile,
+    <View
+      style={[
+        styles.notificationCard,
+        !item.read && styles.notificationCardUnread,
       ]}
     >
-      <View style={styles.homeCardTop}>
-        <Text style={styles.homeCardLabel}>{title}</Text>
-        <View style={[styles.homeChip, accentStyles[accent] || styles.homeAccentBlue]}>
-          <Text style={styles.homeChipText}>{value}</Text>
+      <View
+        style={[
+          styles.notificationAccentBar,
+          { backgroundColor: theme.accent },
+        ]}
+      />
+
+      <View style={styles.notificationCardBody}>
+        <View style={styles.notificationCardTitleRow}>
+          <Text style={styles.notificationCardTitle}>{item.title}</Text>
+          <View
+            style={[
+              styles.notificationStatusPill,
+              item.read
+                ? styles.notificationStatusPillRead
+                : styles.notificationStatusPillUnread,
+            ]}
+          >
+            <Text
+              style={[
+                styles.notificationStatusPillText,
+                item.read
+                  ? styles.notificationStatusPillTextRead
+                  : styles.notificationStatusPillTextUnread,
+              ]}
+            >
+              {item.read ? 'Read' : 'Unread'}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.notificationCardMessage}>{item.message}</Text>
+
+        <View style={styles.notificationMetaRow}>
+          <View
+            style={[
+              styles.notificationCategoryPill,
+              {
+                backgroundColor: theme.soft,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.notificationCategoryPillText,
+                { color: theme.accent },
+              ]}
+            >
+              {item.category}
+            </Text>
+          </View>
+
+          <Text style={styles.notificationTime}>{item.time}</Text>
         </View>
       </View>
-      {note ? <Text style={styles.homeCardNote}>{note}</Text> : null}
-    </Pressable>
+    </View>
+  );
+}
+
+function NotificationsScreen({ onBack, onLogout }) {
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.notificationsHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Notifications</Text>
+          </View>
+
+          <View style={styles.notificationsHeroMain}>
+            <View style={styles.notificationsHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Mia Carter</Text>
+              <View style={styles.notificationsHeroTag}>
+                <Text style={styles.notificationsHeroTagText}>Messages</Text>
+              </View>
+            </View>
+
+            <View style={styles.parentHeroPhotoWrap}>
+              <Image
+                source={HEADER_PHOTO}
+                resizeMode="cover"
+                style={styles.parentHeroPhoto}
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.notificationsIntroCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Inbox</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                {MOCK_NOTIFICATIONS.filter((item) => !item.read).length} unread
+              </Text>
+            </View>
+            <Text style={styles.notificationsIntroText}>
+              Simple updates from Mia&apos;s day.
+            </Text>
+          </View>
+
+          <View style={styles.notificationsList}>
+            {MOCK_NOTIFICATIONS.map((item) => (
+              <NotificationCard key={item.title} item={item} />
+            ))}
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -565,7 +1297,7 @@ export default function App() {
               <View style={styles.parentQuickGrid}>
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => showComingSoon('Before & After Care')}
+                  onPress={() => setScreen('before-after-care')}
                   style={({ pressed }) => [
                     styles.parentQuickCard,
                     styles.parentQuickBlue,
@@ -580,7 +1312,7 @@ export default function App() {
 
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => showComingSoon('Summer Camp')}
+                  onPress={() => setScreen('summer-camp')}
                   style={({ pressed }) => [
                     styles.parentQuickCard,
                     styles.parentQuickPurple,
@@ -591,6 +1323,21 @@ export default function App() {
                   <Text style={styles.parentQuickTitle}>Summer Camp</Text>
                   <Text style={styles.parentQuickValue}>{PARENT_CHILD.summerCamp}</Text>
                   <Text style={styles.parentQuickNote}>Tap for camp details</Text>
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setScreen('child-timeline')}
+                  style={({ pressed }) => [
+                    styles.parentQuickCard,
+                    styles.parentQuickBlue,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <View style={styles.parentQuickAccentBlue} />
+                  <Text style={styles.parentQuickTitle}>Timeline</Text>
+                  <Text style={styles.parentQuickValue}>View Day</Text>
+                  <Text style={styles.parentQuickNote}>See Mia&apos;s timeline</Text>
                 </Pressable>
 
                 <Pressable
@@ -610,7 +1357,7 @@ export default function App() {
 
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => showComingSoon('Notifications')}
+                  onPress={() => setScreen('notifications')}
                   style={({ pressed }) => [
                     styles.parentQuickCard,
                     styles.parentQuickOrange,
@@ -638,6 +1385,26 @@ export default function App() {
             </View>
           </ScrollView>
         </View>
+      ) : screen === 'summer-camp' ? (
+        <SummerCampScreen
+          onBack={() => setScreen('parent-home')}
+          onLogout={handleLogout}
+        />
+      ) : screen === 'child-timeline' ? (
+        <ChildTimelineScreen
+          onBack={() => setScreen('parent-home')}
+          onLogout={handleLogout}
+        />
+      ) : screen === 'before-after-care' ? (
+        <BeforeAfterCareScreen
+          onBack={() => setScreen('parent-home')}
+          onLogout={handleLogout}
+        />
+      ) : screen === 'notifications' ? (
+        <NotificationsScreen
+          onBack={() => setScreen('parent-home')}
+          onLogout={handleLogout}
+        />
       ) : screen === 'child-profile' ? (
         <View style={styles.parentHomePage}>
           <View style={styles.childProfileHero}>
@@ -1433,12 +2200,12 @@ const styles = StyleSheet.create({
   childProfileHero: {
     alignItems: 'stretch',
     backgroundColor: COLORS.navyDark,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     overflow: 'hidden',
-    paddingBottom: 16,
+    paddingBottom: 10,
     paddingHorizontal: 20,
-    paddingTop: 14,
+    paddingTop: 10,
   },
   childProfileHeaderRow: {
     alignItems: 'center',
@@ -1833,12 +2600,13 @@ testAccountCard: {
   parentHero: {
     alignItems: 'stretch',
     backgroundColor: COLORS.navyDark,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    overflow: 'hidden',
-    paddingBottom: 16,
+borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,    overflow: 'hidden',
+    paddingBottom: 10,
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 10,
   },
   parentHeroGlowOne: {
     backgroundColor: '#174EA6',
@@ -2090,6 +2858,606 @@ parentHeroPhotoWrap: {
   },
   logoutButton: {
     marginTop: 6,
+  },
+  beforeAfterHero: {
+    backgroundColor: COLORS.navyDark,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: 'hidden',
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  beforeAfterHeroMain: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 16,
+    justifyContent: 'space-between',
+  },
+  beforeAfterHeroTextBlock: {
+    flex: 1,
+    paddingVertical: 2,
+  },
+  beforeAfterHeroTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.lightBlue,
+    borderRadius: 999,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  beforeAfterHeroTagText: {
+    color: COLORS.blue,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  beforeAfterStatusPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.success,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  beforeAfterStatusPillText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  beforeAfterStatusList: {
+    gap: 10,
+  },
+  beforeAfterStatusRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  beforeAfterStatusLabel: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  beforeAfterStatusValue: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  beforeAfterScheduleList: {
+    gap: 10,
+  },
+  beforeAfterScheduleRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  beforeAfterScheduleNotes: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  beforeAfterScheduleLabel: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  beforeAfterScheduleValue: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  beforeAfterScheduleNoteText: {
+    color: COLORS.text,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+  beforeAfterHoursList: {
+    gap: 10,
+  },
+  beforeAfterHoursRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  beforeAfterHoursDay: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  beforeAfterHoursValue: {
+    color: COLORS.blue,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  beforeAfterTotalRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.lightBlue,
+    borderRadius: 18,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  beforeAfterTotalLabel: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  beforeAfterTotalValue: {
+    color: COLORS.blue,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  beforeAfterBillingAmount: {
+    color: COLORS.text,
+    fontSize: 34,
+    fontWeight: '900',
+    letterSpacing: -0.8,
+    marginTop: 4,
+  },
+  beforeAfterBillingNote: {
+    color: COLORS.muted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 6,
+  },
+  beforeAfterPickupList: {
+    gap: 12,
+  },
+  beforeAfterPickupRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  beforeAfterPickupAvatar: {
+    alignItems: 'center',
+    backgroundColor: COLORS.lightBlue,
+    borderRadius: 999,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  beforeAfterPickupAvatarText: {
+    color: COLORS.blue,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  beforeAfterPickupTextBlock: {
+    flex: 1,
+  },
+  beforeAfterPickupName: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  beforeAfterPickupRelationship: {
+    color: COLORS.muted,
+    fontSize: 13,
+    marginTop: 3,
+  },
+  summerCampHero: {
+    backgroundColor: COLORS.navyDark,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: 'hidden',
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  summerCampHeroMain: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 16,
+    justifyContent: 'space-between',
+  },
+  summerCampHeroTextBlock: {
+    flex: 1,
+    paddingVertical: 2,
+  },
+  summerCampStatusList: {
+    gap: 10,
+  },
+  summerCampStatusHeaderRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    marginTop: -2,
+  },
+  summerCampStatusRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  summerCampStatusLabel: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  summerCampStatusValue: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  summerCampScheduleList: {
+    gap: 10,
+  },
+  summerCampScheduleRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  summerCampScheduleLabel: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  summerCampScheduleValue: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  summerCampEventList: {
+    gap: 10,
+  },
+  summerCampEventRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  summerCampEventDot: {
+    borderRadius: 999,
+    height: 10,
+    width: 10,
+  },
+  summerCampEventText: {
+    color: COLORS.text,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  summerCampNoteList: {
+    gap: 10,
+  },
+  summerCampNoteRow: {
+    alignItems: 'flex-start',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  summerCampNoteMarker: {
+    borderRadius: 999,
+    height: 10,
+    marginTop: 5,
+    width: 10,
+  },
+  summerCampNoteText: {
+    color: COLORS.text,
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  summerCampPhotoGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  summerCampPhotoCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    borderWidth: 1,
+    flex: 1,
+    overflow: 'hidden',
+    padding: 10,
+  },
+  summerCampPhotoThumb: {
+    alignItems: 'center',
+    borderRadius: 16,
+    justifyContent: 'center',
+    minHeight: 88,
+    padding: 10,
+  },
+  summerCampPhotoThumbText: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  summerCampPhotoLabel: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: '800',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  timelineHero: {
+    backgroundColor: COLORS.navyDark,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: 'hidden',
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  timelineHeroMain: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 16,
+    justifyContent: 'space-between',
+  },
+  timelineHeroTextBlock: {
+    flex: 1,
+    paddingVertical: 2,
+  },
+  timelineIntroCard: {
+    backgroundColor: COLORS.card,
+    borderColor: COLORS.border,
+    borderRadius: 28,
+    borderWidth: 1,
+    padding: 18,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.06,
+    shadowRadius: 24,
+    elevation: 3,
+  },
+  timelineIntroText: {
+    color: COLORS.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+  timelineList: {
+    gap: 12,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'stretch',
+  },
+  timelineTimeColumn: {
+    paddingTop: 6,
+    width: 78,
+  },
+  timelineTime: {
+    color: COLORS.blue,
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  timelineTrackColumn: {
+    alignItems: 'center',
+    width: 18,
+  },
+  timelineDot: {
+    backgroundColor: COLORS.blue,
+    borderColor: COLORS.white,
+    borderRadius: 999,
+    borderWidth: 3,
+    height: 16,
+    width: 16,
+    zIndex: 1,
+  },
+  timelineLine: {
+    backgroundColor: COLORS.border,
+    flex: 1,
+    marginTop: -1,
+    width: 2,
+  },
+  timelineCard: {
+    backgroundColor: COLORS.card,
+    borderColor: COLORS.border,
+    borderRadius: 24,
+    borderWidth: 1,
+    flex: 1,
+    padding: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.05,
+    shadowRadius: 20,
+    elevation: 2,
+  },
+  timelineCardTitle: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  timelineCardMessage: {
+    color: COLORS.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 6,
+  },
+  notificationsHero: {
+    backgroundColor: COLORS.navyDark,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: 'hidden',
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  notificationsHeroMain: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 16,
+    justifyContent: 'space-between',
+  },
+  notificationsHeroTextBlock: {
+    flex: 1,
+    paddingVertical: 2,
+  },
+  notificationsHeroTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.blue,
+    borderRadius: 999,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  notificationsHeroTagText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  notificationsIntroCard: {
+    backgroundColor: COLORS.card,
+    borderColor: COLORS.border,
+    borderRadius: 28,
+    borderWidth: 1,
+    padding: 18,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.06,
+    shadowRadius: 24,
+    elevation: 3,
+  },
+  notificationsIntroText: {
+    color: COLORS.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+  notificationsList: {
+    gap: 12,
+  },
+  notificationCard: {
+    backgroundColor: COLORS.card,
+    borderColor: COLORS.border,
+    borderRadius: 24,
+    borderWidth: 1,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.05,
+    shadowRadius: 20,
+    elevation: 2,
+  },
+  notificationCardUnread: {
+    borderColor: '#BFD1FF',
+    backgroundColor: '#FBFDFF',
+  },
+  notificationAccentBar: {
+    width: 8,
+  },
+  notificationCardBody: {
+    flex: 1,
+    gap: 10,
+    padding: 16,
+  },
+  notificationCardTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  notificationCardTitle: {
+    color: COLORS.text,
+    flexShrink: 1,
+    fontSize: 16,
+    fontWeight: '900',
+    lineHeight: 22,
+  },
+  notificationStatusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  notificationStatusPillUnread: {
+    backgroundColor: COLORS.lightBlue,
+  },
+  notificationStatusPillRead: {
+    backgroundColor: '#EEF2F6',
+  },
+  notificationStatusPillText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  notificationStatusPillTextUnread: {
+    color: COLORS.blue,
+  },
+  notificationStatusPillTextRead: {
+    color: COLORS.muted,
+  },
+  notificationCardMessage: {
+    color: COLORS.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  notificationMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  notificationCategoryPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  notificationCategoryPillText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  notificationTime: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
   },
   loginBackgroundImage: {
   position: 'absolute',
