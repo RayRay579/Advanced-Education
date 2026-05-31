@@ -547,6 +547,217 @@ function SummerCampScreen({ onBack, onLogout }) {
   );
 }
 
+const PARENT_BILLING_HOURS = [
+  { day: 'Monday', hours: '8.5 hrs' },
+  { day: 'Tuesday', hours: '9.0 hrs' },
+  { day: 'Wednesday', hours: '8.0 hrs' },
+  { day: 'Thursday', hours: '7.5 hrs' },
+  { day: 'Friday', hours: '0.0 hrs' },
+];
+
+const PARENT_BILLING_INVOICES = [
+  { period: 'Week of May 20', amount: '$171.50', status: 'Paid' },
+  { period: 'Week of May 27', amount: '$198.00', status: 'Pending' },
+  { period: 'Week of June 3', amount: 'Not generated yet', status: 'Pending' },
+];
+
+function ParentBillingScreen({ onBack, onLogout }) {
+  const childTheme = getChildGroupTheme(CHILD_PROFILE.group);
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.billingHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Billing</Text>
+          </View>
+
+          <View style={styles.billingHeroMain}>
+            <View style={styles.billingHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Mia Carter</Text>
+              <View
+                style={[
+                  styles.childProfileGroupBadge,
+                  {
+                    backgroundColor: childTheme.soft,
+                    borderColor: childTheme.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.childProfileGroupBadgeText,
+                    { color: childTheme.accent },
+                  ]}
+                >
+                  Blue Group
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.parentHeroPhotoWrap}>
+              <Image
+                source={HEADER_PHOTO}
+                resizeMode="cover"
+                style={styles.parentHeroPhoto}
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Current Balance</Text>
+              <View style={styles.billingDuePill}>
+                <Text style={styles.billingDuePillText}>Due Friday</Text>
+              </View>
+            </View>
+            <Text style={styles.billingAmount}>$198.00</Text>
+            <View style={styles.billingDetailList}>
+              <View style={styles.billingDetailRow}>
+                <Text style={styles.billingDetailLabel}>Billing Type</Text>
+                <Text style={styles.billingDetailValue}>Before & After Care</Text>
+              </View>
+              <Text style={styles.billingNote}>
+                Billing is reviewed and sent by Advanced Education.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>This Week</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>33.0 hrs</Text>
+            </View>
+
+            <View style={styles.billingHoursList}>
+              {PARENT_BILLING_HOURS.map((entry) => (
+                <View key={entry.day} style={styles.billingHoursRow}>
+                  <Text style={styles.billingHoursDay}>{entry.day}</Text>
+                  <Text style={styles.billingHoursValue}>{entry.hours}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.billingTotalRow}>
+              <Text style={styles.billingTotalLabel}>Total</Text>
+              <Text style={styles.billingTotalValue}>33.0 hrs</Text>
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Rate Summary</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Estimate</Text>
+            </View>
+
+            <View style={styles.billingSummaryList}>
+              <View style={styles.billingSummaryRow}>
+                <Text style={styles.billingSummaryLabel}>Hourly Rate</Text>
+                <Text style={styles.billingSummaryValue}>$6.00/hr</Text>
+              </View>
+              <View style={styles.billingSummaryRow}>
+                <Text style={styles.billingSummaryLabel}>Weekly Estimate</Text>
+                <Text style={styles.billingSummaryValue}>$198.00</Text>
+              </View>
+              <View style={styles.billingSummaryRow}>
+                <Text style={styles.billingSummaryLabel}>Payment Status</Text>
+                <View style={styles.billingStatusPillOrange}>
+                  <Text style={styles.billingStatusPillOrangeText}>Pending</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Recent Invoices</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>History</Text>
+            </View>
+
+            <View style={styles.billingInvoiceList}>
+              {PARENT_BILLING_INVOICES.map((invoice) => (
+                <View key={invoice.period} style={styles.billingInvoiceRow}>
+                  <View style={styles.billingInvoiceCopy}>
+                    <Text style={styles.billingInvoicePeriod}>{invoice.period}</Text>
+                    <Text style={styles.billingInvoiceAmount}>{invoice.amount}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.billingInvoiceStatusPill,
+                      invoice.status === 'Paid'
+                        ? styles.billingInvoiceStatusPaid
+                        : styles.billingInvoiceStatusPending,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.billingInvoiceStatusText,
+                        invoice.status === 'Paid'
+                          ? styles.billingInvoiceStatusTextPaid
+                          : styles.billingInvoiceStatusTextPending,
+                      ]}
+                    >
+                      {invoice.status}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Payment Note</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>View only</Text>
+            </View>
+
+            <View style={styles.billingNoteList}>
+              <Text style={styles.billingNoteItem}>
+                Payments are handled through Advanced Education.
+              </Text>
+              <Text style={styles.billingNoteItem}>
+                This prototype does not process payments yet.
+              </Text>
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
 const CHILD_TIMELINE_ITEMS = [
   {
     time: '8:12 AM',
@@ -1342,7 +1553,7 @@ export default function App() {
 
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => showComingSoon('Billing')}
+                  onPress={() => setScreen('parent-billing')}
                   style={({ pressed }) => [
                     styles.parentQuickCard,
                     styles.parentQuickGreen,
@@ -1385,6 +1596,11 @@ export default function App() {
             </View>
           </ScrollView>
         </View>
+      ) : screen === 'parent-billing' ? (
+        <ParentBillingScreen
+          onBack={() => setScreen('parent-home')}
+          onLogout={handleLogout}
+        />
       ) : screen === 'summer-camp' ? (
         <SummerCampScreen
           onBack={() => setScreen('parent-home')}
@@ -3216,6 +3432,234 @@ parentHeroPhotoWrap: {
     fontWeight: '800',
     marginTop: 10,
     textAlign: 'center',
+  },
+  billingHero: {
+    backgroundColor: COLORS.navyDark,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: 'hidden',
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  billingHeroMain: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 16,
+    justifyContent: 'space-between',
+  },
+  billingHeroTextBlock: {
+    flex: 1,
+    paddingVertical: 2,
+  },
+  billingAmount: {
+    color: COLORS.text,
+    fontSize: 34,
+    fontWeight: '900',
+    letterSpacing: -0.8,
+    marginTop: 4,
+  },
+  billingDetailList: {
+    gap: 10,
+    marginTop: 10,
+  },
+  billingDetailRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  billingDetailLabel: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  billingDetailValue: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  billingNote: {
+    color: COLORS.muted,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  billingHoursList: {
+    gap: 10,
+  },
+  billingHoursRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  billingHoursDay: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  billingHoursValue: {
+    color: COLORS.blue,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  billingTotalRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.lightBlue,
+    borderRadius: 18,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  billingTotalLabel: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  billingTotalValue: {
+    color: COLORS.blue,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  billingSummaryList: {
+    gap: 10,
+  },
+  billingSummaryRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  billingSummaryLabel: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  billingSummaryValue: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  billingDuePill: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.lightBlue,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  billingDuePillText: {
+    color: COLORS.blue,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  billingStatusPillOrange: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.softOrange,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  billingStatusPillOrangeText: {
+    color: '#C2410C',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  billingInvoiceList: {
+    gap: 10,
+  },
+  billingInvoiceRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  billingInvoiceCopy: {
+    flex: 1,
+  },
+  billingInvoicePeriod: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  billingInvoiceAmount: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  billingInvoiceStatusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  billingInvoiceStatusPaid: {
+    backgroundColor: COLORS.softGreen,
+  },
+  billingInvoiceStatusPending: {
+    backgroundColor: COLORS.softOrange,
+  },
+  billingInvoiceStatusText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  billingInvoiceStatusTextPaid: {
+    color: COLORS.success,
+  },
+  billingInvoiceStatusTextPending: {
+    color: '#C2410C',
+  },
+  billingNoteList: {
+    gap: 10,
+  },
+  billingNoteItem: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    color: COLORS.text,
+    fontSize: 14,
+    lineHeight: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  billingStatusPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.softBlue,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  billingStatusPillText: {
+    color: COLORS.blue,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
   },
   timelineHero: {
     backgroundColor: COLORS.navyDark,
