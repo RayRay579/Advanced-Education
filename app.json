@@ -18,13 +18,17 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       }
     },
-"web": {
-  "output": "single",
-  "favicon": "./assets/images/favicon.png"
-},
-"experiments": {
-  "baseUrl": "/Advanced-Education"
-},
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png",
+      "name": "Advanced Education",
+      "shortName": "Advanced Ed",
+      "startUrl": "/Advanced-Education/",
+      "scope": "/Advanced-Education/",
+      "display": "standalone",
+      "themeColor": "#001B3D"
+    },
+    
     "plugins": [
       [
         "expo-splash-screen",
