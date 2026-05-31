@@ -11,8 +11,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "build:web": "npx expo export --platform web",
-    "deploy": "npm run build:web && gh-pages -d dist"
-  },
+"deploy": "npm run build:web && gh-pages --nojekyll -d dist"  },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@react-navigation/bottom-tabs": "^7.4.0",
@@ -24,7 +23,6 @@
     "expo-haptics": "~15.0.8",
     "expo-image": "~3.0.11",
     "expo-linking": "~8.0.12",
-    "expo-router": "~6.0.23",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
     "expo-symbols": "~1.0.8",
