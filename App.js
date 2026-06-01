@@ -1732,7 +1732,7 @@ function StaffMyHoursScreen({ onBack, onLogout }) {
   );
 }
 
-function OwnerDashboardScreen({ onLogout, onShowComingSoon }) {
+function OwnerDashboardScreen({ onLogout, onShowComingSoon, onOpenStudents, onOpenStaff }) {
   const [openSection, setOpenSection] = useState(null);
 
   const centerStatusCards = [
@@ -2005,22 +2005,43 @@ function OwnerDashboardScreen({ onLogout, onShowComingSoon }) {
       title: 'Owner Quick Actions',
       summary: '8 mission-control shortcuts',
       details: (
-        <View style={styles.ownerSectionDetailsGrid}>
-          {OWNER_MODULES.map((moduleName, index) => {
-            const accents = ['blue', 'green', 'orange', 'purple'];
-            const accent = accents[index % accents.length];
+        <View style={styles.ownerQuickActionsList}>
+          {(() => {
+            const quickActionDescriptions = {
+              Students: 'Manage enrolled children',
+              Staff: 'Manage employees and hours',
+              Parents: 'Manage parent accounts',
+              Billing: 'Review balances and invoices',
+              Messages: 'Center-wide communication',
+              'Camp Events': 'Manage camp schedules',
+              'Invite Codes': 'Create parent and staff access',
+              Reports: 'Attendance and program reports',
+            };
+            return OWNER_MODULES.map((moduleName) => {
+              const action =
+                moduleName === 'Students'
+                  ? onOpenStudents
+                  : moduleName === 'Staff'
+                    ? onOpenStaff
+                    : onShowComingSoon;
 
-            return (
-              <ActionButtonCard
-                key={moduleName}
-                accent={accent}
-                title={moduleName}
-                value="Coming Soon"
-                note="Mission control placeholder"
-                onPress={() => onShowComingSoon(moduleName)}
-              />
-            );
-          })}
+              return (
+                <OwnerNavCard
+                  key={moduleName}
+                  accentColor={OWNER_MODULE_COLORS[moduleName]}
+                  title={moduleName}
+                  subtitle={quickActionDescriptions[moduleName]}
+                  onPress={() =>
+                    moduleName === 'Students'
+                      ? onOpenStudents()
+                      : moduleName === 'Staff'
+                        ? onOpenStaff()
+                      : action(moduleName)
+                  }
+                />
+              );
+            });
+          })()}
         </View>
       ),
     },
@@ -2069,6 +2090,517 @@ function OwnerDashboardScreen({ onLogout, onShowComingSoon }) {
               </View>
             );
           })}
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState('All');
+  const studentAccent = OWNER_MODULE_COLORS.Students;
+  const badgeToneStyles = {
+    blue: styles.ownerStudentBadgeBlue,
+    green: styles.ownerStudentBadgeGreen,
+    orange: styles.ownerStudentBadgeOrange,
+    red: styles.ownerStudentBadgeRed,
+    purple: styles.ownerStudentBadgePurple,
+  };
+
+  const filterPills = ['All', 'Before & After Care', 'Summer Camp', 'Both'];
+
+  const students = [
+    {
+      id: 'mia',
+      name: 'Mia Carter',
+      parent: 'Avery Parent',
+      programs: ['B&A', 'Summer Camp'],
+      programLabels: ['Before & After Care', 'Summer Camp'],
+      status: 'Checked In',
+      statusTone: 'green',
+      badgeLabel: 'Blue Group',
+      badgeTone: 'blue',
+      filterKey: 'Both',
+    },
+    {
+      id: 'liam',
+      name: 'Liam Wilson',
+      parent: 'Dana Wilson',
+      programs: ['Before & After Care'],
+      programLabels: ['Before & After Care'],
+      status: 'On Bus',
+      statusTone: 'orange',
+      badgeLabel: 'Sky Blue',
+      badgeTone: 'blue',
+      filterKey: 'Before & After Care',
+    },
+    {
+      id: 'emma',
+      name: 'Emma Davis',
+      parent: 'Jordan Davis',
+      programs: ['Summer Camp'],
+      programLabels: ['Summer Camp'],
+      status: 'Group Confirmed',
+      statusTone: 'blue',
+      badgeLabel: 'Red Group',
+      badgeTone: 'red',
+      filterKey: 'Summer Camp',
+    },
+    {
+      id: 'noah',
+      name: 'Noah Brown',
+      parent: 'Taylor Brown',
+      programs: ['Before & After Care'],
+      programLabels: ['Before & After Care'],
+      status: 'Picked Up',
+      statusTone: 'green',
+      badgeLabel: 'Soft Orange',
+      badgeTone: 'orange',
+      filterKey: 'Before & After Care',
+    },
+  ];
+
+  const summaryCards = [
+    { title: 'Total Students', value: '42', accent: 'blue' },
+    { title: 'Before & After Care', value: '24', accent: 'blue' },
+    { title: 'Summer Camp', value: '31', accent: 'blue' },
+    { title: 'Both Programs', value: '13', accent: 'blue' },
+  ];
+
+  const visibleStudents = students.filter((student) => {
+    const query = searchQuery.trim().toLowerCase();
+    const matchesQuery =
+      !query ||
+      student.name.toLowerCase().includes(query) ||
+      student.parent.toLowerCase().includes(query);
+    const matchesFilter =
+      activeFilter === 'All' ||
+      (activeFilter === 'Both' ? student.programs.length > 1 : student.filterKey === activeFilter);
+    return matchesQuery && matchesFilter;
+  });
+
+  return (
+    <View style={styles.page}>
+      <View style={styles.hero}>
+        <View style={styles.heroOrbLarge} />
+        <View style={styles.heroOrbSmall} />
+        <View style={styles.childProfileHeaderRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.childProfileBackButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.childProfileBackButtonText}>Back</Text>
+          </Pressable>
+
+          <Text style={styles.childProfileHeaderLabel}>Students</Text>
+        </View>
+          <View style={styles.ownerDashboardHeroCopy}>
+            <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+            <Text style={styles.shellHeroTitle}>Students</Text>
+            <Text style={styles.shellHeroSubtitle}>Manage enrolled children</Text>
+          <View
+            style={[
+              styles.shellHeroPill,
+              styles.ownerStudentsHeroPill,
+              { marginTop: 10 },
+            ]}
+          >
+            <Text style={styles.ownerStudentsHeroPillText}>Owner Access</Text>
+          </View>
+          </View>
+        </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.contentStack}>
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Student Summary</Text>
+            <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
+              {summaryCards.map((card) => (
+                <SummaryTile
+                  key={card.title}
+                  accent={card.accent}
+                  badge={card.title.charAt(0)}
+                  title={card.title}
+                  value={card.value}
+                  note="Center-wide totals"
+                  fill="Owner"
+                />
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Search / Filter</Text>
+            <TextInput
+              placeholder="Search student name..."
+              placeholderTextColor={COLORS.muted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={styles.ownerSearchInput}
+            />
+
+            <View style={styles.ownerFilterPillRow}>
+              {filterPills.map((pill) => {
+                const isActive = activeFilter === pill;
+                return (
+                  <Pressable
+                    key={pill}
+                    accessibilityRole="button"
+                    onPress={() => setActiveFilter(pill)}
+                    style={({ pressed }) => [
+                      styles.ownerFilterPill,
+                      isActive && styles.ownerFilterPillActive,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.ownerFilterPillText,
+                        isActive && styles.ownerFilterPillTextActive,
+                      ]}
+                    >
+                      {pill}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Student List</Text>
+            <View style={styles.ownerStudentList}>
+              {visibleStudents.map((student) => (
+                <View key={student.id} style={styles.ownerStudentCard}>
+                  <View style={styles.ownerStudentTopRow}>
+                    <View style={styles.ownerStudentMainBlock}>
+                      <Text style={styles.ownerStudentName}>{student.name}</Text>
+                      <Text style={styles.ownerStudentParent}>Parent: {student.parent}</Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.ownerStudentBadge,
+                        badgeToneStyles[student.badgeTone] || styles.ownerStudentBadgeBlue,
+                      ]}
+                    >
+                      <Text style={styles.ownerStudentBadgeText}>{student.badgeLabel}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.ownerStudentChipRow}>
+                    {student.programLabels.map((program) => (
+                      <View key={program} style={styles.ownerStudentProgramChip}>
+                        <Text style={styles.ownerStudentProgramChipText}>{program}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  <View style={styles.ownerStudentMetaRow}>
+                    <View
+                      style={[
+                        styles.ownerStudentStatusPill,
+                        styles.ownerStudentStatusPillBlue,
+                      ]}
+                    >
+                      <Text style={styles.ownerStudentStatusPillText}>{student.status}</Text>
+                    </View>
+                  </View>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => Alert.alert('Owner student profile coming next.')}
+                    style={({ pressed }) => [
+                      styles.ownerStudentProfileButton,
+                      { backgroundColor: studentAccent },
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text style={styles.ownerStudentProfileButtonText}>View Profile</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Owner Student Actions</Text>
+            <View style={styles.ownerActionButtonStack}>
+              {['Add Student', 'Send Parent Invite Code', 'View Attendance', 'View Billing'].map(
+                (label) => (
+                  <Pressable
+                    key={label}
+                    accessibilityRole="button"
+                    onPress={() => onShowComingSoon(label)}
+                    style={({ pressed }) => [
+                      styles.actionCard,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <View style={styles.actionAccentBlue} />
+                    <View style={styles.actionCardBody}>
+                      <Text style={styles.actionTitle}>{label}</Text>
+                      <Text style={styles.actionNote}>Coming Soon</Text>
+                    </View>
+                    <Text style={styles.chevron}>›</Text>
+                  </Pressable>
+                )
+              )}
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function OwnerStaffScreen({ onBack, onLogout, onShowComingSoon }) {
+  const staffAccent = OWNER_MODULE_COLORS.Staff;
+
+  const staffSummaryCards = [
+    { title: 'Total Staff', value: '12', accent: 'green' },
+    { title: 'Clocked In', value: '7', accent: 'green' },
+    { title: 'Clocked Out', value: '5', accent: 'green' },
+    { title: 'Hours Pending Review', value: '3', accent: 'green' },
+  ];
+
+  const staffMembers = [
+    {
+      id: 'ms-sarah',
+      name: 'Ms. Sarah',
+      role: 'Counselor',
+      status: 'Clocked In',
+      today: '7:30 AM - 4:00 PM',
+      hours: '32.0',
+      review: 'Pending',
+      badge: 'Shift On',
+      badgeTone: 'green',
+    },
+    {
+      id: 'mr-james',
+      name: 'Mr. James',
+      role: 'Bus / After Care',
+      status: 'Clocked In',
+      today: '8:00 AM - 5:00 PM',
+      hours: '30.5',
+      review: 'Approved',
+      badge: 'Shift On',
+      badgeTone: 'blue',
+    },
+    {
+      id: 'ms-kelly',
+      name: 'Ms. Kelly',
+      role: 'Camp Counselor',
+      status: 'Clocked Out',
+      today: '7:00 AM - 3:00 PM',
+      hours: '28.0',
+      review: 'Pending',
+      badge: 'Shift Off',
+      badgeTone: 'orange',
+    },
+  ];
+
+  const badgeToneStyles = {
+    blue: styles.ownerStaffBadgeBlue,
+    green: styles.ownerStaffBadgeGreen,
+    orange: styles.ownerStaffBadgeOrange,
+    red: styles.ownerStaffBadgeRed,
+    purple: styles.ownerStaffBadgePurple,
+  };
+
+  const reviewToneStyles = {
+    blue: styles.ownerStaffReviewBlue,
+    green: styles.ownerStaffReviewGreen,
+    orange: styles.ownerStaffReviewOrange,
+  };
+
+  return (
+    <View style={styles.page}>
+      <View style={styles.hero}>
+        <View style={styles.heroOrbLarge} />
+        <View style={styles.heroOrbSmall} />
+        <View style={styles.childProfileHeaderRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.childProfileBackButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.childProfileBackButtonText}>Back</Text>
+          </Pressable>
+
+          <Text style={styles.childProfileHeaderLabel}>Staff</Text>
+        </View>
+
+        <View style={styles.ownerDashboardHeroCopy}>
+          <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+          <Text style={styles.shellHeroTitle}>Staff</Text>
+          <Text style={styles.shellHeroSubtitle}>Manage employees and hours</Text>
+          <View
+            style={[
+              styles.shellHeroPill,
+              styles.ownerStaffHeroPill,
+              { marginTop: 10 },
+            ]}
+          >
+            <Text style={styles.ownerStaffHeroPillText}>Owner Access</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.contentStack}>
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Staff Summary</Text>
+            <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
+              {staffSummaryCards.map((card) => (
+                <SummaryTile
+                  key={card.title}
+                  accent={card.accent}
+                  badge={card.title.charAt(0)}
+                  title={card.title}
+                  value={card.value}
+                  note="Center-wide totals"
+                  fill="Owner"
+                />
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Staff List</Text>
+            <View style={styles.ownerStaffList}>
+              {staffMembers.map((member) => (
+                <View key={member.id} style={styles.ownerStaffCard}>
+                  <View style={styles.ownerStudentTopRow}>
+                    <View style={styles.ownerStudentMainBlock}>
+                      <Text style={styles.ownerStudentName}>{member.name}</Text>
+                      <Text style={styles.ownerStudentParent}>Role: {member.role}</Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.ownerStaffBadge,
+                        badgeToneStyles[member.badgeTone] || styles.ownerStaffBadgeGreen,
+                      ]}
+                    >
+                      <Text style={styles.ownerStaffBadgeText}>{member.badge}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.ownerStaffMetaList}>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Status</Text>
+                      <View
+                        style={[
+                          styles.ownerStaffStatusPill,
+                          member.status === 'Clocked In'
+                            ? styles.ownerStaffStatusPillGreen
+                            : styles.ownerStaffStatusPillOrange,
+                        ]}
+                      >
+                        <Text style={styles.ownerStaffStatusPillText}>{member.status}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Today</Text>
+                      <Text style={styles.ownerStaffMetaValue}>{member.today}</Text>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Hours This Week</Text>
+                      <Text style={styles.ownerStaffMetaValue}>{member.hours}</Text>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Review Status</Text>
+                      <View
+                        style={[
+                          styles.ownerStaffReviewPill,
+                          member.review === 'Approved'
+                            ? reviewToneStyles.green
+                            : reviewToneStyles.orange,
+                        ]}
+                      >
+                        <Text style={styles.ownerStaffReviewPillText}>{member.review}</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => onShowComingSoon('View Staff Profile')}
+                    style={({ pressed }) => [
+                      styles.ownerStaffProfileButton,
+                      { backgroundColor: staffAccent },
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text style={styles.ownerStaffProfileButtonText}>View Staff Profile</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Owner Staff Actions</Text>
+            <View style={styles.ownerActionButtonStack}>
+              {['Add Staff', 'Send Staff Invite Code', 'Review Hours', 'Staff Schedule'].map(
+                (label) => (
+                  <Pressable
+                    key={label}
+                    accessibilityRole="button"
+                    onPress={() => onShowComingSoon(label)}
+                    style={({ pressed }) => [
+                      styles.actionCard,
+                      pressed && styles.pressedTile,
+                    ]}
+                  >
+                    <View style={[styles.actionAccent, { backgroundColor: staffAccent }]} />
+                    <View style={styles.actionCardBody}>
+                      <Text style={styles.actionTitle}>{label}</Text>
+                      <Text style={styles.actionNote}>Coming Soon</Text>
+                    </View>
+                    <Text style={styles.chevron}>›</Text>
+                  </Pressable>
+                )
+              )}
+            </View>
+          </View>
 
           <Pressable
             accessibilityRole="button"
@@ -3393,6 +3925,17 @@ const OWNER_MODULES = [
   'Reports',
 ];
 
+const OWNER_MODULE_COLORS = {
+  Students: '#0F62FE',
+  Staff: '#16A34A',
+  Parents: '#7C4DFF',
+  Billing: '#F59E0B',
+  Messages: '#38BDF8',
+  'Camp Events': '#14B8A6',
+  'Invite Codes': '#F97366',
+  Reports: '#001B3D',
+};
+
 const OFFICIAL_LOGO = require('./assets/images/logo.png');
 const HEADER_PHOTO = require('./assets/images/header_kids.jpg');
 
@@ -3439,7 +3982,15 @@ function SummaryTile({ accent, title, value, note, fill, onPress, badge }) {
   return <View style={styles.summaryTile}>{Content}</View>;
 }
 
-function ActionButtonCard({ accent, title, value, note, onPress, outline = false }) {
+function ActionButtonCard({
+  accent,
+  title,
+  subtitle,
+  value,
+  note,
+  onPress,
+  outline = false,
+}) {
   const accentStyles = {
     blue: styles.actionAccentBlue,
     green: styles.actionAccentGreen,
@@ -3460,10 +4011,28 @@ function ActionButtonCard({ accent, title, value, note, onPress, outline = false
       <View style={[styles.actionAccent, accentStyles[accent] || styles.actionAccentBlue]} />
       <View style={styles.actionCardBody}>
         <Text style={styles.actionTitle}>{title}</Text>
-        <Text style={styles.actionValue}>{value}</Text>
+        {subtitle ? <Text style={styles.actionSubtitle}>{subtitle}</Text> : null}
+        {value ? <Text style={styles.actionValue}>{value}</Text> : null}
         {note ? <Text style={styles.actionNote}>{note}</Text> : null}
       </View>
       <Text style={styles.chevron}>›</Text>
+    </Pressable>
+  );
+}
+
+function OwnerNavCard({ accentColor, title, subtitle, onPress }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.ownerNavCard, pressed && styles.pressedTile]}
+    >
+      <View style={styles.ownerNavContent}>
+        <View style={[styles.ownerNavAccent, { backgroundColor: accentColor }]} />
+        <Text style={styles.ownerNavTitle}>{title}</Text>
+        <Text style={styles.ownerNavSubtitle}>{subtitle}</Text>
+      </View>
+      <Text style={styles.ownerNavChevron}>›</Text>
     </Pressable>
   );
 }
@@ -4554,8 +5123,25 @@ export default function App() {
           savedNotes={staffDailyNotesSavedEntries}
           onSaveNote={saveStaffDailyNote}
         />
+      ) : screen === 'owner-students' ? (
+        <OwnerStudentsScreen
+          onBack={() => setScreen('owner-home')}
+          onLogout={handleLogout}
+          onShowComingSoon={showComingSoon}
+        />
+      ) : screen === 'owner-staff' ? (
+        <OwnerStaffScreen
+          onBack={() => setScreen('owner-home')}
+          onLogout={handleLogout}
+          onShowComingSoon={showComingSoon}
+        />
       ) : (
-        <OwnerDashboardScreen onLogout={handleLogout} onShowComingSoon={showComingSoon} />
+        <OwnerDashboardScreen
+          onLogout={handleLogout}
+          onShowComingSoon={showComingSoon}
+          onOpenStudents={() => setScreen('owner-students')}
+          onOpenStaff={() => setScreen('owner-staff')}
+        />
       )}
     </SafeAreaView>
   );
@@ -4572,7 +5158,7 @@ const styles = StyleSheet.create({
   },
   hero: {
     backgroundColor: COLORS.navyDark,
-    borderBottomLeftRadius: 38,
+    borderBottomLeftRadius: 18,
     borderBottomRightRadius: 38,
     overflow: 'hidden',
     paddingBottom: 20,
@@ -4804,8 +5390,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 14,
-    minHeight: 92,
-    padding: 16,
+    minHeight: 104,
+    padding: 18,
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.05,
@@ -4837,8 +5423,15 @@ const styles = StyleSheet.create({
   },
   actionTitle: {
     color: COLORS.text,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '900',
+  },
+  actionSubtitle: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+    marginTop: 4,
   },
   actionValue: {
     color: COLORS.text,
@@ -6026,6 +6619,344 @@ const styles = StyleSheet.create({
   },
   ownerSectionList: {
     gap: 12,
+  },
+  ownerQuickActionsList: {
+    gap: 12,
+  },
+  ownerNavCard: {
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 22,
+    borderWidth: 1,
+    flexDirection: 'row',
+    minHeight: 92,
+    overflow: 'hidden',
+    paddingVertical: 16,
+    paddingRight: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 18,
+    elevation: 2,
+  },
+  ownerNavAccent: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    height: 8,
+    marginBottom: 12,
+    width: 64,
+  },
+  ownerNavContent: {
+    flex: 1,
+  },
+  ownerNavTitle: {
+    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  ownerNavSubtitle: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  ownerNavChevron: {
+    color: COLORS.blue,
+    fontSize: 24,
+    fontWeight: '900',
+    lineHeight: 24,
+  },
+  ownerSearchInput: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '600',
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  ownerFilterPillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 14,
+  },
+  ownerFilterPill: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  ownerFilterPillActive: {
+    backgroundColor: COLORS.softBlue,
+    borderColor: '#B5CCFF',
+  },
+  ownerFilterPillText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  ownerFilterPillTextActive: {
+    color: COLORS.blue,
+  },
+  ownerStudentList: {
+    gap: 12,
+    marginTop: 14,
+  },
+  ownerStudentCard: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 16,
+  },
+  ownerStudentTopRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  ownerStudentMainBlock: {
+    flex: 1,
+  },
+  ownerStudentName: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  ownerStudentParent: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  ownerStudentBadge: {
+    alignItems: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  ownerStudentBadgeText: {
+    color: COLORS.white,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  ownerStudentBadgeBlue: {
+    backgroundColor: COLORS.blue,
+  },
+  ownerStudentBadgeGreen: {
+    backgroundColor: COLORS.success,
+  },
+  ownerStudentBadgeOrange: {
+    backgroundColor: COLORS.warning,
+  },
+  ownerStudentBadgeRed: {
+    backgroundColor: COLORS.danger,
+  },
+  ownerStudentBadgePurple: {
+    backgroundColor: '#7C4DFF',
+  },
+  ownerStudentChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  ownerStudentProgramChip: {
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  ownerStudentProgramChipText: {
+    color: COLORS.blue,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  ownerStudentMetaRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    marginTop: 12,
+  },
+  ownerStudentStatusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  ownerStudentStatusPillBlue: {
+    backgroundColor: COLORS.softBlue,
+  },
+  ownerStudentStatusPillGreen: {
+    backgroundColor: COLORS.softGreen,
+  },
+  ownerStudentStatusPillOrange: {
+    backgroundColor: COLORS.softOrange,
+  },
+  ownerStudentStatusPillPurple: {
+    backgroundColor: COLORS.softPurple,
+  },
+  ownerStudentStatusPillText: {
+    color: COLORS.blue,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  ownerStudentProfileButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    marginTop: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  ownerStudentProfileButtonText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  ownerStudentsHeroPill: {
+    backgroundColor: COLORS.softBlue,
+    borderColor: '#B5CCFF',
+    borderWidth: 1,
+  },
+  ownerStudentsHeroPillText: {
+    color: COLORS.blue,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  ownerStaffHeroPill: {
+    backgroundColor: '#F0FBF4',
+    borderColor: '#B7E4C0',
+    borderWidth: 1,
+  },
+  ownerStaffHeroPillText: {
+    color: COLORS.success,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  ownerStaffList: {
+    gap: 12,
+    marginTop: 14,
+  },
+  ownerStaffCard: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 16,
+  },
+  ownerStaffBadge: {
+    alignItems: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  ownerStaffBadgeText: {
+    color: COLORS.white,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  ownerStaffBadgeBlue: {
+    backgroundColor: COLORS.blue,
+  },
+  ownerStaffBadgeGreen: {
+    backgroundColor: COLORS.success,
+  },
+  ownerStaffBadgeOrange: {
+    backgroundColor: COLORS.warning,
+  },
+  ownerStaffBadgeRed: {
+    backgroundColor: COLORS.danger,
+  },
+  ownerStaffBadgePurple: {
+    backgroundColor: '#7C4DFF',
+  },
+  ownerStaffMetaList: {
+    gap: 10,
+    marginTop: 12,
+  },
+  ownerStaffMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  ownerStaffMetaLabel: {
+    color: COLORS.muted,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  ownerStaffMetaValue: {
+    color: COLORS.text,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  ownerStaffStatusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  ownerStaffStatusPillGreen: {
+    backgroundColor: COLORS.softGreen,
+  },
+  ownerStaffStatusPillOrange: {
+    backgroundColor: COLORS.softOrange,
+  },
+  ownerStaffStatusPillText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  ownerStaffReviewPill: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  ownerStaffReviewGreen: {
+    backgroundColor: COLORS.softGreen,
+  },
+  ownerStaffReviewOrange: {
+    backgroundColor: COLORS.softOrange,
+  },
+  ownerStaffReviewPillText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  ownerStaffProfileButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    marginTop: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  ownerStaffProfileButtonText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  ownerActionButtonStack: {
+    gap: 12,
+    marginTop: 14,
   },
   homeCard: {
     backgroundColor: COLORS.card,
