@@ -1732,7 +1732,21 @@ function StaffMyHoursScreen({ onBack, onLogout }) {
   );
 }
 
-function OwnerDashboardScreen({ onLogout, onShowComingSoon, onOpenStudents, onOpenStaff }) {
+function OwnerDashboardScreen({
+  onLogout,
+  onShowComingSoon,
+  onOpenStudents,
+  onOpenStaff,
+  onOpenParents,
+  onOpenMessages,
+  onOpenBilling,
+  onOpenCampEvents,
+  onOpenInviteCodes,
+  onOpenReports,
+  onOpenSummerCampCheckIn,
+  ownerSummerCampSummary,
+  staffSummerCampGroups,
+}) {
   const [openSection, setOpenSection] = useState(null);
 
   const centerStatusCards = [
@@ -1805,40 +1819,32 @@ function OwnerDashboardScreen({ onLogout, onShowComingSoon, onOpenStudents, onOp
     },
   ];
 
-  const campCards = [
-    {
-      accent: 'blue',
-      badge: 'B',
-      title: 'Blue Group',
-      value: '12 / 12',
-      note: 'Confirmed',
-      fill: 'Ready',
-    },
-    {
-      accent: 'green',
-      badge: 'G',
-      title: 'Green Group',
-      value: '11 / 11',
-      note: 'Confirmed',
-      fill: 'Ready',
-    },
-    {
-      accent: 'red',
-      badge: 'R',
-      title: 'Red Group',
-      value: '9 / 10',
-      note: 'Confirmed',
-      fill: '1 Pending',
-    },
-    {
-      accent: 'yellow',
-      badge: 'Y',
-      title: 'Yellow Group',
-      value: '10 / 10',
-      note: 'Confirmed',
-      fill: 'Ready',
-    },
-  ];
+  const campConfirmedCounts = STAFF_CAMP_GROUP_NAMES.reduce((acc, groupName) => {
+    acc[groupName] = (staffSummerCampGroups[groupName] || []).filter(
+      (child) =>
+        child.checkInStatus === 'Checked In' &&
+        child.groupConfirmationStatus === 'Confirmed Present'
+    ).length;
+    return acc;
+  }, {});
+
+  const campAccentByGroup = {
+    'Blue Group': 'blue',
+    'Green Group': 'green',
+    'Red Group': 'red',
+    'Yellow Group': 'yellow',
+  };
+
+  const campCards = STAFF_CAMP_GROUP_NAMES.map((groupName) => {
+    return {
+      accent: campAccentByGroup[groupName] || 'blue',
+      badge: groupName[0],
+      title: groupName,
+      value: `Owner Checked In ${ownerSummerCampSummary[groupName] || 0}`,
+      note: `Counselor Confirmed ${campConfirmedCounts[groupName] || 0}`,
+      fill: 'Camp Headcount',
+    };
+  });
 
   const staffNotesCards = [
     {
@@ -1965,6 +1971,24 @@ function OwnerDashboardScreen({ onLogout, onShowComingSoon, onOpenStudents, onOp
       ),
     },
     {
+      key: 'owner-camp-check-in',
+      title: 'Summer Camp Check-In',
+      summary: 'Owner check-in only',
+      details: (
+        <View style={styles.ownerSummerCampActionBlock}>
+          <Text style={styles.ownerSummerCampActionText}>
+            Counselors confirm headcount after the owner checks campers in.
+          </Text>
+          <OwnerNavCard
+            accentColor={OWNER_MODULE_COLORS['Camp Events']}
+            title="Open Summer Camp Check-In"
+            subtitle="Owner check-in only"
+            onPress={onOpenSummerCampCheckIn}
+          />
+        </View>
+      ),
+    },
+    {
       key: 'staff-notes',
       title: 'Staff & Notes',
       summary: 'Daily notes, hours, and parent inbox activity',
@@ -2023,6 +2047,18 @@ function OwnerDashboardScreen({ onLogout, onShowComingSoon, onOpenStudents, onOp
                   ? onOpenStudents
                   : moduleName === 'Staff'
                     ? onOpenStaff
+                    : moduleName === 'Parents'
+                      ? onOpenParents
+                      : moduleName === 'Messages'
+                        ? onOpenMessages
+                      : moduleName === 'Billing'
+                        ? onOpenBilling
+                      : moduleName === 'Camp Events'
+                        ? onOpenCampEvents
+                      : moduleName === 'Invite Codes'
+                        ? onOpenInviteCodes
+                      : moduleName === 'Reports'
+                        ? onOpenReports
                     : onShowComingSoon;
 
               return (
@@ -2036,6 +2072,18 @@ function OwnerDashboardScreen({ onLogout, onShowComingSoon, onOpenStudents, onOp
                       ? onOpenStudents()
                       : moduleName === 'Staff'
                         ? onOpenStaff()
+                      : moduleName === 'Parents'
+                        ? onOpenParents()
+                      : moduleName === 'Messages'
+                        ? onOpenMessages()
+                      : moduleName === 'Billing'
+                        ? onOpenBilling()
+                      : moduleName === 'Camp Events'
+                        ? onOpenCampEvents()
+                      : moduleName === 'Invite Codes'
+                        ? onOpenInviteCodes()
+                      : moduleName === 'Reports'
+                        ? onOpenReports()
                       : action(moduleName)
                   }
                 />
@@ -3093,8 +3141,13 @@ function StaffSummerCampGroupCheckInScreen({
 }) {
   const roster = groups[selectedGroup] || [];
   const theme = getChildGroupTheme(selectedGroup);
-  const confirmedCount = roster.filter((child) => child.groupConfirmationStatus === 'Confirmed Present').length;
-  const missingChildren = roster.filter((child) => child.groupConfirmationStatus !== 'Confirmed Present');
+  const ownerCheckedInRoster = roster.filter((child) => child.checkInStatus === 'Checked In');
+  const confirmedCount = ownerCheckedInRoster.filter(
+    (child) => child.groupConfirmationStatus === 'Confirmed Present'
+  ).length;
+  const missingChildren = ownerCheckedInRoster.filter(
+    (child) => child.groupConfirmationStatus !== 'Confirmed Present'
+  );
 
   return (
     <View style={styles.parentHomePage}>
@@ -3137,8 +3190,10 @@ function StaffSummerCampGroupCheckInScreen({
         <View style={styles.parentHomeContent}>
           <View style={styles.profileCard}>
             <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Choose Group Color</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>Select today&apos;s assignment</Text>
+              <Text style={styles.parentSectionHeaderTitle}>Choose Assigned Group</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                Counselors confirm after owner check-in
+              </Text>
             </View>
 
             <View style={styles.staffCampGroupButtonRow}>
@@ -3176,12 +3231,14 @@ function StaffSummerCampGroupCheckInScreen({
 
           <View style={styles.profileCard}>
             <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>{selectedGroup} Roster</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>{roster.length} children</Text>
+              <Text style={styles.parentSectionHeaderTitle}>Campers Ready for Headcount</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                {ownerCheckedInRoster.length} owner check-ins ready
+              </Text>
             </View>
 
             <View style={styles.staffCampRosterList}>
-              {roster.map((child) => {
+              {ownerCheckedInRoster.map((child) => {
                 const confirmed = child.groupConfirmationStatus === 'Confirmed Present';
                 const groupTheme = theme;
 
@@ -3198,7 +3255,7 @@ function StaffSummerCampGroupCheckInScreen({
                       <View style={styles.staffCampStatusStack}>
                         <View style={styles.staffCampStatusPillBlue}>
                           <Text style={styles.staffCampStatusPillTextBlue}>
-                            {child.checkInStatus}
+                            Owner Checked In
                           </Text>
                         </View>
                         <View
@@ -3257,16 +3314,22 @@ function StaffSummerCampGroupCheckInScreen({
                 );
               })}
             </View>
+
+            {!ownerCheckedInRoster.length ? (
+              <Text style={styles.staffCampOwnerUpdate}>
+                No campers have been checked in by the owner for this group yet.
+              </Text>
+            ) : null}
           </View>
 
           <View style={styles.profileCard}>
             <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Headcount Confirmation</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>Owner handoff</Text>
+              <Text style={styles.parentSectionHeaderTitle}>Summer Camp Headcount</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Counselor confirmation</Text>
             </View>
 
             <Text style={styles.staffCampHeadcountValue}>
-              Confirmed: {confirmedCount} / {roster.length}
+              Confirmed: {confirmedCount} / {ownerCheckedInRoster.length}
             </Text>
 
             <View style={styles.staffCampMissingBlock}>
@@ -3292,6 +3355,2031 @@ function StaffSummerCampGroupCheckInScreen({
                 ? `Owner master list updated at ${ownerStatus[selectedGroup].sentAt}.`
                 : 'Headcount not sent yet.'}
             </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function OwnerParentsScreen({ onBack, onLogout, onShowComingSoon }) {
+  const parentsAccent = OWNER_MODULE_COLORS.Parents;
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState('All');
+  const [openParentId, setOpenParentId] = useState(null);
+
+  const filterPills = ['All', 'Active', 'Pending Invite'];
+
+  const parents = [
+    {
+      id: 'avery-parent',
+      name: 'Avery Parent',
+      childCount: '1 Child',
+      status: 'Active Account',
+      statusTone: 'green',
+      email: 'avery.parent@example.com',
+      phone: '(555) 201-4801',
+      children: ['Mia Carter'],
+      programs: ['Before & After Care', 'Summer Camp'],
+      inviteStatus: 'Active Account',
+      lastLogin: 'Today at 7:42 AM',
+      emergencyContactStatus: 'Confirmed',
+      filterKey: 'Active',
+    },
+    {
+      id: 'dana-wilson',
+      name: 'Dana Wilson',
+      childCount: '2 Children',
+      status: 'Active Account',
+      statusTone: 'green',
+      email: 'dana.wilson@example.com',
+      phone: '(555) 201-4802',
+      children: ['Liam Wilson', 'Ava Wilson'],
+      programs: ['Before & After Care'],
+      inviteStatus: 'Active Account',
+      lastLogin: 'Yesterday at 5:18 PM',
+      emergencyContactStatus: 'Confirmed',
+      filterKey: 'Active',
+    },
+    {
+      id: 'jordan-davis',
+      name: 'Jordan Davis',
+      childCount: '1 Child',
+      status: 'Active Account',
+      statusTone: 'green',
+      email: 'jordan.davis@example.com',
+      phone: '(555) 201-4803',
+      children: ['Emma Davis'],
+      programs: ['Summer Camp'],
+      inviteStatus: 'Active Account',
+      lastLogin: 'Today at 8:05 AM',
+      emergencyContactStatus: 'Confirmed',
+      filterKey: 'Active',
+    },
+    {
+      id: 'taylor-brown',
+      name: 'Taylor Brown',
+      childCount: '1 Child',
+      status: 'Pending Invite',
+      statusTone: 'orange',
+      email: 'taylor.brown@example.com',
+      phone: '(555) 201-4804',
+      children: ['Noah Brown'],
+      programs: ['Before & After Care'],
+      inviteStatus: 'Pending Invite',
+      lastLogin: 'Not yet logged in',
+      emergencyContactStatus: 'On file',
+      filterKey: 'Pending Invite',
+    },
+  ];
+
+  const visibleParents = parents.filter((parent) => {
+    const query = searchQuery.trim().toLowerCase();
+    const matchesQuery =
+      !query ||
+      parent.name.toLowerCase().includes(query) ||
+      parent.children.some((child) => child.toLowerCase().includes(query));
+    const matchesFilter =
+      activeFilter === 'All' || parent.filterKey === activeFilter;
+    return matchesQuery && matchesFilter;
+  });
+
+  const badgeToneStyles = {
+    green: styles.ownerStudentBadgeGreen,
+    orange: styles.ownerStudentBadgeOrange,
+    purple: styles.ownerStudentBadgePurple,
+  };
+
+  return (
+    <View style={styles.page}>
+      <View style={styles.ownerParentsHero}>
+        <View style={styles.heroOrbLarge} />
+        <View style={styles.heroOrbSmall} />
+
+        <View style={styles.childProfileHeaderRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.childProfileBackButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.childProfileBackButtonText}>Back</Text>
+          </Pressable>
+
+          <Text style={styles.childProfileHeaderLabel}>Parents</Text>
+        </View>
+
+        <View style={styles.ownerDashboardHeroCopy}>
+          <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+          <Text style={styles.shellHeroTitle}>Parents</Text>
+          <Text style={styles.shellHeroSubtitle}>Manage parent accounts</Text>
+          <View
+            style={[
+              styles.shellHeroPill,
+              styles.ownerParentsHeroPill,
+              { marginTop: 10 },
+            ]}
+          >
+            <Text style={styles.ownerParentsHeroPillText}>Owner Access</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.contentStack}>
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Parent Summary</Text>
+            <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
+              {[
+                { title: 'Total Parent Accounts', value: '38' },
+                { title: 'Active Accounts', value: '35' },
+                { title: 'Pending Invites', value: '3' },
+              ].map((card) => (
+                <SummaryTile
+                  key={card.title}
+                  accent="purple"
+                  badge={card.title.charAt(0)}
+                  title={card.title}
+                  value={card.value}
+                  note="Center-wide totals"
+                  fill="Owner"
+                />
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Search & Filter</Text>
+            <TextInput
+              placeholder="Search parent or child..."
+              placeholderTextColor={COLORS.muted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={styles.ownerSearchInput}
+            />
+
+            <View style={styles.ownerFilterPillRow}>
+              {filterPills.map((pill) => {
+                const isActive = activeFilter === pill;
+                return (
+                  <Pressable
+                    key={pill}
+                    accessibilityRole="button"
+                    onPress={() => setActiveFilter(pill)}
+                    style={({ pressed }) => [
+                      styles.ownerFilterPill,
+                      isActive && styles.ownerFilterPillActive,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.ownerFilterPillText,
+                        isActive && styles.ownerFilterPillTextActive,
+                      ]}
+                    >
+                      {pill}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Parent Directory</Text>
+            <View style={styles.ownerParentList}>
+              {visibleParents.map((parent) => {
+                const isOpen = openParentId === parent.id;
+                const childLabel = parent.childCount;
+                const toneStyle = badgeToneStyles[parent.statusTone] || styles.ownerStudentBadgePurple;
+
+                return (
+                  <View key={parent.id} style={styles.ownerParentCard}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        setOpenParentId((current) => (current === parent.id ? null : parent.id))
+                      }
+                      style={({ pressed }) => [
+                        styles.ownerParentCardHeader,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <View style={styles.ownerParentHeaderTextBlock}>
+                        <Text style={styles.ownerParentName}>{parent.name}</Text>
+                        <Text style={styles.ownerParentChildCount}>{childLabel}</Text>
+                      </View>
+
+                      <View style={styles.ownerParentHeaderRight}>
+                        <View style={[styles.ownerStudentBadge, toneStyle]}>
+                          <Text style={styles.ownerStudentBadgeText}>{parent.status}</Text>
+                        </View>
+                        <Text style={styles.ownerNavChevron}>{isOpen ? '⌃' : '›'}</Text>
+                      </View>
+                    </Pressable>
+
+                    {isOpen ? (
+                      <View style={styles.ownerParentExpandedContent}>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Parent email</Text>
+                          <Text style={styles.ownerParentDetailValue}>{parent.email}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Phone number</Text>
+                          <Text style={styles.ownerParentDetailValue}>{parent.phone}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Children linked</Text>
+                          <Text style={styles.ownerParentDetailValue}>{parent.children.join(', ')}</Text>
+                        </View>
+                        <View style={styles.ownerParentChipRow}>
+                          {parent.programs.map((program) => (
+                            <View key={program} style={styles.ownerParentProgramChip}>
+                              <Text style={styles.ownerParentProgramChipText}>{program}</Text>
+                            </View>
+                          ))}
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Invite status</Text>
+                          <Text style={styles.ownerParentDetailValue}>{parent.inviteStatus}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Last login</Text>
+                          <Text style={styles.ownerParentDetailValue}>{parent.lastLogin}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Emergency contact status</Text>
+                          <Text style={styles.ownerParentDetailValue}>
+                            {parent.emergencyContactStatus}
+                          </Text>
+                        </View>
+
+                        <View style={styles.ownerParentActionList}>
+                          {[
+                            'View Children',
+                            'Send Message',
+                            'Resend Invite',
+                            'View Billing',
+                          ].map((label) => (
+                            <OwnerNavCard
+                              key={label}
+                              accentColor={parentsAccent}
+                              title={label}
+                              subtitle="Coming Soon"
+                              onPress={() => onShowComingSoon(label)}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Owner Parent Actions</Text>
+            <View style={styles.ownerActionButtonStack}>
+              {['Add Parent', 'Send Parent Invite', 'Parent Account Report'].map((label) => (
+                <Pressable
+                  key={label}
+                  accessibilityRole="button"
+                  onPress={() => onShowComingSoon(label)}
+                  style={({ pressed }) => [
+                    styles.actionCard,
+                    pressed && styles.pressedTile,
+                  ]}
+                >
+                  <View style={[styles.actionAccent, { backgroundColor: parentsAccent }]} />
+                  <View style={styles.actionCardBody}>
+                    <Text style={styles.actionTitle}>{label}</Text>
+                    <Text style={styles.actionNote}>Coming Soon</Text>
+                  </View>
+                  <Text style={styles.chevron}>›</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function OwnerMessagesScreen({ onBack, onLogout }) {
+  const messagesAccent = OWNER_MODULE_COLORS.Messages;
+  const [selectedRecipients, setSelectedRecipients] = useState(['All Parents']);
+  const [selectedMessageType, setSelectedMessageType] = useState('Announcement');
+  const [messageText, setMessageText] = useState('');
+  const [recentMessages, setRecentMessages] = useState([
+    {
+      id: 'camp-reminder',
+      title: 'Camp Reminder',
+      audience: 'Summer Camp Parents',
+      time: 'Today 9:30 AM',
+      type: 'Reminder',
+    },
+    {
+      id: 'billing-notice',
+      title: 'Billing Notice',
+      audience: 'Before & After Care Parents',
+      time: 'Yesterday 4:15 PM',
+      type: 'Billing Notice',
+    },
+    {
+      id: 'staff-reminder',
+      title: 'Staff Reminder',
+      audience: 'All Staff',
+      time: 'Yesterday 8:00 AM',
+      type: 'Reminder',
+    },
+  ]);
+
+  const recipientChips = [
+    'All Parents',
+    'All Staff',
+    'Blue Group Parents',
+    'Before & After Care Parents',
+    'Summer Camp Parents',
+  ];
+
+  const messageTypeChips = [
+    'Announcement',
+    'Reminder',
+    'Billing Notice',
+    'Camp Update',
+    'Emergency',
+  ];
+
+  const toggleRecipient = (recipient) => {
+    setSelectedRecipients((current) =>
+      current.includes(recipient)
+        ? current.filter((item) => item !== recipient)
+        : [...current, recipient]
+    );
+  };
+
+  const handleSendMessage = () => {
+    Alert.alert('Message sent.');
+
+    const audience = selectedRecipients.length ? selectedRecipients.join(', ') : 'All Parents';
+    const time = 'Today 10:00 AM';
+    const title = messageText.trim() || selectedMessageType;
+
+    setRecentMessages((prev) => [
+      {
+        id: `message-${Date.now()}`,
+        title,
+        audience,
+        time,
+        type: selectedMessageType,
+      },
+      ...prev,
+    ].slice(0, 6));
+    setMessageText('');
+  };
+
+  return (
+    <View style={styles.page}>
+      <View style={styles.ownerMessagesHero}>
+        <View style={styles.heroOrbLarge} />
+        <View style={styles.heroOrbSmall} />
+
+        <View style={styles.childProfileHeaderRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.childProfileBackButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.childProfileBackButtonText}>Back</Text>
+          </Pressable>
+
+          <Text style={styles.childProfileHeaderLabel}>Messages</Text>
+        </View>
+
+        <View style={styles.ownerDashboardHeroCopy}>
+          <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+          <Text style={styles.shellHeroTitle}>Messages</Text>
+          <Text style={styles.shellHeroSubtitle}>Center-wide communication</Text>
+          <View
+            style={[
+              styles.shellHeroPill,
+              styles.ownerMessagesHeroPill,
+              { marginTop: 10 },
+            ]}
+          >
+            <Text style={styles.ownerMessagesHeroPillText}>Owner Access</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.contentStack}>
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Message Summary</Text>
+            <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
+              {[
+                { title: 'Unread Parent Messages', value: '4' },
+                { title: 'Staff Announcements', value: '2' },
+                { title: 'Parent Announcements', value: '3' },
+                { title: 'Drafts', value: '1' },
+              ].map((card) => (
+                <SummaryTile
+                  key={card.title}
+                  accent="blue"
+                  badge={card.title.charAt(0)}
+                  title={card.title}
+                  value={card.value}
+                  note="Center-wide totals"
+                  fill="Owner"
+                />
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Send New Message</Text>
+            <Text style={styles.ownerAccordionSummary}>Pick recipients and a message type</Text>
+
+            <View style={styles.ownerChipGroup}>
+              <Text style={styles.ownerChipGroupLabel}>Recipients</Text>
+              <View style={styles.ownerFilterPillRow}>
+                {recipientChips.map((chip) => {
+                  const isActive = selectedRecipients.includes(chip);
+                  return (
+                    <Pressable
+                      key={chip}
+                      accessibilityRole="button"
+                      onPress={() => toggleRecipient(chip)}
+                      style={({ pressed }) => [
+                        styles.ownerFilterPill,
+                        isActive && styles.ownerFilterPillActive,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.ownerFilterPillText,
+                          isActive && styles.ownerFilterPillTextActive,
+                        ]}
+                      >
+                        {chip}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.ownerChipGroup}>
+              <Text style={styles.ownerChipGroupLabel}>Message Type</Text>
+              <View style={styles.ownerFilterPillRow}>
+                {messageTypeChips.map((chip) => {
+                  const isActive = selectedMessageType === chip;
+                  return (
+                    <Pressable
+                      key={chip}
+                      accessibilityRole="button"
+                      onPress={() => setSelectedMessageType(chip)}
+                      style={({ pressed }) => [
+                        styles.ownerFilterPill,
+                        isActive && styles.ownerFilterPillActive,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.ownerFilterPillText,
+                          isActive && styles.ownerFilterPillTextActive,
+                        ]}
+                      >
+                        {chip}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <TextInput
+              placeholder="Write a message..."
+              placeholderTextColor={COLORS.muted}
+              value={messageText}
+              onChangeText={setMessageText}
+              multiline
+              style={styles.ownerMessageInput}
+            />
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleSendMessage}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                { backgroundColor: messagesAccent },
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.primaryButtonText}>Send Message</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Recent Messages</Text>
+            <View style={styles.ownerRecentMessageList}>
+              {recentMessages.map((message) => (
+                <View key={message.id} style={styles.ownerRecentMessageCard}>
+                  <View style={styles.ownerRecentMessageTopRow}>
+                    <View style={styles.ownerRecentMessageTextBlock}>
+                      <Text style={styles.ownerRecentMessageTitle}>{message.title}</Text>
+                      <Text style={styles.ownerRecentMessageAudience}>
+                        Sent to {message.audience}
+                      </Text>
+                    </View>
+                    <View style={[styles.ownerRecentMessageBadge, { backgroundColor: messagesAccent }]}>
+                      <Text style={styles.ownerRecentMessageBadgeText}>{message.type}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.ownerRecentMessageTime}>{message.time}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Communication Notes</Text>
+            <Text style={styles.ownerCommunicationNote}>
+              Messages sent here will eventually appear in parent notifications, staff notifications,
+              and child timelines when connected.
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function OwnerBillingScreen({ onBack, onLogout, onShowComingSoon }) {
+  const billingAccent = OWNER_MODULE_COLORS.Billing;
+  const [openParentId, setOpenParentId] = useState(null);
+
+  const billingSummaryCards = [
+    { title: 'Total Outstanding', value: '$2,845.00', accent: 'orange', note: 'Review queue' },
+    { title: 'Paid This Week', value: '$1,920.00', accent: 'green', note: 'Posted payments' },
+    { title: 'Pending Invoices', value: '14', accent: 'orange', note: 'Unsent or unpaid' },
+    { title: 'Overdue Accounts', value: '3', accent: 'red', note: 'Needs follow-up' },
+  ];
+
+  const programBillingRows = [
+    { label: 'Before & After Care', value: '$1,695.00 pending', tone: 'orange' },
+    { label: 'Summer Camp', value: '$1,150.00 pending', tone: 'orange' },
+  ];
+
+  const parentBillingAccounts = [
+    {
+      id: 'avery',
+      name: 'Avery Parent',
+      child: 'Mia Carter',
+      balance: '$348.00',
+      status: 'Pending',
+      statusTone: 'orange',
+      beforeAfter: '$198.00',
+      summerCamp: '$150.00',
+      lastInvoiceDate: 'May 27',
+      dueDate: 'Friday',
+      paymentStatus: 'Pending',
+    },
+    {
+      id: 'dana',
+      name: 'Dana Wilson',
+      child: 'Liam Wilson',
+      balance: '$198.00',
+      status: 'Pending',
+      statusTone: 'orange',
+      beforeAfter: '$198.00',
+      summerCamp: '$0.00',
+      lastInvoiceDate: 'May 27',
+      dueDate: 'Friday',
+      paymentStatus: 'Pending',
+    },
+    {
+      id: 'jordan',
+      name: 'Jordan Davis',
+      child: 'Emma Davis',
+      balance: '$0.00',
+      status: 'Paid',
+      statusTone: 'green',
+      beforeAfter: '$0.00',
+      summerCamp: '$0.00',
+      lastInvoiceDate: 'May 20',
+      dueDate: 'Paid',
+      paymentStatus: 'Paid',
+    },
+    {
+      id: 'taylor',
+      name: 'Taylor Brown',
+      child: 'Noah Brown',
+      balance: '$171.50',
+      status: 'Overdue',
+      statusTone: 'red',
+      beforeAfter: '$171.50',
+      summerCamp: '$0.00',
+      lastInvoiceDate: 'May 20',
+      dueDate: 'Overdue',
+      paymentStatus: 'Overdue',
+    },
+  ];
+
+  const toneToBadge = {
+    orange: styles.ownerBillingBadgeOrange,
+    green: styles.ownerBillingBadgeGreen,
+    red: styles.ownerBillingBadgeRed,
+    blue: styles.ownerBillingBadgeBlue,
+  };
+
+  const toneToSummaryAccent = {
+    orange: 'orange',
+    green: 'green',
+    red: 'red',
+    blue: 'blue',
+  };
+
+  return (
+    <View style={styles.page}>
+      <View style={styles.ownerBillingHero}>
+        <View style={styles.heroOrbLarge} />
+        <View style={styles.heroOrbSmall} />
+
+        <View style={styles.childProfileHeaderRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.childProfileBackButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.childProfileBackButtonText}>Back</Text>
+          </Pressable>
+
+          <Text style={styles.childProfileHeaderLabel}>Billing</Text>
+        </View>
+
+        <View style={styles.ownerDashboardHeroCopy}>
+          <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+          <Text style={styles.shellHeroTitle}>Billing</Text>
+          <Text style={styles.shellHeroSubtitle}>Review balances and invoices</Text>
+          <View
+            style={[
+              styles.shellHeroPill,
+              styles.ownerBillingHeroPill,
+              { marginTop: 0 },
+            ]}
+          >
+            <Text style={styles.ownerBillingHeroPillText}>Owner Access</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.contentStack}>
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Billing Summary</Text>
+            <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
+              {billingSummaryCards.map((card) => (
+                <SummaryTile
+                  key={card.title}
+                  accent={toneToSummaryAccent[card.accent] || 'orange'}
+                  badge={card.title.charAt(0)}
+                  title={card.title}
+                  value={card.value}
+                  note={card.note}
+                  fill="Owner"
+                />
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Program Billing</Text>
+            <View style={styles.ownerBillingProgramList}>
+              {programBillingRows.map((row) => (
+                <View key={row.label} style={styles.ownerBillingProgramRow}>
+                  <Text style={styles.ownerBillingProgramLabel}>{row.label}</Text>
+                  <View style={[styles.ownerBillingAmountBadge, toneToBadge[row.tone]]}>
+                    <Text style={styles.ownerBillingAmountBadgeText}>{row.value}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Parent Balances</Text>
+            <View style={styles.ownerParentList}>
+              {parentBillingAccounts.map((account) => {
+                const isOpen = openParentId === account.id;
+
+                return (
+                  <View key={account.id} style={styles.ownerParentCard}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        setOpenParentId((current) => (current === account.id ? null : account.id))
+                      }
+                      style={({ pressed }) => [
+                        styles.ownerParentCardHeader,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <View style={styles.ownerParentHeaderTextBlock}>
+                        <Text style={styles.ownerParentName}>{account.name}</Text>
+                        <Text style={styles.ownerParentChildCount}>Child: {account.child}</Text>
+                      </View>
+
+                      <View style={styles.ownerParentHeaderRight}>
+                        <View
+                          style={[
+                            styles.ownerBillingStatusPill,
+                            toneToBadge[account.statusTone] || styles.ownerBillingBadgeOrange,
+                          ]}
+                        >
+                          <Text style={styles.ownerBillingStatusPillText}>{account.status}</Text>
+                        </View>
+                        <Text style={styles.ownerNavChevron}>{isOpen ? '⌃' : '›'}</Text>
+                      </View>
+                    </Pressable>
+
+                    {isOpen ? (
+                      <View style={styles.ownerParentExpandedContent}>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Before & After Care amount</Text>
+                          <Text style={styles.ownerParentDetailValue}>{account.beforeAfter}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Summer Camp amount</Text>
+                          <Text style={styles.ownerParentDetailValue}>{account.summerCamp}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Last invoice date</Text>
+                          <Text style={styles.ownerParentDetailValue}>{account.lastInvoiceDate}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Due date</Text>
+                          <Text style={styles.ownerParentDetailValue}>{account.dueDate}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Payment status</Text>
+                          <Text style={styles.ownerParentDetailValue}>{account.paymentStatus}</Text>
+                        </View>
+
+                        <View style={styles.ownerParentActionList}>
+                          {['View Invoice', 'Send Billing Notice', 'Mark Reviewed'].map((label) => (
+                            <OwnerNavCard
+                              key={label}
+                              accentColor={billingAccent}
+                              title={label}
+                              subtitle="Coming Soon"
+                              onPress={() => onShowComingSoon(label)}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Billing Actions</Text>
+            <View style={styles.ownerActionButtonStack}>
+              {['Generate Weekly Invoices', 'Send Billing Notices', 'Export Billing Report'].map(
+                (label) => (
+                  <Pressable
+                    key={label}
+                    accessibilityRole="button"
+                    onPress={() => onShowComingSoon(label)}
+                    style={({ pressed }) => [
+                      styles.actionCard,
+                      pressed && styles.pressedTile,
+                    ]}
+                  >
+                    <View style={[styles.actionAccent, { backgroundColor: billingAccent }]} />
+                    <View style={styles.actionCardBody}>
+                      <Text style={styles.actionTitle}>{label}</Text>
+                      <Text style={styles.actionNote}>Coming Soon</Text>
+                    </View>
+                    <Text style={styles.chevron}>›</Text>
+                  </Pressable>
+                )
+              )}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Payment Processing Note</Text>
+            <Text style={styles.ownerCommunicationNote}>
+              Payments are not processed in this prototype. Billing is review-only until payment
+              processing is connected.
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function OwnerCampEventsScreen({ onBack, onLogout, onShowComingSoon }) {
+  const campEventsAccent = OWNER_MODULE_COLORS['Camp Events'];
+  const [openEventId, setOpenEventId] = useState(null);
+  const [eventForm, setEventForm] = useState({
+    title: '',
+    dateTime: '',
+    audience: '',
+    supplies: '',
+    parentMessage: '',
+  });
+
+  const eventSummaryCards = [
+    { title: 'Upcoming Events', value: '4', accent: 'blue', note: 'On the calendar' },
+    { title: 'This Week', value: '2', accent: 'green', note: 'Happening soon' },
+    { title: 'Parent Notices Sent', value: '3', accent: 'orange', note: 'Shared with families' },
+    { title: 'Draft Events', value: '1', accent: 'purple', note: 'Not published yet' },
+  ];
+
+  const upcomingEvents = [
+    {
+      id: 'water-day',
+      title: 'Water Day',
+      dateTime: 'Friday at 1:00 PM',
+      audience: 'Summer Camp Parents',
+      status: 'Notice Sent',
+      supplies: 'Towels, sunscreen, water shoes',
+      noticeStatus: 'Sent',
+      groupBadges: ['Summer Camp'],
+    },
+    {
+      id: 'field-trip',
+      title: 'Field Trip',
+      dateTime: 'Next Tuesday',
+      audience: 'Blue and Green Groups',
+      status: 'Draft',
+      supplies: 'Field trip permission slips, lunches, group walkie-talkies',
+      noticeStatus: 'Draft',
+      groupBadges: ['Blue Group', 'Green Group'],
+    },
+    {
+      id: 'art-project',
+      title: 'Art Project',
+      dateTime: 'Wednesday Morning',
+      audience: 'All Camp Groups',
+      status: 'Scheduled',
+      supplies: 'Construction paper, glue, markers, wipes',
+      noticeStatus: 'Scheduled',
+      groupBadges: ['All Camp Groups'],
+    },
+    {
+      id: 'camp-spirit-day',
+      title: 'Camp Spirit Day',
+      dateTime: 'Friday Morning',
+      audience: 'All Camp Groups',
+      status: 'Scheduled',
+      supplies: 'Camp shirts, stickers, music speaker',
+      noticeStatus: 'Scheduled',
+      groupBadges: ['All Camp Groups'],
+    },
+  ];
+
+  const statusTone = {
+    'Notice Sent': styles.ownerCampBadgeGreen,
+    Draft: styles.ownerCampBadgeOrange,
+    Scheduled: styles.ownerCampBadgeBlue,
+  };
+
+  const handleSaveEvent = () => {
+    Alert.alert('Camp event saved.');
+    setEventForm({
+      title: '',
+      dateTime: '',
+      audience: '',
+      supplies: '',
+      parentMessage: '',
+    });
+  };
+
+  return (
+    <View style={styles.page}>
+      <View style={styles.ownerCampEventsHero}>
+        <View style={styles.heroOrbLarge} />
+        <View style={styles.heroOrbSmall} />
+
+        <View style={styles.childProfileHeaderRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.childProfileBackButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.childProfileBackButtonText}>Back</Text>
+          </Pressable>
+
+          <Text style={styles.childProfileHeaderLabel}>Camp Events</Text>
+        </View>
+
+        <View style={styles.ownerDashboardHeroCopy}>
+          <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+          <Text style={styles.shellHeroTitle}>Camp Events</Text>
+          <Text style={styles.shellHeroSubtitle}>Manage camp schedules</Text>
+          <View
+            style={[
+              styles.shellHeroPill,
+              styles.ownerCampEventsHeroPill,
+              { marginTop: 10 },
+            ]}
+          >
+            <Text style={styles.ownerCampEventsHeroPillText}>Owner Access</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.contentStack}>
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Camp Event Summary</Text>
+            <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
+              {eventSummaryCards.map((card) => (
+                <SummaryTile
+                  key={card.title}
+                  accent={card.accent}
+                  badge={card.title.charAt(0)}
+                  title={card.title}
+                  value={card.value}
+                  note={card.note}
+                  fill="Owner"
+                />
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Upcoming Events</Text>
+            <View style={styles.ownerParentList}>
+              {upcomingEvents.map((event) => {
+                const isOpen = openEventId === event.id;
+
+                return (
+                  <View key={event.id} style={styles.ownerParentCard}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        setOpenEventId((current) => (current === event.id ? null : event.id))
+                      }
+                      style={({ pressed }) => [
+                        styles.ownerParentCardHeader,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <View style={styles.ownerParentHeaderTextBlock}>
+                        <Text style={styles.ownerParentName}>{event.title}</Text>
+                        <Text style={styles.ownerParentChildCount}>{event.dateTime}</Text>
+                      </View>
+
+                      <View style={styles.ownerParentHeaderRight}>
+                        <View style={[styles.ownerCampStatusPill, statusTone[event.status] || styles.ownerCampBadgeOrange]}>
+                          <Text style={styles.ownerCampStatusPillText}>{event.status}</Text>
+                        </View>
+                        <Text style={styles.ownerNavChevron}>{isOpen ? '⌃' : '›'}</Text>
+                      </View>
+                    </Pressable>
+
+                    {isOpen ? (
+                      <View style={styles.ownerParentExpandedContent}>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Event title</Text>
+                          <Text style={styles.ownerParentDetailValue}>{event.title}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Date / Time</Text>
+                          <Text style={styles.ownerParentDetailValue}>{event.dateTime}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Audience</Text>
+                          <Text style={styles.ownerParentDetailValue}>{event.audience}</Text>
+                        </View>
+
+                        <View style={styles.ownerParentChipRow}>
+                          {event.groupBadges.map((badge) => (
+                            <View key={badge} style={styles.ownerParentProgramChip}>
+                              <Text style={styles.ownerParentProgramChipText}>{badge}</Text>
+                            </View>
+                          ))}
+                        </View>
+
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Supplies needed</Text>
+                          <Text style={styles.ownerParentDetailValue}>{event.supplies}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Parent notice status</Text>
+                          <Text style={styles.ownerParentDetailValue}>{event.noticeStatus}</Text>
+                        </View>
+
+                        <View style={styles.ownerParentActionList}>
+                          {['Edit Event', 'Send Parent Notice', 'Add to Timeline'].map((label) => (
+                            <OwnerNavCard
+                              key={label}
+                              accentColor={campEventsAccent}
+                              title={label}
+                              subtitle="Coming Soon"
+                              onPress={() => onShowComingSoon(label)}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Create Event</Text>
+            <View style={styles.ownerEventForm}>
+              {[
+                ['Event Title', 'title'],
+                ['Date / Time', 'dateTime'],
+                ['Audience', 'audience'],
+                ['Supplies Needed', 'supplies'],
+                ['Parent Message', 'parentMessage'],
+              ].map(([label, key]) => (
+                <View key={key} style={styles.ownerEventField}>
+                  <Text style={styles.ownerEventFieldLabel}>{label}</Text>
+                  <TextInput
+                    placeholder={label}
+                    placeholderTextColor={COLORS.muted}
+                    value={eventForm[key]}
+                    onChangeText={(value) =>
+                      setEventForm((current) => ({ ...current, [key]: value }))
+                    }
+                    style={[
+                      styles.ownerMessageInput,
+                      { minHeight: key === 'parentMessage' ? 120 : 52, marginTop: 0 },
+                    ]}
+                  />
+                </View>
+              ))}
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleSaveEvent}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                { backgroundColor: campEventsAccent },
+                pressed && styles.pressedButton,
+                { marginTop: 14 },
+              ]}
+            >
+              <Text style={styles.primaryButtonText}>Save Camp Event</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Camp Event Notes</Text>
+            <Text style={styles.ownerCommunicationNote}>
+              Camp events will eventually appear in Parent Summer Camp, Parent Notifications, and
+              Child Timeline.
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function OwnerInviteCodesScreen({ onBack, onLogout, onShowComingSoon }) {
+  const inviteAccent = OWNER_MODULE_COLORS['Invite Codes'];
+  const [selectedType, setSelectedType] = useState('Parent');
+  const [generatedCode, setGeneratedCode] = useState('PARENT-4821');
+  const [openInviteId, setOpenInviteId] = useState(null);
+  const [generatedType, setGeneratedType] = useState('Parent');
+
+  const [parentForm, setParentForm] = useState({
+    child: 'Mia Carter',
+    email: 'avery.parent@example.com',
+    accessLevel: 'Parent View Only',
+  });
+  const [staffForm, setStaffForm] = useState({
+    name: 'Ms. Sarah',
+    email: 'ms.sarah@example.com',
+    accessLevel: 'Staff Workspace',
+  });
+
+  const inviteSummaryCards = [
+    { title: 'Active Parent Codes', value: '35', accent: 'blue', note: 'In use' },
+    { title: 'Active Staff Codes', value: '12', accent: 'green', note: 'In use' },
+    { title: 'Pending Invites', value: '5', accent: 'orange', note: 'Waiting' },
+    { title: 'Expired Codes', value: '2', accent: 'red', note: 'Archived' },
+  ];
+
+  const inviteCards = [
+    {
+      id: 'avery',
+      name: 'Avery Parent',
+      type: 'Parent',
+      childOrRole: 'Mia Carter',
+      status: 'Active',
+      code: 'MIA-4821',
+      email: 'avery.parent@example.com',
+      createdDate: 'May 24',
+    },
+    {
+      id: 'dana',
+      name: 'Dana Wilson',
+      type: 'Parent',
+      childOrRole: 'Liam Wilson',
+      status: 'Pending',
+      code: 'LIAM-7310',
+      email: 'dana.wilson@example.com',
+      createdDate: 'May 26',
+    },
+    {
+      id: 'sarah',
+      name: 'Ms. Sarah',
+      type: 'Staff',
+      childOrRole: 'Counselor',
+      status: 'Active',
+      code: 'STAFF-9142',
+      email: 'ms.sarah@example.com',
+      createdDate: 'May 20',
+    },
+    {
+      id: 'james',
+      name: 'Mr. James',
+      type: 'Staff',
+      childOrRole: 'Bus / After Care',
+      status: 'Pending',
+      code: 'STAFF-5520',
+      email: 'mr.james@example.com',
+      createdDate: 'May 28',
+    },
+  ];
+
+  const typeToneStyles = {
+    Parent: styles.ownerInviteBadgeBlue,
+    Staff: styles.ownerInviteBadgeTeal,
+  };
+
+  const statusToneStyles = {
+    Active: styles.ownerInviteBadgeGreen,
+    Pending: styles.ownerInviteBadgeOrange,
+  };
+
+  const handleGenerateCode = () => {
+    const nextCode = selectedType === 'Parent' ? 'PARENT-4821' : 'STAFF-9142';
+    setGeneratedCode(nextCode);
+    setGeneratedType(selectedType);
+    Alert.alert('Invite code generated.');
+  };
+
+  return (
+    <View style={styles.page}>
+      <View style={styles.ownerInviteCodesHero}>
+        <View style={styles.heroOrbLarge} />
+        <View style={styles.heroOrbSmall} />
+
+        <View style={styles.childProfileHeaderRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.childProfileBackButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.childProfileBackButtonText}>Back</Text>
+          </Pressable>
+
+          <Text style={styles.childProfileHeaderLabel}>Invite Codes</Text>
+        </View>
+
+        <View style={styles.ownerDashboardHeroCopy}>
+          <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+          <Text style={styles.shellHeroTitle}>Invite Codes</Text>
+          <Text style={styles.shellHeroSubtitle}>Create parent and staff access</Text>
+          <View
+            style={[
+              styles.shellHeroPill,
+              styles.ownerInviteCodesHeroPill,
+              { marginTop: 10 },
+            ]}
+          >
+            <Text style={styles.ownerInviteCodesHeroPillText}>Owner Access</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.contentStack}>
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Invite Summary</Text>
+            <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
+              {inviteSummaryCards.map((card) => (
+                <SummaryTile
+                  key={card.title}
+                  accent={card.accent}
+                  badge={card.title.charAt(0)}
+                  title={card.title}
+                  value={card.value}
+                  note={card.note}
+                  fill="Owner"
+                />
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Generate Invite Code</Text>
+
+            <View style={styles.ownerChipGroup}>
+              <Text style={styles.ownerChipGroupLabel}>Type</Text>
+              <View style={styles.ownerFilterPillRow}>
+                {['Parent', 'Staff'].map((type) => {
+                  const isActive = selectedType === type;
+                  return (
+                    <Pressable
+                      key={type}
+                      accessibilityRole="button"
+                      onPress={() => setSelectedType(type)}
+                      style={({ pressed }) => [
+                        styles.ownerFilterPill,
+                        isActive && styles.ownerFilterPillActive,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.ownerFilterPillText,
+                          isActive && styles.ownerFilterPillTextActive,
+                        ]}
+                      >
+                        {type}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {selectedType === 'Parent' ? (
+              <View style={styles.ownerEventForm}>
+                <View style={styles.ownerEventField}>
+                  <Text style={styles.ownerEventFieldLabel}>Select Child</Text>
+                  <TextInput
+                    placeholder="Select Child"
+                    placeholderTextColor={COLORS.muted}
+                    value={parentForm.child}
+                    onChangeText={(value) =>
+                      setParentForm((current) => ({ ...current, child: value }))
+                    }
+                    style={styles.ownerMessageInput}
+                  />
+                </View>
+                <View style={styles.ownerEventField}>
+                  <Text style={styles.ownerEventFieldLabel}>Parent Email</Text>
+                  <TextInput
+                    placeholder="Parent Email"
+                    placeholderTextColor={COLORS.muted}
+                    value={parentForm.email}
+                    onChangeText={(value) =>
+                      setParentForm((current) => ({ ...current, email: value }))
+                    }
+                    style={styles.ownerMessageInput}
+                  />
+                </View>
+                <View style={styles.ownerEventField}>
+                  <Text style={styles.ownerEventFieldLabel}>Access Level</Text>
+                  <TextInput
+                    placeholder="Parent View Only"
+                    placeholderTextColor={COLORS.muted}
+                    value={parentForm.accessLevel}
+                    onChangeText={(value) =>
+                      setParentForm((current) => ({ ...current, accessLevel: value }))
+                    }
+                    style={styles.ownerMessageInput}
+                  />
+                </View>
+              </View>
+            ) : (
+              <View style={styles.ownerEventForm}>
+                <View style={styles.ownerEventField}>
+                  <Text style={styles.ownerEventFieldLabel}>Staff Name</Text>
+                  <TextInput
+                    placeholder="Staff Name"
+                    placeholderTextColor={COLORS.muted}
+                    value={staffForm.name}
+                    onChangeText={(value) =>
+                      setStaffForm((current) => ({ ...current, name: value }))
+                    }
+                    style={styles.ownerMessageInput}
+                  />
+                </View>
+                <View style={styles.ownerEventField}>
+                  <Text style={styles.ownerEventFieldLabel}>Staff Email</Text>
+                  <TextInput
+                    placeholder="Staff Email"
+                    placeholderTextColor={COLORS.muted}
+                    value={staffForm.email}
+                    onChangeText={(value) =>
+                      setStaffForm((current) => ({ ...current, email: value }))
+                    }
+                    style={styles.ownerMessageInput}
+                  />
+                </View>
+                <View style={styles.ownerEventField}>
+                  <Text style={styles.ownerEventFieldLabel}>Access Level</Text>
+                  <TextInput
+                    placeholder="Staff Workspace"
+                    placeholderTextColor={COLORS.muted}
+                    value={staffForm.accessLevel}
+                    onChangeText={(value) =>
+                      setStaffForm((current) => ({ ...current, accessLevel: value }))
+                    }
+                    style={styles.ownerMessageInput}
+                  />
+                </View>
+              </View>
+            )}
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleGenerateCode}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                { backgroundColor: inviteAccent },
+                pressed && styles.pressedButton,
+                { marginTop: 14 },
+              ]}
+            >
+              <Text style={styles.primaryButtonText}>Generate Code</Text>
+            </Pressable>
+
+            <View style={styles.ownerInviteGeneratedBlock}>
+              <Text style={styles.ownerInviteGeneratedLabel}>Generated Code</Text>
+              <Text style={styles.ownerInviteGeneratedCode}>{generatedCode}</Text>
+              <Text style={styles.ownerInviteGeneratedMeta}>
+                {generatedType} invite prepared for owner use.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Pending Invites</Text>
+            <View style={styles.ownerParentList}>
+              {inviteCards.map((invite) => {
+                const isOpen = openInviteId === invite.id;
+
+                return (
+                  <View key={invite.id} style={styles.ownerParentCard}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        setOpenInviteId((current) => (current === invite.id ? null : invite.id))
+                      }
+                      style={({ pressed }) => [
+                        styles.ownerParentCardHeader,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <View style={styles.ownerParentHeaderTextBlock}>
+                        <Text style={styles.ownerParentName}>{invite.name}</Text>
+                        <Text style={styles.ownerParentChildCount}>
+                          {invite.type} · {invite.childOrRole}
+                        </Text>
+                      </View>
+
+                      <View style={styles.ownerParentHeaderRight}>
+                        <View
+                          style={[
+                            styles.ownerInviteStatusPill,
+                            typeToneStyles[invite.type] || styles.ownerInviteBadgeBlue,
+                            statusToneStyles[invite.status] || styles.ownerInviteBadgeOrange,
+                          ]}
+                        >
+                          <Text style={styles.ownerInviteStatusPillText}>{invite.status}</Text>
+                        </View>
+                        <Text style={styles.ownerNavChevron}>{isOpen ? '⌃' : '›'}</Text>
+                      </View>
+                    </Pressable>
+
+                    {isOpen ? (
+                      <View style={styles.ownerParentExpandedContent}>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Recipient name</Text>
+                          <Text style={styles.ownerParentDetailValue}>{invite.name}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Email</Text>
+                          <Text style={styles.ownerParentDetailValue}>{invite.email}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Type</Text>
+                          <Text style={styles.ownerParentDetailValue}>{invite.type}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Linked child or staff role</Text>
+                          <Text style={styles.ownerParentDetailValue}>{invite.childOrRole}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Code</Text>
+                          <Text style={styles.ownerParentDetailValue}>{invite.code}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Status</Text>
+                          <Text style={styles.ownerParentDetailValue}>{invite.status}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Created date</Text>
+                          <Text style={styles.ownerParentDetailValue}>{invite.createdDate}</Text>
+                        </View>
+
+                        <View style={styles.ownerParentActionList}>
+                          {['Send Code', 'Copy Code', 'Revoke Code'].map((label) => (
+                            <OwnerNavCard
+                              key={label}
+                              accentColor={inviteAccent}
+                              title={label}
+                              subtitle="Coming Soon"
+                              onPress={() => onShowComingSoon(label)}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Invite Rules</Text>
+            <View style={styles.ownerInviteRulesList}>
+              {[
+                'Parent codes only open that parent’s child profile.',
+                'Staff codes only open staff workspace.',
+                'Owner codes should not be shared.',
+                'Codes can be revoked by the owner.',
+              ].map((rule) => (
+                <View key={rule} style={styles.ownerInviteRuleRow}>
+                  <View style={[styles.ownerInviteRuleDot, { backgroundColor: inviteAccent }]} />
+                  <Text style={styles.ownerInviteRuleText}>{rule}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function OwnerReportsScreen({ onBack, onLogout, onShowComingSoon }) {
+  const reportsAccent = OWNER_MODULE_COLORS.Reports;
+  const [openReportId, setOpenReportId] = useState(null);
+  const [activeFilter, setActiveFilter] = useState('This Week');
+
+  const reportSummaryCards = [
+    { title: 'Attendance Records', value: '128', accent: 'blue', note: 'All attendance logs' },
+    { title: 'Billing Reports', value: '14', accent: 'orange', note: 'Balances and invoices' },
+    { title: 'Staff Hour Reports', value: '6', accent: 'green', note: 'Time review queue' },
+    { title: 'Camp Headcount Reports', value: '8', accent: 'purple', note: 'Camp totals' },
+  ];
+
+  const reports = [
+    {
+      id: 'ba-attendance',
+      title: 'Before & After Care Attendance',
+      description: 'Daily drop-off, bus, return, and pickup records',
+      dateRange: 'May 27 - June 1',
+      lastGenerated: 'Today at 9:15 AM',
+      status: 'Ready',
+    },
+    {
+      id: 'camp-headcounts',
+      title: 'Summer Camp Headcounts',
+      description: 'Group confirmation and owner check-in totals',
+      dateRange: 'This Week',
+      lastGenerated: 'Today at 8:45 AM',
+      status: 'Ready',
+    },
+    {
+      id: 'staff-hours',
+      title: 'Staff Hours',
+      description: 'Clock-in/out records and owner review status',
+      dateRange: 'May 27 - June 1',
+      lastGenerated: 'Yesterday at 6:00 PM',
+      status: 'Pending Review',
+    },
+    {
+      id: 'billing-summary',
+      title: 'Billing Summary',
+      description: 'Pending, paid, and overdue balances',
+      dateRange: 'This Month',
+      lastGenerated: 'Today at 7:30 AM',
+      status: 'Ready',
+    },
+    {
+      id: 'daily-notes',
+      title: 'Daily Notes',
+      description: 'Notes submitted by staff for parent review',
+      dateRange: 'This Week',
+      lastGenerated: 'Today at 10:00 AM',
+      status: 'Ready',
+    },
+  ];
+
+  const filters = [
+    'Today',
+    'This Week',
+    'This Month',
+    'Before & After Care',
+    'Summer Camp',
+    'Staff',
+    'Billing',
+  ];
+
+  return (
+    <View style={styles.page}>
+      <View style={styles.ownerReportsHero}>
+        <View style={styles.heroOrbLarge} />
+        <View style={styles.heroOrbSmall} />
+
+        <View style={styles.childProfileHeaderRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.childProfileBackButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.childProfileBackButtonText}>Back</Text>
+          </Pressable>
+
+          <Text style={styles.childProfileHeaderLabel}>Reports</Text>
+        </View>
+
+        <View style={styles.ownerDashboardHeroCopy}>
+          <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+          <Text style={[styles.shellHeroTitle, styles.ownerReportsHeroTitle]}>Reports</Text>
+          <Text style={styles.shellHeroSubtitle}>Attendance and program reports</Text>
+          <View
+            style={[
+              styles.shellHeroPill,
+              styles.ownerReportsHeroPill,
+              { marginTop: 10 },
+            ]}
+          >
+            <Text style={styles.ownerReportsHeroPillText}>Owner Access</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.contentStack}>
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Report Summary</Text>
+            <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
+              {reportSummaryCards.map((card) => (
+                <SummaryTile
+                  key={card.title}
+                  accent={card.accent}
+                  badge={card.title.charAt(0)}
+                  title={card.title}
+                  value={card.value}
+                  note={card.note}
+                  fill="Owner"
+                />
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Quick Reports</Text>
+            <View style={styles.ownerParentList}>
+              {reports.map((report) => {
+                const isOpen = openReportId === report.id;
+
+                return (
+                  <View key={report.id} style={styles.ownerParentCard}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        setOpenReportId((current) => (current === report.id ? null : report.id))
+                      }
+                      style={({ pressed }) => [
+                        styles.ownerParentCardHeader,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <View style={styles.ownerParentHeaderTextBlock}>
+                        <Text style={styles.ownerParentName}>{report.title}</Text>
+                        <Text style={styles.ownerParentChildCount}>{report.description}</Text>
+                      </View>
+
+                      <View style={styles.ownerParentHeaderRight}>
+                        <View style={[styles.ownerReportsStatusPill, styles.ownerReportsStatusReady]}>
+                          <Text style={styles.ownerReportsStatusPillText}>{report.status}</Text>
+                        </View>
+                        <Text style={styles.ownerNavChevron}>{isOpen ? '⌃' : '›'}</Text>
+                      </View>
+                    </Pressable>
+
+                    {isOpen ? (
+                      <View style={styles.ownerParentExpandedContent}>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Report description</Text>
+                          <Text style={styles.ownerParentDetailValue}>{report.description}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Mock date range</Text>
+                          <Text style={styles.ownerParentDetailValue}>{report.dateRange}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Last generated</Text>
+                          <Text style={styles.ownerParentDetailValue}>{report.lastGenerated}</Text>
+                        </View>
+                        <View style={styles.ownerParentDetailRow}>
+                          <Text style={styles.ownerParentDetailLabel}>Status</Text>
+                          <Text style={styles.ownerParentDetailValue}>{report.status}</Text>
+                        </View>
+
+                        <View style={styles.ownerParentActionList}>
+                          {['View Report', 'Export PDF', 'Send to Owner Email'].map((label) => (
+                            <OwnerNavCard
+                              key={label}
+                              accentColor={reportsAccent}
+                              title={label}
+                              subtitle="Coming Soon"
+                              onPress={() => onShowComingSoon(label)}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Report Filters</Text>
+            <View style={styles.ownerFilterPillRow}>
+              {filters.map((pill) => {
+                const isActive = activeFilter === pill;
+                return (
+                  <Pressable
+                    key={pill}
+                    accessibilityRole="button"
+                    onPress={() => setActiveFilter(pill)}
+                    style={({ pressed }) => [
+                      styles.ownerFilterPill,
+                      isActive && styles.ownerFilterPillActive,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.ownerFilterPillText,
+                        isActive && styles.ownerFilterPillTextActive,
+                      ]}
+                    >
+                      {pill}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Reports Note</Text>
+            <Text style={styles.ownerCommunicationNote}>
+              Reports are mock-only in this prototype. When connected to real data, reports will
+              summarize attendance, billing, staff hours, daily notes, and camp headcounts.
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function OwnerSummerCampCheckInScreen({
+  onBack,
+  onLogout,
+  ownerSummerCampChildren,
+  ownerSummerCampSummary,
+  onCheckInChild,
+}) {
+  const totalAccent = OWNER_MODULE_COLORS['Camp Events'];
+
+  const campSummaryCards = [
+    {
+      accent: 'blue',
+      badge: 'T',
+      title: 'Total Campers Checked In',
+      value: String(ownerSummerCampSummary.total),
+      note: 'Owner access only',
+      fill: 'Live',
+    },
+    {
+      accent: 'blue',
+      badge: 'B',
+      title: 'Blue Group',
+      value: String(ownerSummerCampSummary['Blue Group'] || 0),
+      note: 'Owner checked in',
+      fill: 'Camp',
+    },
+    {
+      accent: 'green',
+      badge: 'G',
+      title: 'Green Group',
+      value: String(ownerSummerCampSummary['Green Group'] || 0),
+      note: 'Owner checked in',
+      fill: 'Camp',
+    },
+    {
+      accent: 'red',
+      badge: 'R',
+      title: 'Red Group',
+      value: String(ownerSummerCampSummary['Red Group'] || 0),
+      note: 'Owner checked in',
+      fill: 'Camp',
+    },
+    {
+      accent: 'yellow',
+      badge: 'Y',
+      title: 'Yellow Group',
+      value: String(ownerSummerCampSummary['Yellow Group'] || 0),
+      note: 'Owner checked in',
+      fill: 'Camp',
+    },
+  ];
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.ownerSummerCampHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Summer Camp Check-In</Text>
+          </View>
+
+          <View style={styles.ownerSummerCampHeroMain}>
+            <View style={styles.ownerSummerCampHeroCopy}>
+              <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+              <Text style={styles.shellHeroTitle}>Summer Camp Check-In</Text>
+              <Text style={styles.shellHeroSubtitle}>Owner check-in only</Text>
+              <View style={[styles.ownerAccessPill, { backgroundColor: totalAccent }]}>
+                <Text style={styles.ownerAccessPillText}>Owner Access</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Camp Check-In Summary</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Live totals across the center</Text>
+            </View>
+
+            <View style={styles.ownerSectionDetailsGrid}>
+              {campSummaryCards.map((card) => (
+                <SummaryTile
+                  key={card.title}
+                  accent={card.accent}
+                  badge={card.badge}
+                  title={card.title}
+                  value={card.value}
+                  note={card.note}
+                  fill={card.fill}
+                />
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Choose Child to Check In</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                {ownerSummerCampChildren.length} campers in the owner list
+              </Text>
+            </View>
+
+            <View style={styles.ownerSummerCampChildList}>
+              {ownerSummerCampChildren.map((child) => {
+                const theme = getChildGroupTheme(child.groupName);
+                const checkedIn = child.checkInStatus === 'Checked In';
+
+                return (
+                  <View key={child.id} style={styles.staffCampChildCard}>
+                    <View style={styles.staffCampChildCardTopRow}>
+                      <View style={styles.staffCampChildNameBlock}>
+                        <Text style={styles.staffCampChildName}>{child.name}</Text>
+                        <Text style={styles.staffCampChildTime}>
+                          Last update: {child.lastUpdateTime}
+                        </Text>
+                      </View>
+
+                      <View style={styles.staffCampStatusStack}>
+                        <View
+                          style={[
+                            styles.childProfileGroupBadge,
+                            {
+                              backgroundColor: theme.soft,
+                              borderColor: theme.border,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.childProfileGroupBadgeText,
+                              { color: theme.accent },
+                            ]}
+                          >
+                            {child.groupName}
+                          </Text>
+                        </View>
+
+                        <View
+                          style={[
+                            styles.childProfileStatusBadge,
+                            {
+                              backgroundColor: checkedIn ? COLORS.success : COLORS.softOrange,
+                            },
+                          ]}
+                        >
+                          <Text style={styles.childProfileStatusBadgeText}>
+                            {child.checkInStatus}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={checkedIn}
+                      onPress={() => onCheckInChild(child.id)}
+                      style={({ pressed }) => [
+                        styles.staffCampConfirmButton,
+                        {
+                          backgroundColor: checkedIn ? COLORS.success : totalAccent,
+                        },
+                        checkedIn && styles.staffCampConfirmButtonDisabled,
+                        pressed && !checkedIn && styles.pressedButton,
+                      ]}
+                    >
+                      <Text style={styles.staffCampConfirmButtonText}>
+                        {checkedIn ? 'Checked In' : 'Check In to Camp'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
           </View>
 
           <Pressable
@@ -3795,8 +5883,8 @@ function createStaffSummerCampGroups() {
       {
         id: 'blue-mia',
         name: 'Mia Carter',
-        checkInStatus: 'Checked In',
-        groupConfirmationStatus: 'Confirmed Present',
+        checkInStatus: 'Not Checked In',
+        groupConfirmationStatus: 'Not Confirmed',
         lastUpdateTime: '8:12 AM',
       },
       {
@@ -3809,7 +5897,7 @@ function createStaffSummerCampGroups() {
       {
         id: 'blue-lucas',
         name: 'Lucas Reed',
-        checkInStatus: 'Not Checked In',
+        checkInStatus: 'Checked In',
         groupConfirmationStatus: 'Not Confirmed',
         lastUpdateTime: '8:00 AM',
       },
@@ -3817,16 +5905,16 @@ function createStaffSummerCampGroups() {
         id: 'blue-sophia',
         name: 'Sophia Green',
         checkInStatus: 'Checked In',
-        groupConfirmationStatus: 'Confirmed Present',
+        groupConfirmationStatus: 'Not Confirmed',
         lastUpdateTime: '8:22 AM',
       },
     ],
     'Green Group': [
       {
-        id: 'green-ella',
-        name: 'Ella Moore',
-        checkInStatus: 'Checked In',
-        groupConfirmationStatus: 'Confirmed Present',
+        id: 'green-liam',
+        name: 'Liam Wilson',
+        checkInStatus: 'Not Checked In',
+        groupConfirmationStatus: 'Not Confirmed',
         lastUpdateTime: '8:14 AM',
       },
       {
@@ -3839,15 +5927,15 @@ function createStaffSummerCampGroups() {
       {
         id: 'green-lily',
         name: 'Lily Johnson',
-        checkInStatus: 'Not Checked In',
+        checkInStatus: 'Checked In',
         groupConfirmationStatus: 'Not Confirmed',
         lastUpdateTime: '8:00 AM',
       },
       {
-        id: 'green-noah',
-        name: 'Noah Brown',
+        id: 'green-ella',
+        name: 'Ella Moore',
         checkInStatus: 'Checked In',
-        groupConfirmationStatus: 'Confirmed Present',
+        groupConfirmationStatus: 'Not Confirmed',
         lastUpdateTime: '8:20 AM',
       },
     ],
@@ -3856,13 +5944,13 @@ function createStaffSummerCampGroups() {
         id: 'red-sadie',
         name: 'Sadie Brooks',
         checkInStatus: 'Checked In',
-        groupConfirmationStatus: 'Confirmed Present',
+        groupConfirmationStatus: 'Not Confirmed',
         lastUpdateTime: '8:10 AM',
       },
       {
         id: 'red-james',
         name: 'James Walker',
-        checkInStatus: 'Not Checked In',
+        checkInStatus: 'Checked In',
         groupConfirmationStatus: 'Not Confirmed',
         lastUpdateTime: '8:00 AM',
       },
@@ -3870,12 +5958,12 @@ function createStaffSummerCampGroups() {
         id: 'red-zoe',
         name: 'Zoe Hall',
         checkInStatus: 'Checked In',
-        groupConfirmationStatus: 'Confirmed Present',
+        groupConfirmationStatus: 'Not Confirmed',
         lastUpdateTime: '8:18 AM',
       },
       {
-        id: 'red-henry',
-        name: 'Henry Clark',
+        id: 'red-emma',
+        name: 'Emma Davis',
         checkInStatus: 'Checked In',
         groupConfirmationStatus: 'Not Confirmed',
         lastUpdateTime: '8:11 AM',
@@ -3883,16 +5971,16 @@ function createStaffSummerCampGroups() {
     ],
     'Yellow Group': [
       {
-        id: 'yellow-ella',
-        name: 'Ella King',
-        checkInStatus: 'Checked In',
-        groupConfirmationStatus: 'Confirmed Present',
+        id: 'yellow-noah',
+        name: 'Noah Brown',
+        checkInStatus: 'Not Checked In',
+        groupConfirmationStatus: 'Not Confirmed',
         lastUpdateTime: '8:09 AM',
       },
       {
         id: 'yellow-mason',
         name: 'Mason Scott',
-        checkInStatus: 'Not Checked In',
+        checkInStatus: 'Checked In',
         groupConfirmationStatus: 'Not Confirmed',
         lastUpdateTime: '8:00 AM',
       },
@@ -3900,7 +5988,7 @@ function createStaffSummerCampGroups() {
         id: 'yellow-ava',
         name: 'Ava Brooks',
         checkInStatus: 'Checked In',
-        groupConfirmationStatus: 'Confirmed Present',
+        groupConfirmationStatus: 'Not Confirmed',
         lastUpdateTime: '8:16 AM',
       },
       {
@@ -3912,6 +6000,51 @@ function createStaffSummerCampGroups() {
       },
     ],
   };
+}
+
+function createOwnerSummerCampChildren() {
+  return [
+    {
+      id: 'owner-summer-blue-mia',
+      name: 'Mia Carter',
+      groupName: 'Blue Group',
+      checkInStatus: 'Not Checked In',
+      checkInTime: 'Pending',
+      lastUpdateTime: 'Pending',
+    },
+    {
+      id: 'owner-summer-blue-ava',
+      name: 'Ava Martin',
+      groupName: 'Blue Group',
+      checkInStatus: 'Checked In',
+      checkInTime: '8:18 AM',
+      lastUpdateTime: '8:18 AM',
+    },
+    {
+      id: 'owner-summer-green-liam',
+      name: 'Liam Wilson',
+      groupName: 'Green Group',
+      checkInStatus: 'Not Checked In',
+      checkInTime: 'Pending',
+      lastUpdateTime: 'Pending',
+    },
+    {
+      id: 'owner-summer-red-emma',
+      name: 'Emma Davis',
+      groupName: 'Red Group',
+      checkInStatus: 'Checked In',
+      checkInTime: '8:11 AM',
+      lastUpdateTime: '8:11 AM',
+    },
+    {
+      id: 'owner-summer-yellow-noah',
+      name: 'Noah Brown',
+      groupName: 'Yellow Group',
+      checkInStatus: 'Not Checked In',
+      checkInTime: 'Pending',
+      lastUpdateTime: 'Pending',
+    },
+  ];
 }
 
 const OWNER_MODULES = [
@@ -3934,6 +6067,14 @@ const OWNER_MODULE_COLORS = {
   'Camp Events': '#14B8A6',
   'Invite Codes': '#F97366',
   Reports: '#001B3D',
+};
+
+const OWNER_SUMMER_CAMP_INITIAL_SUMMARY = {
+  total: 32,
+  'Blue Group': 12,
+  'Green Group': 8,
+  'Red Group': 6,
+  'Yellow Group': 6,
 };
 
 const OFFICIAL_LOGO = require('./assets/images/logo.png');
@@ -4323,10 +6464,16 @@ export default function App() {
   const [staffSummerCampGroups, setStaffSummerCampGroups] = useState(() =>
     createStaffSummerCampGroups()
   );
+  const [ownerSummerCampChildren, setOwnerSummerCampChildren] = useState(() =>
+    createOwnerSummerCampChildren()
+  );
   const [staffSummerCampSelectedGroup, setStaffSummerCampSelectedGroup] = useState(
     'Blue Group'
   );
   const [staffSummerCampOwnerStatus, setStaffSummerCampOwnerStatus] = useState({});
+  const [ownerSummerCampSummary, setOwnerSummerCampSummary] = useState(
+    OWNER_SUMMER_CAMP_INITIAL_SUMMARY
+  );
   const [staffDailyNotesSavedEntries, setStaffDailyNotesSavedEntries] = useState([]);
 
   const handleLogin = () => {
@@ -4374,8 +6521,10 @@ export default function App() {
     setStaffBeforeAfterSelectedChildId(createStaffBeforeAfterChildren()[0]?.id ?? null);
     setStaffBeforeAfterPickupChildId(null);
     setStaffSummerCampGroups(createStaffSummerCampGroups());
+    setOwnerSummerCampChildren(createOwnerSummerCampChildren());
     setStaffSummerCampSelectedGroup('Blue Group');
     setStaffSummerCampOwnerStatus({});
+    setOwnerSummerCampSummary(OWNER_SUMMER_CAMP_INITIAL_SUMMARY);
     setStaffDailyNotesSavedEntries([]);
   };
 
@@ -4525,6 +6674,17 @@ export default function App() {
   };
 
   const confirmCampPresent = (groupName, childId) => {
+    const currentGroup = staffSummerCampGroups[groupName] || [];
+    const existing = currentGroup.find((child) => child.id === childId);
+
+    if (!existing || existing.checkInStatus !== 'Checked In') {
+      return;
+    }
+
+    if (existing.groupConfirmationStatus === 'Confirmed Present') {
+      return;
+    }
+
     const time = consumeStaffMockTime();
 
     setStaffSummerCampGroups((prev) => {
@@ -4543,6 +6703,53 @@ export default function App() {
         ),
       };
     });
+  };
+
+  const checkInOwnerSummerCampChild = (groupName, childId, childName) => {
+    const time = consumeStaffMockTime();
+    const currentGroup = staffSummerCampGroups[groupName] || [];
+    const existing = currentGroup.find((child) => child.id === childId);
+
+    if (!existing || existing.checkInStatus === 'Checked In') {
+      return;
+    }
+
+    setStaffSummerCampGroups((prev) => {
+      const group = prev[groupName] || [];
+      return {
+        ...prev,
+        [groupName]: group.map((child) =>
+          child.id === childId
+            ? {
+                ...child,
+                checkInStatus: 'Checked In',
+                lastUpdateTime: time,
+              }
+            : child
+        ),
+      };
+    });
+
+    setOwnerSummerCampChildren((prev) =>
+      prev.map((child) =>
+        child.id === childId
+          ? {
+              ...child,
+              checkInStatus: 'Checked In',
+              checkInTime: time,
+              lastUpdateTime: time,
+            }
+          : child
+      )
+    );
+
+    setOwnerSummerCampSummary((prev) => ({
+      ...prev,
+      total: prev.total + 1,
+      [groupName]: (prev[groupName] || 0) + 1,
+    }));
+
+    Alert.alert(`${childName} checked into ${groupName}.`);
   };
 
   const sendCampHeadcount = (groupName) => {
@@ -5129,11 +7336,61 @@ export default function App() {
           onLogout={handleLogout}
           onShowComingSoon={showComingSoon}
         />
+      ) : screen === 'owner-parents' ? (
+        <OwnerParentsScreen
+          onBack={() => setScreen('owner-home')}
+          onLogout={handleLogout}
+          onShowComingSoon={showComingSoon}
+        />
+      ) : screen === 'owner-messages' ? (
+        <OwnerMessagesScreen
+          onBack={() => setScreen('owner-home')}
+          onLogout={handleLogout}
+        />
+      ) : screen === 'owner-billing' ? (
+        <OwnerBillingScreen
+          onBack={() => setScreen('owner-home')}
+          onLogout={handleLogout}
+          onShowComingSoon={showComingSoon}
+        />
+      ) : screen === 'owner-camp-events' ? (
+        <OwnerCampEventsScreen
+          onBack={() => setScreen('owner-home')}
+          onLogout={handleLogout}
+          onShowComingSoon={showComingSoon}
+        />
+      ) : screen === 'owner-invite-codes' ? (
+        <OwnerInviteCodesScreen
+          onBack={() => setScreen('owner-home')}
+          onLogout={handleLogout}
+          onShowComingSoon={showComingSoon}
+        />
+      ) : screen === 'owner-reports' ? (
+        <OwnerReportsScreen
+          onBack={() => setScreen('owner-home')}
+          onLogout={handleLogout}
+          onShowComingSoon={showComingSoon}
+        />
       ) : screen === 'owner-staff' ? (
         <OwnerStaffScreen
           onBack={() => setScreen('owner-home')}
           onLogout={handleLogout}
           onShowComingSoon={showComingSoon}
+        />
+      ) : screen === 'owner-summer-camp-check-in' ? (
+        <OwnerSummerCampCheckInScreen
+          onBack={() => setScreen('owner-home')}
+          onLogout={handleLogout}
+          ownerSummerCampChildren={ownerSummerCampChildren}
+          ownerSummerCampSummary={ownerSummerCampSummary}
+          onCheckInChild={(childId) => {
+            const child = ownerSummerCampChildren.find((entry) => entry.id === childId);
+            if (!child) {
+              return;
+            }
+
+            checkInOwnerSummerCampChild(child.groupName, child.id, child.name);
+          }}
         />
       ) : (
         <OwnerDashboardScreen
@@ -5141,6 +7398,15 @@ export default function App() {
           onShowComingSoon={showComingSoon}
           onOpenStudents={() => setScreen('owner-students')}
           onOpenStaff={() => setScreen('owner-staff')}
+          onOpenParents={() => setScreen('owner-parents')}
+          onOpenMessages={() => setScreen('owner-messages')}
+          onOpenBilling={() => setScreen('owner-billing')}
+          onOpenCampEvents={() => setScreen('owner-camp-events')}
+          onOpenInviteCodes={() => setScreen('owner-invite-codes')}
+          onOpenReports={() => setScreen('owner-reports')}
+          onOpenSummerCampCheckIn={() => setScreen('owner-summer-camp-check-in')}
+          ownerSummerCampSummary={ownerSummerCampSummary}
+          staffSummerCampGroups={staffSummerCampGroups}
         />
       )}
     </SafeAreaView>
@@ -6550,6 +8816,461 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
+  ownerParentsHero: {
+    backgroundColor: COLORS.navyDark,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden',
+    paddingBottom: 10,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    position: 'relative',
+  },
+  ownerParentsHeroPill: {
+    backgroundColor: COLORS.softPurple,
+    borderColor: '#D6CCFF',
+    borderWidth: 1,
+  },
+  ownerParentsHeroPillText: {
+    color: OWNER_MODULE_COLORS.Parents,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  ownerMessagesHero: {
+    backgroundColor: COLORS.navyDark,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden',
+    paddingBottom: 10,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    position: 'relative',
+  },
+  ownerMessagesHeroPill: {
+    backgroundColor: COLORS.softBlue,
+    borderColor: '#B5E3F7',
+    borderWidth: 1,
+  },
+  ownerMessagesHeroPillText: {
+    color: OWNER_MODULE_COLORS.Messages,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  ownerChipGroup: {
+    marginTop: 14,
+  },
+  ownerChipGroupLabel: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: '900',
+    marginBottom: 10,
+  },
+  ownerMessageInput: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 22,
+    borderWidth: 1,
+    color: COLORS.text,
+    fontSize: 15,
+    minHeight: 120,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    textAlignVertical: 'top',
+    marginTop: 14,
+  },
+  ownerRecentMessageList: {
+    gap: 12,
+    marginTop: 14,
+  },
+  ownerRecentMessageCard: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 16,
+  },
+  ownerRecentMessageTopRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  ownerRecentMessageTextBlock: {
+    flex: 1,
+  },
+  ownerRecentMessageTitle: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  ownerRecentMessageAudience: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  ownerRecentMessageBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  ownerRecentMessageBadgeText: {
+    color: COLORS.white,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  ownerRecentMessageTime: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 10,
+  },
+  ownerCommunicationNote: {
+    color: COLORS.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 14,
+  },
+  ownerInviteCodesHero: {
+    backgroundColor: COLORS.navyDark,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden',
+    paddingBottom: 10,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    position: 'relative',
+  },
+  ownerInviteCodesHeroPill: {
+    backgroundColor: COLORS.softOrange,
+    borderColor: '#FCDFA6',
+    borderWidth: 1,
+  },
+  ownerInviteCodesHeroPillText: {
+    color: OWNER_MODULE_COLORS['Invite Codes'],
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  ownerReportsHero: {
+    backgroundColor: COLORS.navyDark,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden',
+    paddingBottom: 10,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    position: 'relative',
+  },
+  ownerReportsHeroPill: {
+    backgroundColor: COLORS.softNavy,
+    borderColor: '#D9E1EF',
+    borderWidth: 1,
+  },
+  ownerReportsHeroPillText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  ownerReportsHeroTitle: {
+    letterSpacing: -0.5,
+  },
+  ownerReportsStatusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  ownerReportsStatusPillText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  ownerReportsStatusReady: {
+    backgroundColor: OWNER_MODULE_COLORS.Reports,
+  },
+  ownerReportsStatusPending: {
+    backgroundColor: COLORS.warning,
+  },
+  ownerInviteBadgeBlue: {
+    backgroundColor: OWNER_MODULE_COLORS.Students,
+  },
+  ownerInviteBadgeGreen: {
+    backgroundColor: COLORS.success,
+  },
+  ownerInviteBadgeOrange: {
+    backgroundColor: OWNER_MODULE_COLORS.Billing,
+  },
+  ownerInviteBadgeTeal: {
+    backgroundColor: OWNER_MODULE_COLORS['Camp Events'],
+  },
+  ownerInviteStatusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  ownerInviteStatusPillText: {
+    color: COLORS.white,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  ownerInviteGeneratedBlock: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: 14,
+    padding: 14,
+  },
+  ownerInviteGeneratedLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  ownerInviteGeneratedCode: {
+    color: OWNER_MODULE_COLORS['Invite Codes'],
+    fontSize: 22,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  ownerInviteGeneratedMeta: {
+    color: COLORS.muted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 6,
+  },
+  ownerInviteRulesList: {
+    gap: 12,
+    marginTop: 14,
+  },
+  ownerInviteRuleRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  ownerInviteRuleDot: {
+    borderRadius: 999,
+    height: 10,
+    marginTop: 5,
+    width: 10,
+  },
+  ownerInviteRuleText: {
+    color: COLORS.text,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  ownerCampEventsHero: {
+    backgroundColor: COLORS.navyDark,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden',
+    paddingBottom: 10,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    position: 'relative',
+  },
+  ownerCampEventsHeroPill: {
+    backgroundColor: COLORS.softTeal,
+    borderColor: '#BDEAE6',
+    borderWidth: 1,
+  },
+  ownerCampEventsHeroPillText: {
+    color: OWNER_MODULE_COLORS['Camp Events'],
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  ownerCampBadgeBlue: {
+    backgroundColor: OWNER_MODULE_COLORS.Students,
+  },
+  ownerCampBadgeGreen: {
+    backgroundColor: OWNER_MODULE_COLORS.Staff,
+  },
+  ownerCampBadgeOrange: {
+    backgroundColor: OWNER_MODULE_COLORS.Billing,
+  },
+  ownerCampBadgeTeal: {
+    backgroundColor: OWNER_MODULE_COLORS['Camp Events'],
+  },
+  ownerCampStatusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  ownerCampStatusPillText: {
+    color: COLORS.white,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  ownerEventForm: {
+    gap: 12,
+    marginTop: 14,
+  },
+  ownerEventField: {
+    gap: 8,
+  },
+  ownerEventFieldLabel: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  ownerBillingHero: {
+    backgroundColor: COLORS.navyDark,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden',
+    paddingBottom: 10,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    position: 'relative',
+  },
+  ownerBillingHeroPill: {
+    backgroundColor: COLORS.softOrange,
+    borderColor: '#FCDFA6',
+    borderWidth: 1,
+  },
+  ownerBillingHeroPillText: {
+    color: OWNER_MODULE_COLORS.Billing,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  ownerBillingProgramList: {
+    gap: 12,
+    marginTop: 14,
+  },
+  ownerBillingProgramRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  ownerBillingProgramLabel: {
+    color: COLORS.text,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '800',
+    paddingRight: 10,
+  },
+  ownerBillingAmountBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  ownerBillingAmountBadgeText: {
+    color: COLORS.white,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  ownerBillingBadgeBlue: {
+    backgroundColor: OWNER_MODULE_COLORS.Students,
+  },
+  ownerBillingBadgeGreen: {
+    backgroundColor: OWNER_MODULE_COLORS.Staff,
+  },
+  ownerBillingBadgeOrange: {
+    backgroundColor: OWNER_MODULE_COLORS.Billing,
+  },
+  ownerBillingBadgeRed: {
+    backgroundColor: COLORS.danger,
+  },
+  ownerBillingStatusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  ownerBillingStatusPillText: {
+    color: COLORS.white,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  ownerSummerCampHero: {
+    backgroundColor: COLORS.navyDark,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden',
+    paddingBottom: 10,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    position: 'relative',
+  },
+  ownerSummerCampHeroMain: {
+    marginTop: 18,
+  },
+  ownerSummerCampHeroCopy: {
+    gap: 6,
+  },
+  ownerSummerCampHeroSubtitle: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 22,
+  },
+  ownerAccessPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  ownerAccessPillText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  ownerSummerCampActionBlock: {
+    gap: 12,
+  },
+  ownerSummerCampActionText: {
+    color: COLORS.muted,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  ownerSummerCampChildList: {
+    gap: 12,
+  },
   ownerActivityList: {
     gap: 12,
   },
@@ -6831,6 +9552,88 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 12,
     fontWeight: '900',
+  },
+  ownerParentList: {
+    gap: 12,
+    marginTop: 14,
+  },
+  ownerParentCard: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 24,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  ownerParentCardHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  ownerParentHeaderTextBlock: {
+    flex: 1,
+  },
+  ownerParentName: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  ownerParentChildCount: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  ownerParentHeaderRight: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  ownerParentExpandedContent: {
+    borderTopColor: COLORS.border,
+    borderTopWidth: 1,
+    padding: 16,
+  },
+  ownerParentDetailRow: {
+    marginBottom: 12,
+  },
+  ownerParentDetailLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  ownerParentDetailValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  ownerParentChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  ownerParentProgramChip: {
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  ownerParentProgramChipText: {
+    color: OWNER_MODULE_COLORS.Parents,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  ownerParentActionList: {
+    gap: 10,
+    marginTop: 4,
   },
   ownerStudentsHeroPill: {
     backgroundColor: COLORS.softBlue,
@@ -7248,13 +10051,13 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: -0.5,
     lineHeight: 36,
-    marginTop: 14,
+    marginTop: -8,
   },
   shellHeroSubtitle: {
     color: 'rgba(255,255,255,0.76)',
     fontSize: 15,
     lineHeight: 22,
-    marginTop: 8,
+    marginTop: -8,
     maxWidth: 340,
   },
 loginPage: {
