@@ -774,6 +774,1656 @@ function ParentBillingScreen({ onBack, onLogout }) {
   );
 }
 
+function StaffHomeScreen({
+  onLogout,
+  onShowComingSoon,
+  onOpenClock,
+  onOpenBeforeAfter,
+  onOpenCamp,
+  onOpenNotes,
+  onOpenHours,
+  staffStatus,
+}) {
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.staffHero}>
+          <View style={styles.staffHeroMain}>
+            <View style={styles.staffHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Hi, Ms. Sarah</Text>
+              <Text style={styles.staffHeroSubheading}>Staff Workspace</Text>
+              <View style={styles.staffStatusPill}>
+                <Text style={styles.staffStatusPillText}>{staffStatus}</Text>
+              </View>
+            </View>
+
+            <View style={styles.staffAvatarPlaceholder}>
+              <Text style={styles.staffAvatarText}>MS</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.staffButtonStack}>
+            {STAFF_WORKSPACE_CARDS.map((card) => (
+              <ActionButtonCard
+                key={card.title}
+                accent={card.accent}
+                title={card.title}
+                value={card.title === 'Clock In / Out' ? staffStatus : card.value}
+                note={card.note}
+                onPress={() =>
+                  card.title === 'Clock In / Out'
+                    ? onOpenClock()
+                    : card.title === 'Before & After Care Attendance'
+                      ? onOpenBeforeAfter()
+                    : card.title === 'Summer Camp Group Check-In'
+                        ? onOpenCamp()
+                        : card.title === 'Daily Notes'
+                          ? onOpenNotes()
+                          : card.title === 'My Hours'
+                            ? onOpenHours()
+                        : onShowComingSoon(card.title)
+                }
+              />
+            ))}
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+/*
+function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
+  const [selectedChildId, setSelectedChildId] = useState(STAFF_DAILY_NOTE_CHILDREN[0]?.id ?? null);
+  const [selectedQuickNotes, setSelectedQuickNotes] = useState([]);
+  const [customNote, setCustomNote] = useState('');
+  const [visibility, setVisibility] = useState({ parent: true, owner: true });
+  const [savedFormKey, setSavedFormKey] = useState('');
+  const [savedFormKey, setSavedFormKey] = useState('');
+  const [savedFormKey, setSavedFormKey] = useState('');
+  const [savedFormKey, setSavedFormKey] = useState('');
+  const [savedFormKey, setSavedFormKey] = useState('');
+  const [savedSignature, setSavedSignature] = useState(null);
+
+  const selectedChild =
+    STAFF_DAILY_NOTE_CHILDREN.find((child) => child.id === selectedChildId) ||
+    STAFF_DAILY_NOTE_CHILDREN[0] ||
+    null;
+
+  const toggleQuickNote = (note) => {
+    setSelectedQuickNotes((prev) =>
+      prev.includes(note) ? prev.filter((item) => item !== note) : [...prev, note]
+    );
+  };
+
+  const toggleVisibility = (target) => {
+    setVisibility((prev) => ({
+      ...prev,
+      [target]: !prev[target],
+    }));
+  };
+
+  const previewQuickNotes = selectedQuickNotes.length
+    ? selectedQuickNotes.join(' • ')
+    : 'No quick notes selected';
+  const previewCustomNote = customNote.trim() || 'No custom note added';
+  const previewVisibility = [
+    visibility.parent ? 'Parent' : null,
+    visibility.owner ? 'Owner' : null,
+  ].filter(Boolean);
+  const currentFormKey = [
+    selectedChild?.id || '',
+    [...selectedQuickNotes].sort().join('|'),
+    customNote.trim(),
+    visibility.parent ? '1' : '0',
+    visibility.owner ? '1' : '0',
+  ].join('::');
+  const hasContent = selectedQuickNotes.length > 0 || customNote.trim().length > 0;
+  const isSaved = Boolean(savedFormKey) && savedFormKey === currentFormKey;
+  const canSave = Boolean(selectedChild) && hasContent;
+  const isSaveDisabled = !canSave || isSaved;
+  const currentSignature = [
+    selectedChild?.id || '',
+    [...selectedQuickNotes].sort().join('|'),
+    customNote.trim(),
+    visibility.parent ? '1' : '0',
+    visibility.owner ? '1' : '0',
+  ].join('::');
+  const hasContent = selectedQuickNotes.length > 0 || customNote.trim().length > 0;
+  const isSaved = savedSignature !== null && savedSignature === currentSignature;
+  const canSave = Boolean(selectedChild) && hasContent;
+  const isSaveDisabled = !canSave || isSaved;
+
+  const handleSave = () => {
+    if (!selectedChild) {
+      Alert.alert('Select a child first.');
+      return;
+    }
+
+    if (!hasContent || isSaved) {
+      return;
+    }
+
+    const savedEntry = onSaveNote({
+      childId: selectedChild.id,
+      childName: selectedChild.name,
+      quickNotes: selectedQuickNotes,
+      customNote: customNote.trim(),
+      visibility,
+      signature: currentSignature,
+    });
+
+    if (!savedEntry) {
+      return;
+    }
+
+    Alert.alert(`Daily note saved for ${selectedChild.name}.`);
+    setSavedSignature(currentSignature);
+  };
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.staffClockHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [styles.childProfileBackButton, pressed && styles.pressedButton]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Daily Notes</Text>
+          </View>
+
+          <View style={styles.staffHeroMain}>
+            <View style={styles.staffHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Staff: Ms. Sarah</Text>
+              <Text style={styles.staffHeroSubheading}>Parent note writer</Text>
+            </View>
+
+            <View style={styles.staffAvatarPlaceholder}>
+              <Text style={styles.staffAvatarText}>MS</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Select Child</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Tap one child</Text>
+            </View>
+
+            <View style={styles.staffDailyNotesChildGrid}>
+              {STAFF_DAILY_NOTE_CHILDREN.map((child) => {
+                const isSelected = child.id === selectedChild?.id;
+                const theme = getChildGroupTheme(child.accentGroup);
+
+                return (
+                  <Pressable
+                    key={child.id}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setSelectedChildId(child.id);
+                      setSavedSignature(null);
+                    }}
+                    style={({ pressed }) => [
+                      styles.staffDailyNotesChildCard,
+                      { borderColor: theme.border },
+                      isSelected && styles.staffDailyNotesChildCardSelected,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <View style={[styles.staffDailyNotesChildAccent, { backgroundColor: theme.accent }]} />
+                    <Text style={styles.staffDailyNotesChildName}>{child.name}</Text>
+                    <Text style={styles.staffDailyNotesChildMeta}>
+                      {isSelected ? 'Selected' : 'Tap to select'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Quick Notes</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Tap multiple chips</Text>
+            </View>
+
+            <View style={styles.staffDailyNotesChipWrap}>
+              {STAFF_DAILY_NOTE_CHIPS.map((note) => {
+                const active = selectedQuickNotes.includes(note);
+
+                return (
+                  <Pressable
+                    key={note}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      toggleQuickNote(note);
+                      setSavedSignature(null);
+                    }}
+                    style={({ pressed }) => [
+                      styles.staffDailyNotesChip,
+                      active && styles.staffDailyNotesChipActive,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.staffDailyNotesChipText,
+                        active && styles.staffDailyNotesChipTextActive,
+                      ]}
+                    >
+                      {note}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Custom Note</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Optional</Text>
+            </View>
+
+            <TextInput
+              multiline
+              onChangeText={(text) => {
+                setCustomNote(text);
+                setSavedSignature(null);
+              }}
+              placeholder="Write a note for the parent..."
+              placeholderTextColor={COLORS.muted}
+              style={[styles.input, styles.staffDailyNotesInput]}
+              textAlignVertical="top"
+              value={customNote}
+            />
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Visibility</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Default: Parent + Owner</Text>
+            </View>
+
+            <View style={styles.staffDailyNotesVisibilityRow}>
+              {[
+                { key: 'parent', label: 'Parent' },
+                { key: 'owner', label: 'Owner' },
+              ].map((item) => {
+                const active = visibility[item.key];
+
+                return (
+                  <Pressable
+                    key={item.key}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      toggleVisibility(item.key);
+                      setSavedSignature(null);
+                    }}
+                    style={({ pressed }) => [
+                      styles.staffDailyNotesVisibilityChip,
+                      active && styles.staffDailyNotesVisibilityChipActive,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.staffDailyNotesVisibilityText,
+                        active && styles.staffDailyNotesVisibilityTextActive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Note Preview</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Mock sync preview</Text>
+            </View>
+
+            <View style={styles.staffDailyNotesPreviewList}>
+              <View style={styles.staffDailyNotesPreviewBlock}>
+                <Text style={styles.staffDailyNotesPreviewLabel}>Selected child</Text>
+                <Text style={styles.staffDailyNotesPreviewValue}>{selectedChild?.name || '—'}</Text>
+              </View>
+              <View style={styles.staffDailyNotesPreviewBlock}>
+                <Text style={styles.staffDailyNotesPreviewLabel}>Quick notes</Text>
+                <Text style={styles.staffDailyNotesPreviewValue}>{previewQuickNotes}</Text>
+              </View>
+              <View style={styles.staffDailyNotesPreviewBlock}>
+                <Text style={styles.staffDailyNotesPreviewLabel}>Custom note</Text>
+                <Text style={styles.staffDailyNotesPreviewValue}>{previewCustomNote}</Text>
+              </View>
+              <View style={styles.staffDailyNotesPreviewBlock}>
+                <Text style={styles.staffDailyNotesPreviewLabel}>Staff / time</Text>
+                <Text style={styles.staffDailyNotesPreviewValue}>
+                  {STAFF_MEMBER.name} · {STAFF_CLOCK_CURRENT_TIME}
+                </Text>
+              </View>
+              <View style={styles.staffDailyNotesPreviewBlock}>
+                <Text style={styles.staffDailyNotesPreviewLabel}>Sync targets</Text>
+                <View style={styles.staffDailyNotesTagRow}>
+                  {previewVisibility.length ? (
+                    previewVisibility.map((target) => (
+                      <View key={target} style={styles.staffDailyNotesTag}>
+                        <Text style={styles.staffDailyNotesTagText}>{target}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.staffDailyNotesPreviewValue}>No visibility selected</Text>
+                  )}
+                </View>
+              </View>
+            </View>
+
+            <Text style={styles.staffDailyNotesPreviewFooter}>
+              This note can later sync to Parent Notifications, Child Timeline, and the Owner Dashboard.
+            </Text>
+
+            <View style={styles.staffDailyNotesSavedHeader}>
+              <Text style={styles.staffDailyNotesSavedTitle}>Recent Saved Notes</Text>
+              <Text style={styles.staffDailyNotesPreviewFooter}>Local only</Text>
+            </View>
+
+            <View style={styles.staffDailyNotesSavedList}>
+              {savedNotes.length ? (
+                savedNotes.slice(0, 3).map((note) => (
+                  <View key={note.id} style={styles.staffDailyNotesSavedItem}>
+                    <View style={styles.staffDailyNotesSavedTopRow}>
+                      <Text style={styles.staffDailyNotesSavedChild}>{note.childName}</Text>
+                      <Text style={styles.staffDailyNotesSavedTime}>{note.time}</Text>
+                    </View>
+                    <Text style={styles.staffDailyNotesSavedSummary}>{note.summary}</Text>
+                    <View style={styles.staffDailyNotesTagRow}>
+                      {note.visibility.parent ? (
+                        <View style={styles.staffDailyNotesTag}>
+                          <Text style={styles.staffDailyNotesTagText}>Parent</Text>
+                        </View>
+                      ) : null}
+                      {note.visibility.owner ? (
+                        <View style={styles.staffDailyNotesTag}>
+                          <Text style={styles.staffDailyNotesTagText}>Owner</Text>
+                        </View>
+                      ) : null}
+                      <View style={styles.staffDailyNotesTag}>
+                        <Text style={styles.staffDailyNotesTagText}>Timeline</Text>
+                      </View>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.staffDailyNotesPreviewFooter}>No notes saved yet.</Text>
+              )}
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleSave}
+            disabled={isSaveDisabled}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              isSaved && styles.staffDailyNotesSaveButtonSaved,
+              isSaveDisabled && !isSaved && styles.staffDailyNotesSaveButtonDisabled,
+              pressed && !isSaveDisabled && styles.pressedButton,
+            ]}
+          >
+            <Text
+              style={[
+                styles.primaryButtonText,
+                isSaved && styles.staffDailyNotesSaveButtonTextSaved,
+                isSaveDisabled && !isSaved && styles.staffDailyNotesSaveButtonTextDisabled,
+              ]}
+            >
+              {isSaved ? '✓ Note Saved' : 'Save Daily Note'}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+*/
+
+function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
+  const [selectedChildId, setSelectedChildId] = useState(STAFF_DAILY_NOTE_CHILDREN[0]?.id ?? null);
+  const [selectedQuickNotes, setSelectedQuickNotes] = useState([]);
+  const [customNote, setCustomNote] = useState('');
+  const [visibility, setVisibility] = useState({ parent: true, owner: true });
+  const [savedFormKey, setSavedFormKey] = useState('');
+
+  const selectedChild =
+    STAFF_DAILY_NOTE_CHILDREN.find((child) => child.id === selectedChildId) ||
+    STAFF_DAILY_NOTE_CHILDREN[0] ||
+    null;
+
+  const toggleQuickNote = (note) => {
+    setSelectedQuickNotes((prev) =>
+      prev.includes(note) ? prev.filter((item) => item !== note) : [...prev, note]
+    );
+  };
+
+  const toggleVisibility = (key) => {
+    setVisibility((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const previewQuickNotes = selectedQuickNotes.length
+    ? selectedQuickNotes.join(' • ')
+    : 'No quick notes selected';
+  const previewCustomNote = customNote.trim() || 'No custom note added';
+  const previewVisibility = [
+    visibility.parent ? 'Parent' : null,
+    visibility.owner ? 'Owner' : null,
+  ].filter(Boolean);
+  const currentFormKey = [
+    selectedChild?.id || '',
+    [...selectedQuickNotes].sort().join('|'),
+    customNote.trim(),
+    visibility.parent ? '1' : '0',
+    visibility.owner ? '1' : '0',
+  ].join('::');
+  const hasContent = selectedQuickNotes.length > 0 || customNote.trim().length > 0;
+  const isSaved = Boolean(savedFormKey) && savedFormKey === currentFormKey;
+  const canSave = Boolean(selectedChild) && hasContent;
+  const isSaveDisabled = !canSave || isSaved;
+
+  const handleSave = () => {
+    if (!selectedChild) {
+      Alert.alert('Select a child first.');
+      return;
+    }
+
+    if (!hasContent || isSaved) {
+      return;
+    }
+
+    const savedEntry = onSaveNote({
+      childId: selectedChild.id,
+      childName: selectedChild.name,
+      quickNotes: selectedQuickNotes,
+      customNote: customNote.trim(),
+      visibility,
+      signature: currentFormKey,
+    });
+
+    if (!savedEntry) {
+      return;
+    }
+
+    Alert.alert(`Daily note saved for ${selectedChild.name}.`);
+    setSavedFormKey(currentFormKey);
+  };
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.staffClockHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Daily Notes</Text>
+          </View>
+
+          <View style={styles.staffHeroMain}>
+            <View style={styles.staffHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Staff: Ms. Sarah</Text>
+              <Text style={styles.staffHeroSubheading}>Parent note writer</Text>
+            </View>
+
+            <View style={styles.staffAvatarPlaceholder}>
+              <Text style={styles.staffAvatarText}>MS</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Select Child</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Tap one child</Text>
+            </View>
+
+            <View style={styles.staffDailyNotesChildGrid}>
+              {STAFF_DAILY_NOTE_CHILDREN.map((child) => {
+                const isSelected = child.id === selectedChild?.id;
+                const theme = getChildGroupTheme(child.accentGroup);
+
+                return (
+                  <Pressable
+                    key={child.id}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setSelectedChildId(child.id);
+                      setSelectedQuickNotes([]);
+                      setCustomNote('');
+                      setVisibility({ parent: true, owner: true });
+                      setSavedFormKey('');
+                    }}
+                    style={({ pressed }) => [
+                      styles.staffDailyNotesChildCard,
+                      { borderColor: theme.border },
+                      isSelected && styles.staffDailyNotesChildCardSelected,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <View style={[styles.staffDailyNotesChildAccent, { backgroundColor: theme.accent }]} />
+                    <Text style={styles.staffDailyNotesChildName}>{child.name}</Text>
+                    <Text style={styles.staffDailyNotesChildMeta}>
+                      {isSelected ? 'Selected' : 'Tap to select'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Quick Notes</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Tap multiple chips</Text>
+            </View>
+
+            <View style={styles.staffDailyNotesChipWrap}>
+              {STAFF_DAILY_NOTE_CHIPS.map((note) => {
+                const active = selectedQuickNotes.includes(note);
+
+                return (
+                  <Pressable
+                    key={note}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      toggleQuickNote(note);
+                      setSavedFormKey('');
+                    }}
+                    style={({ pressed }) => [
+                      styles.staffDailyNotesChip,
+                      active && styles.staffDailyNotesChipActive,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.staffDailyNotesChipText,
+                        active && styles.staffDailyNotesChipTextActive,
+                      ]}
+                    >
+                      {note}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Custom Note</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Optional</Text>
+            </View>
+
+            <TextInput
+              multiline
+              onChangeText={(text) => {
+                setCustomNote(text);
+                setSavedFormKey('');
+              }}
+              placeholder="Write a note for the parent..."
+              placeholderTextColor={COLORS.muted}
+              style={[styles.input, styles.staffDailyNotesInput]}
+              textAlignVertical="top"
+              value={customNote}
+            />
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Visibility</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Default: Parent + Owner</Text>
+            </View>
+
+            <View style={styles.staffDailyNotesVisibilityRow}>
+              {[
+                { key: 'parent', label: 'Parent' },
+                { key: 'owner', label: 'Owner' },
+              ].map((item) => {
+                const active = visibility[item.key];
+
+                return (
+                  <Pressable
+                    key={item.key}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      toggleVisibility(item.key);
+                      setSavedFormKey('');
+                    }}
+                    style={({ pressed }) => [
+                      styles.staffDailyNotesVisibilityChip,
+                      active && styles.staffDailyNotesVisibilityChipActive,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.staffDailyNotesVisibilityText,
+                        active && styles.staffDailyNotesVisibilityTextActive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Note Preview</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Mock sync preview</Text>
+            </View>
+
+            <View style={styles.staffDailyNotesPreviewList}>
+              <View style={styles.staffDailyNotesPreviewBlock}>
+                <Text style={styles.staffDailyNotesPreviewLabel}>Selected child</Text>
+                <Text style={styles.staffDailyNotesPreviewValue}>{selectedChild?.name || '—'}</Text>
+              </View>
+              <View style={styles.staffDailyNotesPreviewBlock}>
+                <Text style={styles.staffDailyNotesPreviewLabel}>Quick notes</Text>
+                <Text style={styles.staffDailyNotesPreviewValue}>{previewQuickNotes}</Text>
+              </View>
+              <View style={styles.staffDailyNotesPreviewBlock}>
+                <Text style={styles.staffDailyNotesPreviewLabel}>Custom note</Text>
+                <Text style={styles.staffDailyNotesPreviewValue}>{previewCustomNote}</Text>
+              </View>
+              <View style={styles.staffDailyNotesPreviewBlock}>
+                <Text style={styles.staffDailyNotesPreviewLabel}>Staff / time</Text>
+                <Text style={styles.staffDailyNotesPreviewValue}>
+                  {STAFF_MEMBER.name} · {STAFF_CLOCK_CURRENT_TIME}
+                </Text>
+              </View>
+              <View style={styles.staffDailyNotesPreviewBlock}>
+                <Text style={styles.staffDailyNotesPreviewLabel}>Sync targets</Text>
+                <View style={styles.staffDailyNotesTagRow}>
+                  {previewVisibility.length ? (
+                    previewVisibility.map((target) => (
+                      <View key={target} style={styles.staffDailyNotesTag}>
+                        <Text style={styles.staffDailyNotesTagText}>{target}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.staffDailyNotesPreviewValue}>No visibility selected</Text>
+                  )}
+                </View>
+              </View>
+            </View>
+
+            <Text style={styles.staffDailyNotesPreviewFooter}>
+              This note can later sync to Parent Notifications, Child Timeline, and the Owner Dashboard.
+            </Text>
+
+            <View style={styles.staffDailyNotesSavedHeader}>
+              <Text style={styles.staffDailyNotesSavedTitle}>Recent Saved Notes</Text>
+              <Text style={styles.staffDailyNotesPreviewFooter}>Local only</Text>
+            </View>
+
+            <View style={styles.staffDailyNotesSavedList}>
+              {savedNotes.length ? (
+                savedNotes.slice(0, 3).map((note) => (
+                  <View key={note.id} style={styles.staffDailyNotesSavedItem}>
+                    <View style={styles.staffDailyNotesSavedTopRow}>
+                      <Text style={styles.staffDailyNotesSavedChild}>{note.childName}</Text>
+                      <Text style={styles.staffDailyNotesSavedTime}>{note.time}</Text>
+                    </View>
+                    <Text style={styles.staffDailyNotesSavedSummary}>{note.summary}</Text>
+                    <View style={styles.staffDailyNotesTagRow}>
+                      {note.visibility.parent ? (
+                        <View style={styles.staffDailyNotesTag}>
+                          <Text style={styles.staffDailyNotesTagText}>Parent</Text>
+                        </View>
+                      ) : null}
+                      {note.visibility.owner ? (
+                        <View style={styles.staffDailyNotesTag}>
+                          <Text style={styles.staffDailyNotesTagText}>Owner</Text>
+                        </View>
+                      ) : null}
+                      <View style={styles.staffDailyNotesTag}>
+                        <Text style={styles.staffDailyNotesTagText}>Timeline</Text>
+                      </View>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.staffDailyNotesPreviewFooter}>No notes saved yet.</Text>
+              )}
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleSave}
+            disabled={isSaveDisabled}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              isSaved && styles.staffDailyNotesSaveButtonSaved,
+              isSaveDisabled && !isSaved && styles.staffDailyNotesSaveButtonDisabled,
+              pressed && !isSaveDisabled && styles.pressedButton,
+            ]}
+          >
+            <Text
+              style={[
+                styles.primaryButtonText,
+                isSaved && styles.staffDailyNotesSaveButtonTextSaved,
+                isSaveDisabled && !isSaved && styles.staffDailyNotesSaveButtonTextDisabled,
+              ]}
+            >
+              {isSaved ? '✓ Note Saved' : 'Save Daily Note'}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function StaffMyHoursScreen({ onBack, onLogout }) {
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.staffClockHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>My Hours</Text>
+          </View>
+
+          <View style={styles.staffHeroMain}>
+            <View style={styles.staffHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Staff: Ms. Sarah</Text>
+              <Text style={styles.staffHeroSubheading}>Hours overview</Text>
+            </View>
+
+            <View style={styles.staffAvatarPlaceholder}>
+              <Text style={styles.staffAvatarText}>MS</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>This Week</Text>
+              <View style={styles.staffHoursPendingPill}>
+                <Text style={styles.staffHoursPendingPillText}>Pending Owner Review</Text>
+              </View>
+            </View>
+
+            <View style={styles.staffHoursWeekList}>
+              {STAFF_HOURS_THIS_WEEK.map((item) => (
+                <View key={item.day} style={styles.staffHoursWeekRow}>
+                  <Text style={styles.staffHoursWeekDay}>{item.day}</Text>
+                  <Text style={styles.staffHoursWeekValue}>{item.hours}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.staffHoursTotalBlock}>
+              <Text style={styles.staffHoursTotalLabel}>Weekly Total</Text>
+              <Text style={styles.staffHoursTotalValue}>32.0 Hours</Text>
+            </View>
+          </View>
+
+          {STAFF_HOURS_APPROVED_WEEKS.map((week) => (
+            <View key={week.title} style={styles.profileCard}>
+              <View style={styles.parentSectionHeaderRow}>
+                <Text style={styles.parentSectionHeaderTitle}>{week.title}</Text>
+                <View style={styles.staffHoursApprovedPill}>
+                  <Text style={styles.staffHoursApprovedPillText}>{week.status}</Text>
+                </View>
+              </View>
+
+              <View style={styles.staffHoursApprovedList}>
+                <View style={styles.staffHoursApprovedRow}>
+                  <Text style={styles.staffHoursApprovedLabel}>Total Hours</Text>
+                  <Text style={styles.staffHoursApprovedValue}>{week.total}</Text>
+                </View>
+                <View style={styles.staffHoursApprovedRow}>
+                  <Text style={styles.staffHoursApprovedLabel}>Approval Date</Text>
+                  <Text style={styles.staffHoursApprovedValue}>{week.date}</Text>
+                </View>
+              </View>
+            </View>
+          ))}
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Clock Activity</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Recent entries</Text>
+            </View>
+
+            <View style={styles.staffHoursActivityList}>
+              {STAFF_HOURS_CLOCK_ACTIVITY.map((entry) => (
+                <View key={`${entry.label}-${entry.time}`} style={styles.staffHoursActivityRow}>
+                  <View style={styles.staffHoursActivityDot} />
+                  <Text style={styles.staffHoursActivityLabel}>{entry.label}</Text>
+                  <Text style={styles.staffHoursActivityTime}>{entry.time}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <Text style={styles.staffHoursInfoText}>
+              Hours are reviewed and approved by Advanced Education management before payroll processing.
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function StaffClockInOutScreen({
+  onBack,
+  onLogout,
+  staffStatus,
+  onToggleStaffStatus,
+  lastClockInTime,
+  lastClockOutTime,
+}) {
+  const isCheckedOut = staffStatus === 'Checked Out';
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.staffClockHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Clock In / Out</Text>
+          </View>
+
+          <View style={styles.staffHeroMain}>
+            <View style={styles.staffHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Staff: Ms. Sarah</Text>
+              <Text style={styles.staffHeroSubheading}>Time clock</Text>
+              <View style={styles.staffClockStatusPill}>
+                <Text style={styles.staffClockStatusPillText}>{staffStatus}</Text>
+              </View>
+            </View>
+
+            <View style={styles.staffAvatarPlaceholder}>
+              <Text style={styles.staffAvatarText}>MS</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Current Status</Text>
+              <View style={styles.staffClockStatusPill}>
+                <Text style={styles.staffClockStatusPillText}>{staffStatus}</Text>
+              </View>
+            </View>
+
+            <View style={styles.staffClockDetailList}>
+              <View style={styles.staffClockDetailRow}>
+                <Text style={styles.staffClockDetailLabel}>Staff status</Text>
+                <Text style={styles.staffClockDetailValue}>{staffStatus}</Text>
+              </View>
+              <View style={styles.staffClockDetailRow}>
+                <Text style={styles.staffClockDetailLabel}>Today&apos;s shift</Text>
+                <Text style={styles.staffClockDetailValue}>{STAFF_MEMBER.shift}</Text>
+              </View>
+              <View style={styles.staffClockDetailRow}>
+                <Text style={styles.staffClockDetailLabel}>Current mock time</Text>
+                <Text style={styles.staffClockDetailValue}>{STAFF_CLOCK_CURRENT_TIME}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Location Check</Text>
+              <View style={styles.staffClockLocationPill}>
+                <Text style={styles.staffClockLocationPillText}>{STAFF_CLOCK_LOCATION_STATUS}</Text>
+              </View>
+            </View>
+
+            <Text style={styles.staffClockLocationNote}>
+              Clock in is only available at Advanced Education.
+            </Text>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Time Clock</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                {isCheckedOut ? 'Ready to clock in' : 'Ready to clock out'}
+              </Text>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={onToggleStaffStatus}
+              style={({ pressed }) => [
+                styles.staffClockPrimaryButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.staffClockPrimaryButtonText}>
+                {isCheckedOut ? 'Clock In' : 'Clock Out'}
+              </Text>
+            </Pressable>
+
+            <View style={styles.staffClockDetailList}>
+              <View style={styles.staffClockDetailRow}>
+                <Text style={styles.staffClockDetailLabel}>Last clock in</Text>
+                <Text style={styles.staffClockDetailValue}>
+                  {lastClockInTime || 'Not logged yet'}
+                </Text>
+              </View>
+              <View style={styles.staffClockDetailRow}>
+                <Text style={styles.staffClockDetailLabel}>Last clock out</Text>
+                <Text style={styles.staffClockDetailValue}>
+                  {lastClockOutTime || 'Not logged yet'}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Owner Review</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Pending</Text>
+            </View>
+
+            <Text style={styles.billingNote}>
+              Your hours are tracked for owner review.
+            </Text>
+            <View style={styles.staffClockOwnerPill}>
+              <Text style={styles.staffClockOwnerPillText}>Approval Status: Pending</Text>
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function StaffBeforeAfterAttendanceScreen({
+  onBack,
+  onLogout,
+  attendanceChildren,
+  selectedChildId,
+  onSelectChild,
+  pickupChild,
+  onAction,
+  onConfirmPickup,
+}) {
+  const actionByStage = {
+    0: 'drop-off',
+    1: 'put-on-bus',
+    2: 'returned',
+    3: 'parent-pickup',
+    4: null,
+  };
+
+  const getButtonState = (child, action) => actionByStage[child.stage] === action;
+
+  const getDetailValue = (value, fallback = '—') => (value ? value : fallback);
+
+  const selectedChild =
+    selectedChildId
+      ? attendanceChildren.find((child) => child.id === selectedChildId) || null
+      : null;
+
+  const renderActionButton = (child, action, label) => {
+    const enabled = getButtonState(child, action);
+    const disabled = !enabled;
+
+    return (
+      <Pressable
+        key={action}
+        accessibilityRole="button"
+        disabled={disabled}
+        onPress={() => onAction(child.id, action)}
+        style={({ pressed }) => [
+          styles.staffAttendanceActionButton,
+          disabled && styles.staffAttendanceActionButtonDisabled,
+          pressed && !disabled && styles.pressedButton,
+        ]}
+      >
+        <Text
+          style={[
+            styles.staffAttendanceActionButtonText,
+            disabled && styles.staffAttendanceActionButtonTextDisabled,
+          ]}
+        >
+          {label}
+        </Text>
+      </Pressable>
+    );
+  };
+
+  const renderDetailRow = (label, value, fallback = '—') => (
+    <View style={styles.staffAttendanceDetailRow}>
+      <Text style={styles.staffAttendanceDetailLabel}>{label}</Text>
+      <Text style={styles.staffAttendanceDetailValue}>{getDetailValue(value, fallback)}</Text>
+    </View>
+  );
+
+  const renderStatusPill = (status) => (
+    <View
+      style={[
+        styles.staffAttendanceStatusPill,
+        status === 'Picked Up'
+          ? styles.staffAttendanceStatusPillGreen
+          : status === 'On Bus'
+            ? styles.staffAttendanceStatusPillBlue
+            : styles.staffAttendanceStatusPillOrange,
+      ]}
+    >
+      <Text
+        style={[
+          styles.staffAttendanceStatusPillText,
+          status === 'Picked Up'
+            ? styles.staffAttendanceStatusPillTextGreen
+            : status === 'On Bus'
+              ? styles.staffAttendanceStatusPillTextBlue
+              : styles.staffAttendanceStatusPillTextOrange,
+        ]}
+      >
+        {status}
+      </Text>
+    </View>
+  );
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.staffClockHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Before & After Care Attendance</Text>
+          </View>
+
+          <View style={styles.staffHeroMain}>
+            <View style={styles.staffHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Staff: Ms. Sarah</Text>
+              <Text style={styles.staffHeroSubheading}>School-year attendance</Text>
+            </View>
+
+            <View style={styles.staffAvatarPlaceholder}>
+              <Text style={styles.staffAvatarText}>MS</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Today&apos;s B&amp;A Summary</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Current counts</Text>
+            </View>
+
+            <View style={styles.staffAttendanceSummaryGrid}>
+              <View style={styles.staffAttendanceSummaryItem}>
+                <Text style={styles.staffAttendanceSummaryValue}>12</Text>
+                <Text style={styles.staffAttendanceSummaryLabel}>Dropped Off</Text>
+              </View>
+              <View style={styles.staffAttendanceSummaryItem}>
+                <Text style={styles.staffAttendanceSummaryValue}>8</Text>
+                <Text style={styles.staffAttendanceSummaryLabel}>On Bus</Text>
+              </View>
+              <View style={styles.staffAttendanceSummaryItem}>
+                <Text style={styles.staffAttendanceSummaryValue}>8</Text>
+                <Text style={styles.staffAttendanceSummaryLabel}>Returned From Bus</Text>
+              </View>
+              <View style={styles.staffAttendanceSummaryItem}>
+                <Text style={styles.staffAttendanceSummaryValue}>4</Text>
+                <Text style={styles.staffAttendanceSummaryLabel}>Picked Up</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>B&amp;A Student List</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Tap a child</Text>
+            </View>
+
+            <View style={styles.staffAttendanceList}>
+              {attendanceChildren.map((child) => {
+                const isSelected = child.id === selectedChild?.id;
+                const theme = getChildGroupTheme(child.accentGroup);
+
+                return (
+                  <View key={child.id} style={styles.staffAttendanceItemWrap}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => onSelectChild(child.id)}
+                      style={({ pressed }) => [
+                        styles.staffAttendanceCard,
+                        isSelected && styles.staffAttendanceCardSelected,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <View style={styles.staffAttendanceCardTopRow}>
+                        <View style={styles.staffAttendanceNameBlock}>
+                          <Text style={styles.staffAttendanceName}>{child.name}</Text>
+                          <Text style={styles.staffAttendanceTime}>
+                            Last update: {child.lastUpdateTime}
+                          </Text>
+                        </View>
+                        {renderStatusPill(child.status)}
+                      </View>
+
+                      <View style={styles.staffAttendanceMiniRow}>
+                        <View
+                          style={[
+                            styles.staffAttendanceAccentPill,
+                            {
+                              backgroundColor: theme.soft,
+                              borderColor: theme.border,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.staffAttendanceAccentText, { color: theme.accent }]}>
+                            {child.accentGroup || 'Before & After Care'}
+                          </Text>
+                        </View>
+                        <Text style={styles.staffAttendanceMiniMeta}>
+                          {isSelected ? 'Expanded below' : 'Tap to expand'}
+                        </Text>
+                      </View>
+                    </Pressable>
+
+                    {isSelected ? (
+                      <View style={styles.staffAttendanceExpandedPanel}>
+                        <View style={styles.staffAttendanceExpandedHeader}>
+                          <Text style={styles.staffAttendanceExpandedTitle}>{child.name}</Text>
+                          {renderStatusPill(child.status)}
+                        </View>
+
+                        <View style={styles.staffAttendanceDetailList}>
+                          {renderDetailRow('Drop Off Time', child.dropOffTime)}
+                          {renderDetailRow('Put On Bus Time', child.busTime)}
+                          {renderDetailRow('Morning Time in Class', child.morningDuration, 'Pending')}
+                          {renderDetailRow('Returned Time', child.returnedTime)}
+                          {renderDetailRow('Parent Pickup Time', child.pickupTime)}
+                          {renderDetailRow('Afternoon Time in Class', child.afternoonDuration, 'Pending')}
+                          {renderDetailRow('Total Time Today', child.totalDailyTime, 'Pending')}
+                        </View>
+
+                        <View style={styles.staffAttendanceActionsRow}>
+                          {renderActionButton(child, 'drop-off', 'Parent Drop Off')}
+                          {renderActionButton(child, 'put-on-bus', 'Put On Bus')}
+                          {renderActionButton(child, 'returned', 'Returned')}
+                          {renderActionButton(child, 'parent-pickup', 'Parent Pickup')}
+                        </View>
+
+                        {pickupChild && pickupChild.id === child.id ? (
+                          <View style={styles.profileCardInner}>
+                            <View style={styles.parentSectionHeaderRow}>
+                              <Text style={styles.parentSectionHeaderTitle}>Pickup Safety</Text>
+                              <View style={styles.staffAttendanceStatusPill}>
+                                <Text style={styles.staffAttendanceStatusPillText}>Review</Text>
+                              </View>
+                            </View>
+
+                            <Text style={styles.staffAttendancePreviewName}>{pickupChild.name}</Text>
+                            <Text style={styles.staffAttendancePreviewNote}>
+                              Confirm pickup details before releasing this child.
+                            </Text>
+
+                            <View style={styles.staffAttendancePreviewList}>
+                              <View style={styles.staffAttendancePreviewBlock}>
+                                <Text style={styles.staffAttendancePreviewLabel}>
+                                  Authorized pickup people
+                                </Text>
+                                <Text style={styles.staffAttendancePreviewValue}>
+                                  {pickupChild.pickup.authorizedPickups.join(', ')}
+                                </Text>
+                              </View>
+                              <View style={styles.staffAttendancePreviewBlock}>
+                                <Text style={styles.staffAttendancePreviewLabel}>Emergency contact</Text>
+                                <Text style={styles.staffAttendancePreviewValue}>
+                                  {pickupChild.pickup.emergencyContact}
+                                </Text>
+                              </View>
+                              <View style={styles.staffAttendancePreviewBlock}>
+                                <Text style={styles.staffAttendancePreviewLabel}>Medical alerts</Text>
+                                <Text style={styles.staffAttendancePreviewValue}>
+                                  {pickupChild.pickup.medicalAlerts.join(', ')}
+                                </Text>
+                              </View>
+                            </View>
+
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={onConfirmPickup}
+                              style={({ pressed }) => [
+                                styles.staffAttendanceConfirmButton,
+                                pressed && styles.pressedButton,
+                              ]}
+                            >
+                              <Text style={styles.staffAttendanceConfirmButtonText}>
+                                Confirm Pickup
+                              </Text>
+                            </Pressable>
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function StaffSummerCampGroupCheckInScreen({
+  onBack,
+  onLogout,
+  groups,
+  selectedGroup,
+  onSelectGroup,
+  onConfirmPresent,
+  onSendHeadcount,
+  ownerStatus,
+}) {
+  const roster = groups[selectedGroup] || [];
+  const theme = getChildGroupTheme(selectedGroup);
+  const confirmedCount = roster.filter((child) => child.groupConfirmationStatus === 'Confirmed Present').length;
+  const missingChildren = roster.filter((child) => child.groupConfirmationStatus !== 'Confirmed Present');
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.staffClockHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Summer Camp Group Check-In</Text>
+          </View>
+
+          <View style={styles.staffHeroMain}>
+            <View style={styles.staffHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Staff: Ms. Sarah</Text>
+              <Text style={styles.staffHeroSubheading}>Summer camp workflow</Text>
+            </View>
+
+            <View style={styles.staffAvatarPlaceholder}>
+              <Text style={styles.staffAvatarText}>MS</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Choose Group Color</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Select today&apos;s assignment</Text>
+            </View>
+
+            <View style={styles.staffCampGroupButtonRow}>
+              {STAFF_CAMP_GROUP_NAMES.map((groupName) => {
+                const groupTheme = getChildGroupTheme(groupName);
+                const selected = selectedGroup === groupName;
+
+                return (
+                  <Pressable
+                    key={groupName}
+                    accessibilityRole="button"
+                    onPress={() => onSelectGroup(groupName)}
+                    style={({ pressed }) => [
+                      styles.staffCampGroupButton,
+                      {
+                        backgroundColor: selected ? groupTheme.soft : COLORS.background,
+                        borderColor: selected ? groupTheme.border : COLORS.border,
+                      },
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.staffCampGroupButtonText,
+                        { color: groupTheme.accent },
+                      ]}
+                    >
+                      {groupName.replace(' Group', '')}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>{selectedGroup} Roster</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>{roster.length} children</Text>
+            </View>
+
+            <View style={styles.staffCampRosterList}>
+              {roster.map((child) => {
+                const confirmed = child.groupConfirmationStatus === 'Confirmed Present';
+                const groupTheme = theme;
+
+                return (
+                  <View key={child.id} style={styles.staffCampChildCard}>
+                    <View style={styles.staffCampChildCardTopRow}>
+                      <View style={styles.staffCampChildNameBlock}>
+                        <Text style={styles.staffCampChildName}>{child.name}</Text>
+                        <Text style={styles.staffCampChildTime}>
+                          Last update: {child.lastUpdateTime}
+                        </Text>
+                      </View>
+
+                      <View style={styles.staffCampStatusStack}>
+                        <View style={styles.staffCampStatusPillBlue}>
+                          <Text style={styles.staffCampStatusPillTextBlue}>
+                            {child.checkInStatus}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.staffCampStatusPill,
+                            {
+                              backgroundColor: confirmed ? COLORS.softGreen : COLORS.softOrange,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.staffCampStatusPillText,
+                              { color: confirmed ? COLORS.success : '#C2410C' },
+                            ]}
+                          >
+                            {child.groupConfirmationStatus}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.childProfileGroupBadge,
+                        {
+                          backgroundColor: groupTheme.soft,
+                          borderColor: groupTheme.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.childProfileGroupBadgeText,
+                          { color: groupTheme.accent },
+                        ]}
+                      >
+                        {selectedGroup}
+                      </Text>
+                    </View>
+
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => onConfirmPresent(selectedGroup, child.id)}
+                      style={({ pressed }) => [
+                        styles.staffCampConfirmButton,
+                        confirmed && styles.staffCampConfirmButtonDisabled,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text style={styles.staffCampConfirmButtonText}>
+                        {confirmed ? 'Confirmed' : 'Confirm Present'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Headcount Confirmation</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Owner handoff</Text>
+            </View>
+
+            <Text style={styles.staffCampHeadcountValue}>
+              Confirmed: {confirmedCount} / {roster.length}
+            </Text>
+
+            <View style={styles.staffCampMissingBlock}>
+              <Text style={styles.staffCampMissingLabel}>Missing / Not Confirmed</Text>
+              <Text style={styles.staffCampMissingValue}>
+                {missingChildren.length ? missingChildren.map((child) => child.name).join(', ') : 'None'}
+              </Text>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => onSendHeadcount(selectedGroup)}
+              style={({ pressed }) => [
+                styles.staffCampSendButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.staffCampSendButtonText}>Send Headcount to Owner</Text>
+            </Pressable>
+
+            <Text style={styles.staffCampOwnerUpdate}>
+              {ownerStatus[selectedGroup]?.status === 'Sent'
+                ? `Owner master list updated at ${ownerStatus[selectedGroup].sentAt}.`
+                : 'Headcount not sent yet.'}
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
 const CHILD_TIMELINE_ITEMS = [
   {
     time: '8:12 AM',
@@ -950,11 +2600,432 @@ const STAFF_MEMBER = {
   name: 'Ms. Sarah',
   status: 'Checked Out',
   shift: '7:30 AM - 4:00 PM',
-  hours: '28.5 Hours This Week',
-  checkInOut: 'Tap to log staff arrival or departure.',
-  studentCheck: 'Tap to mark a student check-in or check-out.',
-  campHeadcount: '24 Students Present',
 };
+
+const STAFF_WORKSPACE_CARDS = [
+  {
+    accent: 'green',
+    title: 'Clock In / Out',
+    value: STAFF_MEMBER.status,
+    note: `${STAFF_MEMBER.shift} · Location required for clock in`,
+  },
+  {
+    accent: 'orange',
+    title: 'Before & After Care Attendance',
+    value: 'School-year workflow',
+    note: 'Check-in, bus, and pickup management',
+  },
+  {
+    accent: 'blue',
+    title: 'Summer Camp Group Check-In',
+    value: 'Blue Group',
+    note: 'Group check-in and headcount confirmation',
+  },
+  {
+    accent: 'purple',
+    title: 'Daily Notes',
+    value: '3 notes today',
+    note: 'Add notes for parents',
+  },
+  {
+    accent: 'blue',
+    title: 'My Hours',
+    value: '28.5 hours this week',
+    note: 'Pending owner review',
+  },
+];
+
+const STAFF_DAILY_NOTE_CHILDREN = [
+  { id: 'note-mia', name: 'Mia Carter', accentGroup: 'Blue Group' },
+  { id: 'note-liam', name: 'Liam Wilson', accentGroup: 'Green Group' },
+  { id: 'note-emma', name: 'Emma Davis', accentGroup: 'Red Group' },
+  { id: 'note-noah', name: 'Noah Brown', accentGroup: 'Yellow Group' },
+];
+
+const STAFF_HOURS_THIS_WEEK = [
+  { day: 'Monday', hours: '8.0 hrs' },
+  { day: 'Tuesday', hours: '8.5 hrs' },
+  { day: 'Wednesday', hours: '7.5 hrs' },
+  { day: 'Thursday', hours: '8.0 hrs' },
+  { day: 'Friday', hours: '0.0 hrs' },
+];
+
+const STAFF_HOURS_APPROVED_WEEKS = [
+  {
+    title: 'Last Week',
+    total: '38.5',
+    status: 'Approved',
+    date: 'May 24',
+  },
+  {
+    title: 'Previous Week',
+    total: '36.0',
+    status: 'Approved',
+    date: 'May 17',
+  },
+];
+
+const STAFF_HOURS_CLOCK_ACTIVITY = [
+  { label: 'Clock In', time: '7:30 AM' },
+  { label: 'Lunch Out', time: '12:00 PM' },
+  { label: 'Lunch In', time: '12:30 PM' },
+  { label: 'Clock Out', time: '4:00 PM' },
+];
+
+const STAFF_DAILY_NOTE_CHIPS = [
+  'Great day',
+  'Completed homework',
+  'Ate snack',
+  'Participated in activity',
+  'Needs extra clothes',
+  'Bring water bottle tomorrow',
+  'Rested quietly',
+  'Played well with group',
+];
+
+const STAFF_CLOCK_CURRENT_TIME = '7:24 AM';
+const STAFF_CLOCK_LOCATION_STATUS = 'At Work Location';
+const STAFF_MOCK_TIMES = ['7:30 AM', '7:42 AM', '8:05 AM', '8:18 AM', '8:30 AM', '8:45 AM', '9:02 AM', '9:15 AM', '9:28 AM', '9:40 AM'];
+
+const STAFF_CAMP_GROUP_NAMES = ['Blue Group', 'Green Group', 'Red Group', 'Yellow Group'];
+
+const STAFF_BA_MOCK_TIMES = {
+  dropOff: '7:12 AM',
+  bus: '8:05 AM',
+  returned: '3:20 PM',
+  pickup: '5:10 PM',
+};
+
+const STAFF_BA_MOCK_DURATIONS = {
+  morning: '53 min',
+  afternoon: '1 hr 50 min',
+  total: '2 hr 43 min',
+};
+
+function buildBeforeAfterChild({
+  id,
+  name,
+  stage,
+  pickup,
+  accentGroup,
+  timelineMessages,
+}) {
+  const stepData = {
+    0: {
+      status: 'Ready for Drop Off',
+      dropOffTime: '',
+      busTime: '',
+      returnedTime: '',
+      pickupTime: '',
+      morningDuration: '',
+      afternoonDuration: '',
+      totalDailyTime: '',
+      lastUpdateTime: 'Not started',
+    },
+    1: {
+      status: 'Dropped Off',
+      dropOffTime: STAFF_BA_MOCK_TIMES.dropOff,
+      busTime: '',
+      returnedTime: '',
+      pickupTime: '',
+      morningDuration: 'Pending',
+      afternoonDuration: 'Pending',
+      totalDailyTime: 'Pending',
+      lastUpdateTime: STAFF_BA_MOCK_TIMES.dropOff,
+    },
+    2: {
+      status: 'On Bus',
+      dropOffTime: STAFF_BA_MOCK_TIMES.dropOff,
+      busTime: STAFF_BA_MOCK_TIMES.bus,
+      returnedTime: '',
+      pickupTime: '',
+      morningDuration: STAFF_BA_MOCK_DURATIONS.morning,
+      afternoonDuration: 'Pending',
+      totalDailyTime: 'Pending',
+      lastUpdateTime: STAFF_BA_MOCK_TIMES.bus,
+    },
+    3: {
+      status: 'Returned From Bus',
+      dropOffTime: STAFF_BA_MOCK_TIMES.dropOff,
+      busTime: STAFF_BA_MOCK_TIMES.bus,
+      returnedTime: STAFF_BA_MOCK_TIMES.returned,
+      pickupTime: '',
+      morningDuration: STAFF_BA_MOCK_DURATIONS.morning,
+      afternoonDuration: 'Pending',
+      totalDailyTime: 'Pending',
+      lastUpdateTime: STAFF_BA_MOCK_TIMES.returned,
+    },
+    4: {
+      status: 'Picked Up',
+      dropOffTime: STAFF_BA_MOCK_TIMES.dropOff,
+      busTime: STAFF_BA_MOCK_TIMES.bus,
+      returnedTime: STAFF_BA_MOCK_TIMES.returned,
+      pickupTime: STAFF_BA_MOCK_TIMES.pickup,
+      morningDuration: STAFF_BA_MOCK_DURATIONS.morning,
+      afternoonDuration: STAFF_BA_MOCK_DURATIONS.afternoon,
+      totalDailyTime: STAFF_BA_MOCK_DURATIONS.total,
+      lastUpdateTime: STAFF_BA_MOCK_TIMES.pickup,
+    },
+  };
+
+  const data = stepData[stage] || stepData[0];
+  const timeline = (timelineMessages || []).map((item) => ({
+    id: `${id}-${item.title}-${item.time}`,
+    ...item,
+    childName: name,
+  }));
+
+  return {
+    id,
+    name,
+    stage,
+    accentGroup,
+    status: data.status,
+    lastUpdateTime: data.lastUpdateTime,
+    programBadge: 'Before & After Care',
+    dropOffTime: data.dropOffTime,
+    busTime: data.busTime,
+    returnedTime: data.returnedTime,
+    pickupTime: data.pickupTime,
+    morningDuration: data.morningDuration,
+    afternoonDuration: data.afternoonDuration,
+    totalDailyTime: data.totalDailyTime,
+    pickup,
+    timeline,
+  };
+}
+
+function createStaffBeforeAfterChildren() {
+  return [
+    buildBeforeAfterChild({
+      id: 'ba-mia',
+      name: 'Mia Carter',
+      stage: 1,
+      accentGroup: 'Blue Group',
+      pickup: {
+        authorizedPickups: ['Avery Parent', 'Susan Carter'],
+        emergencyContact: 'David Carter',
+        medicalAlerts: ['Peanut Allergy'],
+      },
+      timelineMessages: [
+        {
+          time: STAFF_BA_MOCK_TIMES.dropOff,
+          title: 'Dropped Off',
+          message: 'Mia was dropped off for Before & After Care.',
+        },
+      ],
+    }),
+    buildBeforeAfterChild({
+      id: 'ba-liam',
+      name: 'Liam Wilson',
+      stage: 2,
+      accentGroup: 'Green Group',
+      pickup: {
+        authorizedPickups: ['Jordan Wilson'],
+        emergencyContact: 'Megan Wilson',
+        medicalAlerts: ['No Known Allergies'],
+      },
+      timelineMessages: [
+        {
+          time: STAFF_BA_MOCK_TIMES.dropOff,
+          title: 'Dropped Off',
+          message: 'Liam arrived for Before & After Care.',
+        },
+        {
+          time: STAFF_BA_MOCK_TIMES.bus,
+          title: 'On Bus',
+          message: 'Liam boarded the bus for afternoon care.',
+        },
+      ],
+    }),
+    buildBeforeAfterChild({
+      id: 'ba-emma',
+      name: 'Emma Davis',
+      stage: 3,
+      accentGroup: 'Red Group',
+      pickup: {
+        authorizedPickups: ['Olivia Davis', 'Mark Davis'],
+        emergencyContact: 'Mark Davis',
+        medicalAlerts: ['Asthma'],
+      },
+      timelineMessages: [
+        {
+          time: STAFF_BA_MOCK_TIMES.dropOff,
+          title: 'Dropped Off',
+          message: 'Emma arrived for Before & After Care.',
+        },
+        {
+          time: STAFF_BA_MOCK_TIMES.bus,
+          title: 'On Bus',
+          message: 'Emma boarded the bus for afternoon care.',
+        },
+        {
+          time: STAFF_BA_MOCK_TIMES.returned,
+          title: 'Returned From Bus',
+          message: 'Emma returned from the bus and checked back in.',
+        },
+      ],
+    }),
+    buildBeforeAfterChild({
+      id: 'ba-noah',
+      name: 'Noah Brown',
+      stage: 4,
+      accentGroup: 'Yellow Group',
+      pickup: {
+        authorizedPickups: ['Rachel Brown'],
+        emergencyContact: 'Rachel Brown',
+        medicalAlerts: ['Milk Allergy'],
+      },
+      timelineMessages: [
+        {
+          time: STAFF_BA_MOCK_TIMES.dropOff,
+          title: 'Dropped Off',
+          message: 'Noah arrived for Before & After Care.',
+        },
+        {
+          time: STAFF_BA_MOCK_TIMES.bus,
+          title: 'On Bus',
+          message: 'Noah boarded the bus for afternoon care.',
+        },
+        {
+          time: STAFF_BA_MOCK_TIMES.returned,
+          title: 'Returned From Bus',
+          message: 'Noah returned from the bus and checked back in.',
+        },
+        {
+          time: STAFF_BA_MOCK_TIMES.pickup,
+          title: 'Picked Up',
+          message: 'Noah was picked up for the day.',
+        },
+      ],
+    }),
+  ];
+}
+
+function createStaffSummerCampGroups() {
+  return {
+    'Blue Group': [
+      {
+        id: 'blue-mia',
+        name: 'Mia Carter',
+        checkInStatus: 'Checked In',
+        groupConfirmationStatus: 'Confirmed Present',
+        lastUpdateTime: '8:12 AM',
+      },
+      {
+        id: 'blue-ava',
+        name: 'Ava Martin',
+        checkInStatus: 'Checked In',
+        groupConfirmationStatus: 'Confirmed Present',
+        lastUpdateTime: '8:18 AM',
+      },
+      {
+        id: 'blue-lucas',
+        name: 'Lucas Reed',
+        checkInStatus: 'Not Checked In',
+        groupConfirmationStatus: 'Not Confirmed',
+        lastUpdateTime: '8:00 AM',
+      },
+      {
+        id: 'blue-sophia',
+        name: 'Sophia Green',
+        checkInStatus: 'Checked In',
+        groupConfirmationStatus: 'Confirmed Present',
+        lastUpdateTime: '8:22 AM',
+      },
+    ],
+    'Green Group': [
+      {
+        id: 'green-ella',
+        name: 'Ella Moore',
+        checkInStatus: 'Checked In',
+        groupConfirmationStatus: 'Confirmed Present',
+        lastUpdateTime: '8:14 AM',
+      },
+      {
+        id: 'green-owen',
+        name: 'Owen Taylor',
+        checkInStatus: 'Checked In',
+        groupConfirmationStatus: 'Not Confirmed',
+        lastUpdateTime: '8:16 AM',
+      },
+      {
+        id: 'green-lily',
+        name: 'Lily Johnson',
+        checkInStatus: 'Not Checked In',
+        groupConfirmationStatus: 'Not Confirmed',
+        lastUpdateTime: '8:00 AM',
+      },
+      {
+        id: 'green-noah',
+        name: 'Noah Brown',
+        checkInStatus: 'Checked In',
+        groupConfirmationStatus: 'Confirmed Present',
+        lastUpdateTime: '8:20 AM',
+      },
+    ],
+    'Red Group': [
+      {
+        id: 'red-sadie',
+        name: 'Sadie Brooks',
+        checkInStatus: 'Checked In',
+        groupConfirmationStatus: 'Confirmed Present',
+        lastUpdateTime: '8:10 AM',
+      },
+      {
+        id: 'red-james',
+        name: 'James Walker',
+        checkInStatus: 'Not Checked In',
+        groupConfirmationStatus: 'Not Confirmed',
+        lastUpdateTime: '8:00 AM',
+      },
+      {
+        id: 'red-zoe',
+        name: 'Zoe Hall',
+        checkInStatus: 'Checked In',
+        groupConfirmationStatus: 'Confirmed Present',
+        lastUpdateTime: '8:18 AM',
+      },
+      {
+        id: 'red-henry',
+        name: 'Henry Clark',
+        checkInStatus: 'Checked In',
+        groupConfirmationStatus: 'Not Confirmed',
+        lastUpdateTime: '8:11 AM',
+      },
+    ],
+    'Yellow Group': [
+      {
+        id: 'yellow-ella',
+        name: 'Ella King',
+        checkInStatus: 'Checked In',
+        groupConfirmationStatus: 'Confirmed Present',
+        lastUpdateTime: '8:09 AM',
+      },
+      {
+        id: 'yellow-mason',
+        name: 'Mason Scott',
+        checkInStatus: 'Not Checked In',
+        groupConfirmationStatus: 'Not Confirmed',
+        lastUpdateTime: '8:00 AM',
+      },
+      {
+        id: 'yellow-ava',
+        name: 'Ava Brooks',
+        checkInStatus: 'Checked In',
+        groupConfirmationStatus: 'Confirmed Present',
+        lastUpdateTime: '8:16 AM',
+      },
+      {
+        id: 'yellow-noelle',
+        name: 'Noelle Diaz',
+        checkInStatus: 'Checked In',
+        groupConfirmationStatus: 'Not Confirmed',
+        lastUpdateTime: '8:13 AM',
+      },
+    ],
+  };
+}
 
 const OWNER_MODULES = [
   'Before & After Care',
@@ -1386,6 +3457,25 @@ export default function App() {
   const [inviteCode, setInviteCode] = useState('MIA-4821');
   const [error, setError] = useState('');
   const [screen, setScreen] = useState('login');
+  const [staffStatus, setStaffStatus] = useState(STAFF_MEMBER.status);
+  const [lastClockInTime, setLastClockInTime] = useState('');
+  const [lastClockOutTime, setLastClockOutTime] = useState('');
+  const [staffMockTimeIndex, setStaffMockTimeIndex] = useState(0);
+  const [staffBeforeAfterChildren, setStaffBeforeAfterChildren] = useState(() =>
+    createStaffBeforeAfterChildren()
+  );
+  const [staffBeforeAfterSelectedChildId, setStaffBeforeAfterSelectedChildId] = useState(
+    () => createStaffBeforeAfterChildren()[0]?.id ?? null
+  );
+  const [staffBeforeAfterPickupChildId, setStaffBeforeAfterPickupChildId] = useState(null);
+  const [staffSummerCampGroups, setStaffSummerCampGroups] = useState(() =>
+    createStaffSummerCampGroups()
+  );
+  const [staffSummerCampSelectedGroup, setStaffSummerCampSelectedGroup] = useState(
+    'Blue Group'
+  );
+  const [staffSummerCampOwnerStatus, setStaffSummerCampOwnerStatus] = useState({});
+  const [staffDailyNotesSavedEntries, setStaffDailyNotesSavedEntries] = useState([]);
 
   const handleLogin = () => {
     const cleanEmail = email.trim().toLowerCase();
@@ -1424,6 +3514,242 @@ export default function App() {
   const handleLogout = () => {
     setScreen('login');
     setError('');
+    setStaffStatus(STAFF_MEMBER.status);
+    setLastClockInTime('');
+    setLastClockOutTime('');
+    setStaffMockTimeIndex(0);
+    setStaffBeforeAfterChildren(createStaffBeforeAfterChildren());
+    setStaffBeforeAfterSelectedChildId(createStaffBeforeAfterChildren()[0]?.id ?? null);
+    setStaffBeforeAfterPickupChildId(null);
+    setStaffSummerCampGroups(createStaffSummerCampGroups());
+    setStaffSummerCampSelectedGroup('Blue Group');
+    setStaffSummerCampOwnerStatus({});
+    setStaffDailyNotesSavedEntries([]);
+  };
+
+  const toggleStaffStatus = () => {
+    if (staffStatus === 'Checked Out') {
+      setStaffStatus('Checked In');
+      setLastClockInTime(STAFF_CLOCK_CURRENT_TIME);
+      return;
+    }
+
+    setStaffStatus('Checked Out');
+    setLastClockOutTime(STAFF_CLOCK_CURRENT_TIME);
+  };
+
+  const consumeStaffMockTime = () => {
+    const stamp = STAFF_MOCK_TIMES[staffMockTimeIndex % STAFF_MOCK_TIMES.length];
+    setStaffMockTimeIndex((value) => value + 1);
+    return stamp;
+  };
+
+  const advanceBeforeAfterChild = (childId, action) => {
+    let timelineItem = null;
+
+    setStaffBeforeAfterChildren((prev) =>
+      prev.map((entry) => {
+        if (entry.id !== childId) {
+          return entry;
+        }
+
+        if (action === 'drop-off' && entry.stage === 0) {
+          timelineItem = {
+            id: `${entry.id}-drop-off-${STAFF_BA_MOCK_TIMES.dropOff}`,
+            childName: entry.name,
+            time: STAFF_BA_MOCK_TIMES.dropOff,
+            title: 'Dropped Off',
+            message: `${entry.name} was dropped off for Before & After Care.`,
+          };
+
+          return {
+            ...entry,
+            stage: 1,
+            status: 'Dropped Off',
+            dropOffTime: STAFF_BA_MOCK_TIMES.dropOff,
+            busTime: '',
+            returnedTime: '',
+            pickupTime: '',
+            morningDuration: 'Pending',
+            afternoonDuration: 'Pending',
+            totalDailyTime: 'Pending',
+            lastUpdateTime: STAFF_BA_MOCK_TIMES.dropOff,
+            timeline: [timelineItem, ...entry.timeline].slice(0, 5),
+          };
+        }
+
+        if (action === 'put-on-bus' && entry.stage === 1) {
+          timelineItem = {
+            id: `${entry.id}-bus-${STAFF_BA_MOCK_TIMES.bus}`,
+            childName: entry.name,
+            time: STAFF_BA_MOCK_TIMES.bus,
+            title: 'On Bus',
+            message: `${entry.name} boarded the bus for afternoon care.`,
+          };
+
+          return {
+            ...entry,
+            stage: 2,
+            status: 'On Bus',
+            busTime: STAFF_BA_MOCK_TIMES.bus,
+            morningDuration: STAFF_BA_MOCK_DURATIONS.morning,
+            afternoonDuration: 'Pending',
+            totalDailyTime: 'Pending',
+            lastUpdateTime: STAFF_BA_MOCK_TIMES.bus,
+            timeline: [timelineItem, ...entry.timeline].slice(0, 5),
+          };
+        }
+
+        if (action === 'returned' && entry.stage === 2) {
+          timelineItem = {
+            id: `${entry.id}-returned-${STAFF_BA_MOCK_TIMES.returned}`,
+            childName: entry.name,
+            time: STAFF_BA_MOCK_TIMES.returned,
+            title: 'Returned From Bus',
+            message: `${entry.name} returned from the bus and checked back in.`,
+          };
+
+          return {
+            ...entry,
+            stage: 3,
+            status: 'Returned From Bus',
+            returnedTime: STAFF_BA_MOCK_TIMES.returned,
+            afternoonDuration: 'Pending',
+            totalDailyTime: 'Pending',
+            lastUpdateTime: STAFF_BA_MOCK_TIMES.returned,
+            timeline: [timelineItem, ...entry.timeline].slice(0, 5),
+          };
+        }
+
+        return entry;
+      })
+    );
+  };
+
+  const openBeforeAfterPickup = (childId) => {
+    const child = staffBeforeAfterChildren.find((entry) => entry.id === childId);
+    if (!child || child.stage !== 3) {
+      return;
+    }
+
+    setStaffBeforeAfterPickupChildId(childId);
+  };
+
+  const confirmBeforeAfterPickup = () => {
+    if (!staffBeforeAfterPickupChildId) {
+      return;
+    }
+
+    let timelineItem = null;
+
+    setStaffBeforeAfterChildren((prev) =>
+      prev.map((entry) => {
+        if (entry.id !== staffBeforeAfterPickupChildId || entry.stage !== 3) {
+          return entry;
+        }
+
+        timelineItem = {
+          id: `${entry.id}-pickup-${STAFF_BA_MOCK_TIMES.pickup}`,
+          childName: entry.name,
+          time: STAFF_BA_MOCK_TIMES.pickup,
+          title: 'Picked Up',
+          message: `${entry.name} was confirmed for pickup.`,
+        };
+
+        return {
+          ...entry,
+          stage: 4,
+          status: 'Picked Up',
+          pickupTime: STAFF_BA_MOCK_TIMES.pickup,
+          afternoonDuration: STAFF_BA_MOCK_DURATIONS.afternoon,
+          totalDailyTime: STAFF_BA_MOCK_DURATIONS.total,
+          lastUpdateTime: STAFF_BA_MOCK_TIMES.pickup,
+          timeline: [timelineItem, ...entry.timeline].slice(0, 5),
+        };
+      })
+    );
+
+    setStaffBeforeAfterPickupChildId(null);
+  };
+
+  const confirmCampPresent = (groupName, childId) => {
+    const time = consumeStaffMockTime();
+
+    setStaffSummerCampGroups((prev) => {
+      const group = prev[groupName] || [];
+      return {
+        ...prev,
+        [groupName]: group.map((entry) =>
+          entry.id === childId
+            ? {
+                ...entry,
+                checkInStatus: 'Checked In',
+                groupConfirmationStatus: 'Confirmed Present',
+                lastUpdateTime: time,
+              }
+            : entry
+        ),
+      };
+    });
+  };
+
+  const sendCampHeadcount = (groupName) => {
+    const time = consumeStaffMockTime();
+    Alert.alert(`${groupName} headcount sent to owner.`);
+    setStaffSummerCampOwnerStatus((prev) => ({
+      ...prev,
+      [groupName]: {
+        status: 'Sent',
+        sentAt: time,
+      },
+    }));
+  };
+
+  const saveStaffDailyNote = ({
+    childId,
+    childName,
+    quickNotes,
+    customNote,
+    visibility,
+    signature,
+  }) => {
+    const summaryParts = [];
+
+    if (quickNotes.length) {
+      summaryParts.push(quickNotes.join(' • '));
+    }
+
+    if (customNote) {
+      summaryParts.push(customNote);
+    }
+
+    const summary = summaryParts.length ? summaryParts.join(' · ') : 'No note added';
+    const duplicateExists = staffDailyNotesSavedEntries.some(
+      (entry) => entry.childId === childId && entry.signature === signature
+    );
+    if (duplicateExists) {
+      return null;
+    }
+
+    const time = consumeStaffMockTime();
+
+    const entry = {
+      id: `${childId}-${time}-${staffDailyNotesSavedEntries.length + 1}`,
+      childId,
+      childName,
+      quickNotes,
+      customNote,
+      summary,
+      time,
+      visibility,
+      signature,
+      timelineMessage: `${childName} daily note saved at ${time}.`,
+      notificationMessage: `${childName} has a new daily note.`,
+      ownerMessage: `${childName} note captured for owner review.`,
+    };
+
+    setStaffDailyNotesSavedEntries((prev) => [entry, ...prev].slice(0, 5));
+    return entry;
   };
 
   const showComingSoon = (title, message = 'Coming Soon') => {
@@ -1866,78 +4192,85 @@ export default function App() {
           </ScrollView>
         </View>
       ) : screen === 'staff-home' ? (
-        <ScreenShell
-          badge="Staff View"
-          title="Good afternoon"
-          subtitle="Ms. Sarah is checked out right now."
-          titleMaxWidth={220}
-        >
-          <View style={styles.contentStack}>
-            <View style={styles.staffStatusCard}>
-              <View style={styles.staffStatusLeft}>
-                <Text style={styles.cardSectionLabel}>Staff status</Text>
-                <Text style={styles.staffName}>{STAFF_MEMBER.name}</Text>
-                <Text style={styles.staffShift}>{STAFF_MEMBER.shift}</Text>
-              </View>
-              <View style={styles.staffStatusBadge}>
-                <Text style={styles.staffStatusBadgeText}>
-                  {STAFF_MEMBER.status}
-                </Text>
-              </View>
-            </View>
+        <StaffHomeScreen
+          onLogout={handleLogout}
+          onShowComingSoon={showComingSoon}
+          onOpenClock={() => setScreen('staff-clock-in-out')}
+          onOpenBeforeAfter={() => setScreen('staff-before-after-attendance')}
+          onOpenCamp={() => setScreen('staff-summer-camp-group-check-in')}
+          onOpenNotes={() => setScreen('staff-daily-notes')}
+          onOpenHours={() => setScreen('staff-hours')}
+          staffStatus={staffStatus}
+        />
+      ) : screen === 'staff-clock-in-out' ? (
+        <StaffClockInOutScreen
+          onBack={() => setScreen('staff-home')}
+          onLogout={handleLogout}
+          staffStatus={staffStatus}
+          onToggleStaffStatus={toggleStaffStatus}
+          lastClockInTime={lastClockInTime}
+          lastClockOutTime={lastClockOutTime}
+        />
+      ) : screen === 'staff-before-after-attendance' ? (
+        <StaffBeforeAfterAttendanceScreen
+          onBack={() => setScreen('staff-home')}
+          onLogout={handleLogout}
+          attendanceChildren={staffBeforeAfterChildren}
+          selectedChildId={staffBeforeAfterSelectedChildId}
+          onSelectChild={(childId) => {
+            setStaffBeforeAfterSelectedChildId((current) => (current === childId ? null : childId));
+            setStaffBeforeAfterPickupChildId(null);
+          }}
+          pickupChild={
+            staffBeforeAfterPickupChildId
+              ? staffBeforeAfterChildren.find((entry) => entry.id === staffBeforeAfterPickupChildId) || null
+              : null
+          }
+          onAction={(childId, action) => {
+            if (action === 'drop-off') {
+              advanceBeforeAfterChild(childId, 'drop-off');
+              return;
+            }
 
-            <SectionLabel title="Today&apos;s Tools" actionLabel="Tap any card" />
-            <View style={styles.staffButtonStack}>
-              <ActionButtonCard
-                accent="blue"
-                title="Today's Shift"
-                value={STAFF_MEMBER.shift}
-                note="Shift details and schedule"
-                onPress={() => showComingSoon("Today's Shift", STAFF_MEMBER.shift)}
-              />
-              <ActionButtonCard
-                accent="purple"
-                title="My Hours"
-                value={STAFF_MEMBER.hours}
-                note="Time totals and weekly hours"
-                onPress={() => showComingSoon('My Hours')}
-              />
-              <ActionButtonCard
-                accent="green"
-                title="Clock In / Out"
-                value="Open"
-                note={STAFF_MEMBER.checkInOut}
-                onPress={() => showComingSoon('Clock In / Out')}
-              />
-              <ActionButtonCard
-                accent="orange"
-                title="Student Check-In / Out"
-                value="Open"
-                note={STAFF_MEMBER.studentCheck}
-                onPress={() => showComingSoon('Student Check-In / Out')}
-              />
-              <ActionButtonCard
-                accent="blue"
-                title="Camp Headcount"
-                value="Open"
-                note={STAFF_MEMBER.campHeadcount}
-                onPress={() => showComingSoon('Camp Headcount')}
-              />
-            </View>
+            if (action === 'put-on-bus') {
+              advanceBeforeAfterChild(childId, 'put-on-bus');
+              return;
+            }
 
-            <Pressable
-              accessibilityRole="button"
-              onPress={handleLogout}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                styles.logoutButton,
-                pressed && styles.pressedButton,
-              ]}
-            >
-              <Text style={styles.primaryButtonText}>Logout</Text>
-            </Pressable>
-          </View>
-        </ScreenShell>
+            if (action === 'returned') {
+              advanceBeforeAfterChild(childId, 'returned');
+              return;
+            }
+
+            if (action === 'parent-pickup') {
+              openBeforeAfterPickup(childId);
+            }
+          }}
+          onConfirmPickup={confirmBeforeAfterPickup}
+        />
+      ) : screen === 'staff-summer-camp-group-check-in' ? (
+        <StaffSummerCampGroupCheckInScreen
+          onBack={() => setScreen('staff-home')}
+          onLogout={handleLogout}
+          groups={staffSummerCampGroups}
+          selectedGroup={staffSummerCampSelectedGroup}
+          onSelectGroup={setStaffSummerCampSelectedGroup}
+          onConfirmPresent={confirmCampPresent}
+          onSendHeadcount={sendCampHeadcount}
+          ownerStatus={staffSummerCampOwnerStatus}
+        />
+      ) : screen === 'staff-hours' ? (
+        <StaffMyHoursScreen
+          onBack={() => setScreen('staff-home')}
+          onLogout={handleLogout}
+        />
+      ) : screen === 'staff-daily-notes' ? (
+        <StaffDailyNotesScreen
+          onBack={() => setScreen('staff-home')}
+          onLogout={handleLogout}
+          savedNotes={staffDailyNotesSavedEntries}
+          onSaveNote={saveStaffDailyNote}
+        />
       ) : (
         <ScreenShell
           badge="Owner Control Center"
@@ -2299,6 +4632,1041 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     marginTop: -2,
+  },
+  staffHero: {
+    backgroundColor: COLORS.navyDark,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: 'hidden',
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  staffHeroMain: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 16,
+    justifyContent: 'space-between',
+  },
+  staffHeroTextBlock: {
+    flex: 1,
+    paddingVertical: 2,
+  },
+  staffHeroSubheading: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  staffStatusPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.warning,
+    borderRadius: 999,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  staffStatusPillText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  staffAvatarPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    borderColor: 'rgba(255, 255, 255, 0.20)',
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 72,
+    justifyContent: 'center',
+    width: 72,
+  },
+  staffAvatarText: {
+    color: COLORS.white,
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  staffClockHero: {
+    backgroundColor: COLORS.navyDark,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: 'hidden',
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  staffClockStatusPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.warning,
+    borderRadius: 999,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  staffClockStatusPillText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  staffClockDetailList: {
+    gap: 10,
+  },
+  staffClockDetailRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  staffClockDetailLabel: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  staffClockDetailValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  staffClockLocationPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.softGreen,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  staffClockLocationPillText: {
+    color: COLORS.success,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  staffClockLocationNote: {
+    color: COLORS.muted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 10,
+  },
+  staffClockPrimaryButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.blue,
+    borderRadius: 20,
+    minHeight: 64,
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  staffClockPrimaryButtonText: {
+    color: COLORS.white,
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  staffClockOwnerPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.lightBlue,
+    borderRadius: 999,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  staffClockOwnerPillText: {
+    color: COLORS.blue,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  staffHoursPendingPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.softOrange,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  staffHoursPendingPillText: {
+    color: '#C2410C',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  staffHoursWeekList: {
+    gap: 10,
+    marginTop: 8,
+  },
+  staffHoursWeekRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  staffHoursWeekDay: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  staffHoursWeekValue: {
+    color: COLORS.blue,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  staffHoursTotalBlock: {
+    alignItems: 'center',
+    backgroundColor: COLORS.softBlue,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    marginTop: 12,
+    paddingVertical: 14,
+  },
+  staffHoursTotalLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  staffHoursTotalValue: {
+    color: COLORS.text,
+    fontSize: 24,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  staffHoursApprovedPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.softGreen,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  staffHoursApprovedPillText: {
+    color: COLORS.success,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  staffHoursApprovedList: {
+    gap: 10,
+    marginTop: 8,
+  },
+  staffHoursApprovedRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  staffHoursApprovedLabel: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  staffHoursApprovedValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  staffHoursActivityList: {
+    gap: 10,
+    marginTop: 8,
+  },
+  staffHoursActivityRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  staffHoursActivityDot: {
+    backgroundColor: COLORS.blue,
+    borderRadius: 999,
+    height: 10,
+    width: 10,
+  },
+  staffHoursActivityLabel: {
+    color: COLORS.text,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  staffHoursActivityTime: {
+    color: COLORS.blue,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  staffHoursInfoText: {
+    color: COLORS.text,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  staffStudentSummaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 6,
+  },
+  staffStudentSummaryItem: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexGrow: 1,
+    minWidth: 92,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  staffStudentSummaryValue: {
+    color: COLORS.text,
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  staffStudentSummaryLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  staffStudentList: {
+    gap: 12,
+  },
+  staffStudentCard: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 14,
+  },
+  staffStudentCardSelected: {
+    borderColor: COLORS.blue,
+    backgroundColor: COLORS.lightBlue,
+  },
+  staffStudentCardTopRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  staffStudentNameBlock: {
+    flex: 1,
+  },
+  staffStudentName: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  staffStudentLastTime: {
+    color: COLORS.muted,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  staffStudentBadgeRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  staffStudentStatusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  staffStudentStatusPillGreen: {
+    backgroundColor: COLORS.softGreen,
+  },
+  staffStudentStatusPillBlue: {
+    backgroundColor: COLORS.lightBlue,
+  },
+  staffStudentStatusPillOrange: {
+    backgroundColor: COLORS.softOrange,
+  },
+  staffStudentStatusText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  staffStudentStatusTextGreen: {
+    color: COLORS.success,
+  },
+  staffStudentStatusTextBlue: {
+    color: COLORS.blue,
+  },
+  staffStudentStatusTextOrange: {
+    color: '#C2410C',
+  },
+  staffStudentActionButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  staffStudentActionButtonText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  staffStudentPreviewName: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  staffStudentPreviewNote: {
+    color: COLORS.muted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 6,
+  },
+  staffStudentPreviewList: {
+    gap: 10,
+    marginTop: 12,
+  },
+  staffStudentPreviewBlock: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  staffStudentPreviewLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  staffStudentPreviewValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 20,
+    marginTop: 4,
+  },
+  staffAttendanceSummaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 6,
+  },
+  staffAttendanceSummaryItem: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexGrow: 1,
+    minWidth: 92,
+    paddingVertical: 12,
+  },
+  staffAttendanceSummaryValue: {
+    color: COLORS.text,
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  staffAttendanceSummaryLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  staffAttendanceList: {
+    gap: 12,
+  },
+  staffAttendanceItemWrap: {
+    gap: 10,
+  },
+  staffAttendanceCard: {
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 12,
+  },
+  staffAttendanceCardSelected: {
+    borderColor: COLORS.blue,
+    shadowColor: COLORS.blue,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    elevation: 2,
+  },
+  staffAttendanceCardTopRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  staffAttendanceNameBlock: {
+    flex: 1,
+  },
+  staffAttendanceName: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  staffAttendanceTime: {
+    color: COLORS.muted,
+    fontSize: 11,
+    marginTop: 3,
+  },
+  staffAttendanceStatusPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.softOrange,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  staffAttendanceStatusPillText: {
+    color: '#C2410C',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  staffAttendanceStatusPillBlue: {
+    backgroundColor: COLORS.lightBlue,
+  },
+  staffAttendanceStatusPillGreen: {
+    backgroundColor: COLORS.softGreen,
+  },
+  staffAttendanceStatusPillTextBlue: {
+    color: COLORS.blue,
+  },
+  staffAttendanceStatusPillTextGreen: {
+    color: COLORS.success,
+  },
+  staffAttendanceStatusPillTextOrange: {
+    color: '#C2410C',
+  },
+  staffAttendanceMiniRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginTop: 10,
+  },
+  staffAttendanceAccentPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  staffAttendanceAccentText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  staffAttendanceMiniMeta: {
+    color: COLORS.muted,
+    flexShrink: 1,
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  staffAttendanceExpandedPanel: {
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: 10,
+    padding: 14,
+  },
+  staffAttendanceExpandedHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  staffAttendanceExpandedTitle: {
+    color: COLORS.text,
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  staffAttendanceDetailList: {
+    gap: 8,
+    marginTop: 12,
+  },
+  staffAttendanceDetailRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  staffAttendanceDetailLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  staffAttendanceDetailValue: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  staffAttendanceActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  staffAttendanceActionButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexBasis: '48%',
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  staffAttendanceActionButtonDisabled: {
+    opacity: 0.42,
+  },
+  staffAttendanceActionButtonText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  staffAttendanceActionButtonTextDisabled: {
+    color: COLORS.muted,
+  },
+  staffAttendancePreviewName: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  staffAttendancePreviewNote: {
+    color: COLORS.muted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 6,
+  },
+  staffAttendancePreviewList: {
+    gap: 10,
+    marginTop: 12,
+  },
+  staffAttendancePreviewBlock: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  staffAttendancePreviewLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  staffAttendancePreviewValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 20,
+    marginTop: 4,
+  },
+  staffAttendanceConfirmButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.blue,
+    borderRadius: 20,
+    marginTop: 12,
+    minHeight: 52,
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  staffAttendanceConfirmButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  staffDailyNotesChildGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 6,
+  },
+  staffDailyNotesChildCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexBasis: '48%',
+    minWidth: 140,
+    padding: 12,
+  },
+  staffDailyNotesChildCardSelected: {
+    borderColor: COLORS.blue,
+    shadowColor: COLORS.blue,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    elevation: 2,
+  },
+  staffDailyNotesChildAccent: {
+    borderRadius: 999,
+    height: 4,
+    marginBottom: 10,
+  },
+  staffDailyNotesChildName: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  staffDailyNotesChildMeta: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  staffDailyNotesChipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 6,
+  },
+  staffDailyNotesChip: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexBasis: '48%',
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  staffDailyNotesChipActive: {
+    backgroundColor: COLORS.lightBlue,
+    borderColor: COLORS.blue,
+  },
+  staffDailyNotesChipText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  staffDailyNotesChipTextActive: {
+    color: COLORS.blue,
+  },
+  staffDailyNotesInput: {
+    minHeight: 120,
+    paddingVertical: 14,
+  },
+  staffDailyNotesVisibilityRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  staffDailyNotesVisibilityChip: {
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  staffDailyNotesVisibilityChipActive: {
+    backgroundColor: COLORS.softBlue,
+    borderColor: COLORS.blue,
+  },
+  staffDailyNotesVisibilityText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  staffDailyNotesVisibilityTextActive: {
+    color: COLORS.blue,
+  },
+  staffDailyNotesPreviewList: {
+    gap: 10,
+    marginTop: 6,
+  },
+  staffDailyNotesPreviewBlock: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  staffDailyNotesPreviewLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  staffDailyNotesPreviewValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 20,
+    marginTop: 4,
+  },
+  staffDailyNotesPreviewFooter: {
+    color: COLORS.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 10,
+  },
+  staffDailyNotesSavedHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  staffDailyNotesSavedTitle: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  staffDailyNotesSavedList: {
+    gap: 10,
+    marginTop: 8,
+  },
+  staffDailyNotesSavedItem: {
+    backgroundColor: COLORS.softBlue,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 12,
+  },
+  staffDailyNotesSavedTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  staffDailyNotesSavedChild: {
+    color: COLORS.text,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  staffDailyNotesSavedTime: {
+    color: COLORS.blue,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  staffDailyNotesSavedSummary: {
+    color: COLORS.text,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  staffDailyNotesSaveButtonSaved: {
+    backgroundColor: COLORS.success,
+  },
+  staffDailyNotesSaveButtonDisabled: {
+    backgroundColor: COLORS.border,
+  },
+  staffDailyNotesSaveButtonTextSaved: {
+    color: COLORS.white,
+  },
+  staffDailyNotesSaveButtonTextDisabled: {
+    color: COLORS.muted,
+  },
+  staffDailyNotesTagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  staffDailyNotesTag: {
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  staffDailyNotesTagText: {
+    color: COLORS.blue,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  staffCampGroupButtonRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 6,
+  },
+  staffCampGroupButton: {
+    alignItems: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    flexBasis: '48%',
+    justifyContent: 'center',
+    minHeight: 50,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  staffCampGroupButtonText: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  staffCampRosterList: {
+    gap: 12,
+  },
+  staffCampChildCard: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 14,
+  },
+  staffCampChildCardTopRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  staffCampChildNameBlock: {
+    flex: 1,
+  },
+  staffCampChildName: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  staffCampChildTime: {
+    color: COLORS.muted,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  staffCampStatusStack: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  staffCampStatusPillBlue: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.lightBlue,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  staffCampStatusPillTextBlue: {
+    color: COLORS.blue,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  staffCampStatusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  staffCampStatusPillText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  staffCampConfirmButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.blue,
+    borderRadius: 20,
+    marginTop: 12,
+    minHeight: 50,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  staffCampConfirmButtonDisabled: {
+    backgroundColor: COLORS.success,
+  },
+  staffCampConfirmButtonText: {
+    color: COLORS.white,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  staffCampHeadcountValue: {
+    color: COLORS.text,
+    fontSize: 24,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  staffCampMissingBlock: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  staffCampMissingLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  staffCampMissingValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 20,
+    marginTop: 4,
+  },
+  staffCampSendButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.blue,
+    borderRadius: 20,
+    marginTop: 12,
+    minHeight: 54,
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  staffCampSendButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  staffCampOwnerUpdate: {
+    color: COLORS.muted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 10,
   },
   staffStatusCard: {
     backgroundColor: COLORS.card,
