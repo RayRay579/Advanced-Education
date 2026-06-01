@@ -1732,6 +1732,361 @@ function StaffMyHoursScreen({ onBack, onLogout }) {
   );
 }
 
+function OwnerDashboardScreen({ onLogout, onShowComingSoon }) {
+  const [openSection, setOpenSection] = useState(null);
+
+  const centerStatusCards = [
+    {
+      accent: 'blue',
+      badge: 'S',
+      title: 'Students Present',
+      value: '42',
+      note: 'On campus now',
+      fill: 'Live',
+    },
+    {
+      accent: 'green',
+      badge: 'C',
+      title: 'Checked Out',
+      value: '15',
+      note: 'Left for the day',
+      fill: 'Today',
+    },
+    {
+      accent: 'orange',
+      badge: 'P',
+      title: 'Pending Pickups',
+      value: '3',
+      note: 'Awaiting release',
+      fill: 'Watch',
+    },
+    {
+      accent: 'purple',
+      badge: 'T',
+      title: 'Staff Clocked In',
+      value: '7',
+      note: 'On shift now',
+      fill: 'Shift',
+    },
+  ];
+
+  const beforeAfterCards = [
+    {
+      accent: 'blue',
+      badge: 'D',
+      title: 'Dropped Off',
+      value: '12',
+      note: 'Morning check-in',
+      fill: 'Before & After Care',
+    },
+    {
+      accent: 'green',
+      badge: 'B',
+      title: 'On Bus',
+      value: '8',
+      note: 'In transit',
+      fill: 'Morning',
+    },
+    {
+      accent: 'orange',
+      badge: 'R',
+      title: 'Returned',
+      value: '8',
+      note: 'Back on site',
+      fill: 'Afternoon',
+    },
+    {
+      accent: 'purple',
+      badge: 'P',
+      title: 'Picked Up',
+      value: '4',
+      note: 'Released to parent',
+      fill: 'Closed',
+    },
+  ];
+
+  const campCards = [
+    {
+      accent: 'blue',
+      badge: 'B',
+      title: 'Blue Group',
+      value: '12 / 12',
+      note: 'Confirmed',
+      fill: 'Ready',
+    },
+    {
+      accent: 'green',
+      badge: 'G',
+      title: 'Green Group',
+      value: '11 / 11',
+      note: 'Confirmed',
+      fill: 'Ready',
+    },
+    {
+      accent: 'red',
+      badge: 'R',
+      title: 'Red Group',
+      value: '9 / 10',
+      note: 'Confirmed',
+      fill: '1 Pending',
+    },
+    {
+      accent: 'yellow',
+      badge: 'Y',
+      title: 'Yellow Group',
+      value: '10 / 10',
+      note: 'Confirmed',
+      fill: 'Ready',
+    },
+  ];
+
+  const staffNotesCards = [
+    {
+      accent: 'green',
+      badge: 'N',
+      title: 'Daily Notes Submitted',
+      value: '15',
+      note: 'Ready for parent sync',
+      fill: 'Today',
+    },
+    {
+      accent: 'orange',
+      badge: 'R',
+      title: 'Pending Owner Review',
+      value: '4',
+      note: 'Needs approval',
+      fill: 'Queue',
+    },
+    {
+      accent: 'purple',
+      badge: 'H',
+      title: 'Staff Hours Pending Review',
+      value: '3',
+      note: 'Check timecards',
+      fill: 'Hours',
+    },
+    {
+      accent: 'blue',
+      badge: 'M',
+      title: 'Unread Parent Messages',
+      value: '4',
+      note: 'New replies waiting',
+      fill: 'Inbox',
+    },
+  ];
+
+  const activityFeed = [
+    {
+      time: '9:15 AM',
+      text: 'Blue Group headcount submitted by Ms. Sarah',
+      color: COLORS.blue,
+    },
+    {
+      time: '8:12 AM',
+      text: 'Mia Carter checked in for Before & After Care',
+      color: COLORS.success,
+    },
+    {
+      time: '7:30 AM',
+      text: 'Ms. Sarah clocked in',
+      color: COLORS.warning,
+    },
+    {
+      time: '2:45 PM',
+      text: 'Daily note added for Emma Davis',
+      color: '#7C4DFF',
+    },
+    {
+      time: '4:35 PM',
+      text: 'Pickup window opened for Mia Carter',
+      color: COLORS.danger,
+    },
+  ];
+
+  const ownerSections = [
+    {
+      key: 'center-status',
+      title: 'Today’s Center Status',
+      summary: 'Students present, pickups, and staff on shift',
+      details: (
+        <View style={styles.ownerSectionDetailsGrid}>
+          {centerStatusCards.map((card) => (
+            <SummaryTile
+              key={card.title}
+              accent={card.accent}
+              badge={card.badge}
+              title={card.title}
+              value={card.value}
+              note={card.note}
+              fill={card.fill}
+            />
+          ))}
+        </View>
+      ),
+    },
+    {
+      key: 'before-after',
+      title: 'Before & After Care',
+      summary: 'Daily attendance flow for school-year care',
+      details: (
+        <View style={styles.ownerSectionDetailsGrid}>
+          {beforeAfterCards.map((card) => (
+            <SummaryTile
+              key={card.title}
+              accent={card.accent}
+              badge={card.badge}
+              title={card.title}
+              value={card.value}
+              note={card.note}
+              fill={card.fill}
+            />
+          ))}
+        </View>
+      ),
+    },
+    {
+      key: 'camp-headcounts',
+      title: 'Summer Camp Headcounts',
+      summary: 'Group confirmations by camp color',
+      details: (
+        <View style={styles.ownerSectionDetailsGrid}>
+          {campCards.map((card) => (
+            <SummaryTile
+              key={card.title}
+              accent={card.accent}
+              badge={card.badge}
+              title={card.title}
+              value={card.value}
+              note={card.note}
+              fill={card.fill}
+            />
+          ))}
+        </View>
+      ),
+    },
+    {
+      key: 'staff-notes',
+      title: 'Staff & Notes',
+      summary: 'Daily notes, hours, and parent inbox activity',
+      details: (
+        <View style={styles.ownerSectionDetailsGrid}>
+          {staffNotesCards.map((card) => (
+            <SummaryTile
+              key={card.title}
+              accent={card.accent}
+              badge={card.badge}
+              title={card.title}
+              value={card.value}
+              note={card.note}
+              fill={card.fill}
+            />
+          ))}
+        </View>
+      ),
+    },
+    {
+      key: 'activity-feed',
+      title: 'Recent Activity Feed',
+      summary: 'Latest center events by time',
+      details: (
+        <View style={styles.ownerSectionList}>
+          {activityFeed.map((item) => (
+            <View key={`${item.time}-${item.text}`} style={styles.ownerActivityRow}>
+              <Text style={styles.ownerActivityTime}>{item.time}</Text>
+              <View style={[styles.ownerActivityDot, { backgroundColor: item.color }]} />
+              <Text style={styles.ownerActivityText}>{item.text}</Text>
+            </View>
+          ))}
+        </View>
+      ),
+    },
+    {
+      key: 'quick-actions',
+      title: 'Owner Quick Actions',
+      summary: '8 mission-control shortcuts',
+      details: (
+        <View style={styles.ownerSectionDetailsGrid}>
+          {OWNER_MODULES.map((moduleName, index) => {
+            const accents = ['blue', 'green', 'orange', 'purple'];
+            const accent = accents[index % accents.length];
+
+            return (
+              <ActionButtonCard
+                key={moduleName}
+                accent={accent}
+                title={moduleName}
+                value="Coming Soon"
+                note="Mission control placeholder"
+                onPress={() => onShowComingSoon(moduleName)}
+              />
+            );
+          })}
+        </View>
+      ),
+    },
+  ];
+
+  return (
+    <View style={styles.page}>
+      <View style={styles.hero}>
+        <View style={styles.heroOrbLarge} />
+        <View style={styles.heroOrbSmall} />
+        <View style={styles.ownerDashboardHeroCopy}>
+          <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+          <Text style={styles.shellHeroTitle}>Owner Dashboard</Text>
+          <Text style={styles.shellHeroSubtitle}>Welcome back</Text>
+          <View style={[styles.shellHeroPill, { marginTop: 10 }]}>
+            <Text style={styles.shellHeroPillText}>Live Center View</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.contentStack}>
+          {ownerSections.map((section) => {
+            const isOpen = openSection === section.key;
+
+            return (
+              <View key={section.key} style={styles.ownerAccordionCard}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() =>
+                    setOpenSection((current) => (current === section.key ? null : section.key))
+                  }
+                  style={({ pressed }) => [styles.ownerAccordionHeader, pressed && styles.pressedButton]}
+                >
+                  <View style={styles.ownerAccordionHeadingBlock}>
+                    <Text style={styles.ownerAccordionTitle}>{section.title}</Text>
+                    <Text style={styles.ownerAccordionSummary}>{section.summary}</Text>
+                  </View>
+                  <Text style={styles.ownerAccordionChevron}>{isOpen ? '⌃' : '⌄'}</Text>
+                </Pressable>
+
+                {isOpen ? <View style={styles.ownerAccordionContent}>{section.details}</View> : null}
+              </View>
+            );
+          })}
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
 function StaffClockInOutScreen({
   onBack,
   onLogout,
@@ -3028,92 +3383,18 @@ function createStaffSummerCampGroups() {
 }
 
 const OWNER_MODULES = [
-  'Before & After Care',
-  'Summer Camp',
   'Students',
   'Staff',
   'Parents',
   'Billing',
-  'Reports',
   'Messages',
+  'Camp Events',
+  'Invite Codes',
+  'Reports',
 ];
 
 const OFFICIAL_LOGO = require('./assets/images/logo.png');
 const HEADER_PHOTO = require('./assets/images/header_kids.jpg');
-
-function ScreenShell({ children, title, subtitle, badge, titleMaxWidth }) {
-  const hasHeroCopy = Boolean(title || subtitle || badge);
-
-  return (
-    <View style={styles.page}>
-      <View style={styles.hero}>
-        <View style={styles.heroOrbLarge} />
-        <View style={styles.heroOrbSmall} />
-        <View style={styles.heroTopRow}>
-          <Pressable accessibilityRole="button" style={styles.headerIconButton}>
-            <Text style={styles.headerIcon}>☰</Text>
-          </Pressable>
-
-          <View style={styles.brandLockup}>
-            <Image
-              source={OFFICIAL_LOGO}
-              resizeMode="contain"
-              style={styles.brandLogo}
-            />
-            <Text style={styles.brandTag}>Secure Invite Access</Text>
-          </View>
-
-          <View style={styles.bellWrap}>
-            <Pressable accessibilityRole="button" style={styles.headerIconButton}>
-              <Text style={styles.headerIcon}>🔔</Text>
-            </Pressable>
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationBadgeText}>2</Text>
-            </View>
-          </View>
-        </View>
-
-        {hasHeroCopy ? (
-          <View style={styles.heroCopy}>
-            {badge ? (
-              <View style={styles.shellHeroPill}>
-                <Text style={styles.shellHeroPillText}>{badge}</Text>
-              </View>
-            ) : null}
-
-            {title ? (
-              <Text
-                style={[
-                  styles.shellHeroTitle,
-                  titleMaxWidth ? { maxWidth: titleMaxWidth } : null,
-                ]}
-              >
-                {title}
-              </Text>
-            ) : null}
-            {subtitle ? <Text style={styles.shellHeroSubtitle}>{subtitle}</Text> : null}
-          </View>
-        ) : null}
-      </View>
-
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        {children}
-      </ScrollView>
-    </View>
-  );
-}
-
-function SectionLabel({ title, actionLabel }) {
-  return (
-    <View style={styles.sectionLabelRow}>
-      <Text style={styles.sectionLabel}>{title}</Text>
-      {actionLabel ? <Text style={styles.sectionAction}>{actionLabel}</Text> : null}
-    </View>
-  );
-}
 
 function SummaryTile({ accent, title, value, note, fill, onPress, badge }) {
   const accentStyles = {
@@ -3121,6 +3402,8 @@ function SummaryTile({ accent, title, value, note, fill, onPress, badge }) {
     green: styles.tileGreen,
     orange: styles.tileOrange,
     purple: styles.tilePurple,
+    red: styles.tileRed,
+    yellow: styles.tileYellow,
   };
 
   const Content = (
@@ -4272,56 +4555,7 @@ export default function App() {
           onSaveNote={saveStaffDailyNote}
         />
       ) : (
-        <ScreenShell
-          badge="Owner Control Center"
-          title="Welcome back"
-          subtitle="Advanced Education"
-          titleMaxWidth={220}
-        >
-          <View style={styles.contentStack}>
-            <View style={styles.ownerIntroCard}>
-              <Text style={styles.cardSectionLabel}>Control center</Text>
-              <Text style={styles.ownerIntroTitle}>Quick access to the main modules</Text>
-              <Text style={styles.ownerIntroNote}>
-                Everything here is a placeholder for now, but the layout is ready for
-                the next pass.
-              </Text>
-            </View>
-
-            <SectionLabel title="Modules" actionLabel="Coming soon" />
-            <View style={styles.ownerGrid}>
-              {OWNER_MODULES.map((moduleName, index) => {
-                const accents = ['blue', 'purple', 'green', 'orange'];
-                const accent = accents[index % accents.length];
-
-                return (
-                  <SummaryTile
-                    key={moduleName}
-                    accent={accent}
-                    badge={moduleName.charAt(0)}
-                    title={moduleName}
-                    value="Coming Soon"
-                    note="Control panel placeholder"
-                    fill="Admin"
-                    onPress={() => showComingSoon(moduleName)}
-                  />
-                );
-              })}
-            </View>
-
-            <Pressable
-              accessibilityRole="button"
-              onPress={handleLogout}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                styles.logoutButton,
-                pressed && styles.pressedButton,
-              ]}
-            >
-              <Text style={styles.primaryButtonText}>Logout</Text>
-            </Pressable>
-          </View>
-        </ScreenShell>
+        <OwnerDashboardScreen onLogout={handleLogout} onShowComingSoon={showComingSoon} />
       )}
     </SafeAreaView>
   );
@@ -4482,21 +4716,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '900',
   },
-  sectionLabelRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  sectionLabel: {
-    color: COLORS.text,
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  sectionAction: {
-    color: COLORS.blue,
-    fontSize: 13,
-    fontWeight: '800',
-  },
   cardSectionLabel: {
     color: COLORS.blue,
     fontSize: 12,
@@ -4570,6 +4789,12 @@ const styles = StyleSheet.create({
   },
   tilePurple: {
     backgroundColor: '#7C4DFF',
+  },
+  tileRed: {
+    backgroundColor: COLORS.danger,
+  },
+  tileYellow: {
+    backgroundColor: COLORS.warning,
   },
   actionCard: {
     alignItems: 'center',
@@ -5713,34 +5938,93 @@ const styles = StyleSheet.create({
   staffButtonStack: {
     gap: 12,
   },
-  ownerIntroCard: {
+  ownerDashboardHeroCopy: {
+    gap: 6,
+    marginTop: 18,
+    paddingHorizontal: 20,
+  },
+  ownerDashboardEyebrow: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  ownerActivityList: {
+    gap: 12,
+  },
+  ownerActivityRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  ownerActivityTime: {
+    color: COLORS.blue,
+    fontSize: 13,
+    fontWeight: '900',
+    minWidth: 66,
+  },
+  ownerActivityDot: {
+    borderRadius: 999,
+    height: 10,
+    marginTop: 5,
+    width: 10,
+  },
+  ownerActivityText: {
+    color: COLORS.text,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  ownerAccordionCard: {
     backgroundColor: COLORS.card,
     borderColor: COLORS.border,
     borderRadius: 28,
     borderWidth: 1,
-    padding: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.06,
     shadowRadius: 24,
     elevation: 3,
   },
-  ownerIntroTitle: {
+  ownerAccordionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 16,
+    justifyContent: 'space-between',
+  },
+  ownerAccordionHeadingBlock: {
+    flex: 1,
+  },
+  ownerAccordionTitle: {
     color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  ownerAccordionSummary: {
+    color: COLORS.muted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+  },
+  ownerAccordionChevron: {
+    color: COLORS.blue,
     fontSize: 24,
     fontWeight: '900',
-    lineHeight: 30,
-    marginTop: 8,
+    marginTop: -2,
   },
-  ownerIntroNote: {
-    color: COLORS.muted,
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 8,
+  ownerAccordionContent: {
+    marginTop: 14,
   },
-  ownerGrid: {
+  ownerSectionDetailsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 12,
+  },
+  ownerSectionList: {
     gap: 12,
   },
   homeCard: {
