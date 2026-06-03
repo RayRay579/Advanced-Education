@@ -65,7 +65,7 @@ const PARENT_CHILD = {
   beforeAfterCare: 'Enrolled',
   summerCamp: 'Registered',
   billing: 'Current',
-  notifications: '2 New',
+  messages: '2 New',
 };
 
 const CHILD_PROFILE = {
@@ -81,37 +81,6 @@ const CHILD_PROFILE = {
   emergencyContacts: ['Avery Parent', 'Susan Carter'],
   medicalAlerts: ['Peanut Allergy', 'Asthma', 'EpiPen Required'],
 };
-
-const MOCK_NOTIFICATIONS = [
-  {
-    title: 'Camp Reminder',
-    message: 'Water Day is Friday at 1:00 PM.',
-    time: '1:00 PM',
-    category: 'Camp',
-    read: false,
-  },
-  {
-    title: 'Pickup Alert',
-    message: 'Mia was checked in today at 8:12 AM with Ms. Sarah.',
-    time: '8:12 AM',
-    category: 'Pickup',
-    read: false,
-  },
-  {
-    title: 'Billing Notice',
-    message: 'Your weekly balance is current.',
-    time: 'Today',
-    category: 'Billing',
-    read: true,
-  },
-  {
-    title: 'Daily Note',
-    message: 'Mia had a great day and participated in group activities.',
-    time: 'Yesterday',
-    category: 'Daily',
-    read: true,
-  },
-];
 
 const NOTIFICATION_CATEGORY_THEMES = {
   Camp: {
@@ -140,21 +109,302 @@ function getNotificationTheme(category) {
   return NOTIFICATION_CATEGORY_THEMES[category] || NOTIFICATION_CATEGORY_THEMES.Pickup;
 }
 
-const BEFORE_AFTER_WEEKLY_HOURS = [
-  { day: 'Monday', hours: '8.5 hrs' },
-  { day: 'Tuesday', hours: '9.0 hrs' },
-  { day: 'Wednesday', hours: '8.0 hrs' },
-  { day: 'Thursday', hours: '7.5 hrs' },
-  { day: 'Friday', hours: '0.0 hrs' },
+function formatDailyNoteDateLabel(value) {
+  return formatDate(value);
+}
+
+function formatMessageDateTime(value) {
+  return formatDateTime(value);
+}
+
+function parseDateValue(value) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = value.includes('T') ? new Date(value) : new Date(`${value}T00:00:00`);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function formatDate(value) {
+  const parsed = parseDateValue(String(value || ''));
+
+  if (!parsed) {
+    return 'Date not set';
+  }
+
+  return parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function formatDateTime(value) {
+  const parsed = parseDateValue(String(value || ''));
+
+  if (!parsed) {
+    return 'Date not set';
+  }
+
+  const datePart = parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const timePart = parsed.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+  return `${datePart} • ${timePart}`;
+}
+
+function formatDuration(minutes) {
+  const numericMinutes = Number(minutes);
+
+  if (!Number.isFinite(numericMinutes) || numericMinutes <= 0) {
+    return '0 min';
+  }
+
+  if (numericMinutes < 60) {
+    return `${Math.round(numericMinutes)} min`;
+  }
+
+  const hours = Math.floor(numericMinutes / 60);
+  const remainder = Math.round(numericMinutes % 60);
+
+  return `${hours} hr ${remainder} min`;
+}
+
+function formatAudienceLabel(audienceType) {
+  if (audienceType === 'all_parents') {
+    return 'All Parents';
+  }
+  if (audienceType === 'all_staff') {
+    return 'All Staff';
+  }
+  if (audienceType === 'one_parent') {
+    return 'One Parent';
+  }
+  if (audienceType === 'one_staff') {
+    return 'One Staff';
+  }
+
+  return audienceType || 'All Parents';
+}
+
+function formatMessageTypeLabel(messageType) {
+  if (!messageType) {
+    return 'Announcement';
+  }
+
+  return messageType
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+const EMERGENCY_CONTACT_PRIORITY_OPTIONS = [
+  { value: 1, label: 'Primary Contact' },
+  { value: 2, label: 'Secondary Contact' },
+  { value: 3, label: 'Third Contact' },
+  { value: 4, label: 'Fourth Contact' },
 ];
 
-const AUTHORIZED_PICKUPS_TODAY = [
-  { name: 'Avery Parent', relationship: 'Parent' },
-  { name: 'Susan Carter', relationship: 'Grandmother' },
-  { name: 'David Carter', relationship: 'Uncle' },
-];
+function formatEmergencyContactPriority(value) {
+  const numericPriority = Number(value);
+  const selectedOption = EMERGENCY_CONTACT_PRIORITY_OPTIONS.find(
+    (option) => option.value === numericPriority
+  );
 
-function BeforeAfterCareScreen({ onBack, onLogout, onOpenBilling }) {
+  if (!selectedOption) {
+    return 'Priority not set';
+  }
+
+  return `Priority ${selectedOption.value} - ${selectedOption.label}`;
+}
+
+function formatTime(value) {
+  if (!value) {
+    return 'Not recorded';
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Not recorded';
+  }
+
+  return parsed.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function formatMinutes(minutes) {
+  return formatDuration(minutes);
+}
+
+function getTodayIsoRange() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  return {
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+  };
+}
+
+function deriveBeforeAfterStage(sessionRow) {
+  if (!sessionRow) {
+    return 0;
+  }
+
+  if (sessionRow.pickup_time) {
+    return 4;
+  }
+
+  if (sessionRow.returned_time) {
+    return 3;
+  }
+
+  if (sessionRow.bus_departure_time) {
+    return 2;
+  }
+
+  if (sessionRow.drop_off_time) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function getBeforeAfterStatusLabel(sessionRow) {
+  switch (deriveBeforeAfterStage(sessionRow)) {
+    case 1:
+      return 'Dropped Off';
+    case 2:
+      return 'On Bus';
+    case 3:
+      return 'Returned From Bus';
+    case 4:
+      return 'Picked Up';
+    default:
+      return 'Ready for Drop Off';
+  }
+}
+
+function getBeforeAfterLatestTime(sessionRow) {
+  return (
+    sessionRow?.pickup_time ||
+    sessionRow?.returned_time ||
+    sessionRow?.bus_departure_time ||
+    sessionRow?.drop_off_time ||
+    sessionRow?.created_at ||
+    'Not started'
+  );
+}
+
+function getBeforeAfterTimelineEntries(sessionRow, events) {
+  const eventMap = {
+    parent_drop_off: 'Dropped Off',
+    put_on_bus: 'On Bus',
+    returned_from_bus: 'Returned From Bus',
+    parent_pickup: 'Picked Up',
+  };
+
+  const sessionEntries = [
+    sessionRow?.drop_off_time
+      ? {
+          id: `${sessionRow.id}-drop-off`,
+          title: 'Dropped Off',
+          time: sessionRow.drop_off_time,
+          message: 'Parent drop off recorded.',
+        }
+      : null,
+    sessionRow?.bus_departure_time
+      ? {
+          id: `${sessionRow.id}-bus`,
+          title: 'On Bus',
+          time: sessionRow.bus_departure_time,
+          message: 'Put on bus recorded.',
+        }
+      : null,
+    sessionRow?.returned_time
+      ? {
+          id: `${sessionRow.id}-returned`,
+          title: 'Returned From Bus',
+          time: sessionRow.returned_time,
+          message: 'Returned from bus recorded.',
+        }
+      : null,
+    sessionRow?.pickup_time
+      ? {
+          id: `${sessionRow.id}-pickup`,
+          title: 'Picked Up',
+          time: sessionRow.pickup_time,
+          message: 'Parent pickup recorded.',
+        }
+      : null,
+  ].filter(Boolean);
+
+  const eventEntries = (Array.isArray(events) ? events : []).map((event) => ({
+    id: event.id,
+    title: eventMap[event.event_type] || event.event_type || 'Attendance Update',
+    time: event.event_time,
+    message: eventMap[event.event_type]
+      ? `${eventMap[event.event_type]} recorded.`
+      : 'Attendance update recorded.',
+  }));
+
+  return [...eventEntries, ...sessionEntries].sort(
+    (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()
+  );
+}
+
+function BeforeAfterCareScreen({ onBack, onLogout, loading, error, records }) {
+  const renderStatusPill = (status) => (
+    <View
+      style={[
+        styles.beforeAfterStatusPill,
+        status === 'picked_up'
+          ? styles.staffAttendanceStatusPillGreen
+          : status === 'on_bus'
+            ? styles.staffAttendanceStatusPillBlue
+            : styles.staffAttendanceStatusPillOrange,
+      ]}
+    >
+      <Text
+        style={[
+          styles.beforeAfterStatusPillText,
+          status === 'picked_up'
+            ? styles.staffAttendanceStatusPillTextGreen
+            : status === 'on_bus'
+              ? styles.staffAttendanceStatusPillTextBlue
+              : styles.staffAttendanceStatusPillTextOrange,
+        ]}
+      >
+        {status === 'picked_up'
+          ? 'Picked Up'
+          : status === 'on_bus'
+            ? 'On Bus'
+            : status === 'returned'
+              ? 'Returned From Bus'
+              : status === 'dropped_off'
+                ? 'Dropped Off'
+                : 'Ready for Drop Off'}
+      </Text>
+    </View>
+  );
+
   return (
     <View style={styles.parentHomePage}>
       <ScrollView
@@ -183,7 +433,7 @@ function BeforeAfterCareScreen({ onBack, onLogout, onOpenBilling }) {
           <View style={styles.beforeAfterHeroMain}>
             <View style={styles.beforeAfterHeroTextBlock}>
               <Text style={styles.parentHeroKicker}>Advanced Education</Text>
-              <Text style={styles.parentHeroGreeting}>Mia Carter</Text>
+              <Text style={styles.parentHeroGreeting}>Before & After Care</Text>
               <View style={styles.beforeAfterHeroTag}>
                 <Text style={styles.beforeAfterHeroTagText}>View Only</Text>
               </View>
@@ -200,109 +450,80 @@ function BeforeAfterCareScreen({ onBack, onLogout, onOpenBilling }) {
         </View>
 
         <View style={styles.parentHomeContent}>
-          <View style={styles.profileCard}>
-            <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Current Status</Text>
-              <View style={styles.beforeAfterStatusPill}>
-                <Text style={styles.beforeAfterStatusPillText}>Checked In</Text>
-              </View>
-            </View>
-
-            <View style={styles.beforeAfterStatusList}>
-              <View style={styles.beforeAfterStatusRow}>
-                <Text style={styles.beforeAfterStatusLabel}>Check In Time</Text>
-                <Text style={styles.beforeAfterStatusValue}>7:12 AM</Text>
-              </View>
-              <View style={styles.beforeAfterStatusRow}>
-                <Text style={styles.beforeAfterStatusLabel}>Staff Member</Text>
-                <Text style={styles.beforeAfterStatusValue}>Ms. Sarah</Text>
-              </View>
-            </View>
-          </View>
+          {loading ? <Text style={styles.parentAttendanceStateText}>Loading camp roster...</Text> : null}
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
           <View style={styles.profileCard}>
             <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Today&apos;s Schedule</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>Daily routine</Text>
+              <Text style={styles.parentSectionHeaderTitle}>Today&apos;s B&amp;A Records</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Read only</Text>
             </View>
 
-            <View style={styles.beforeAfterScheduleList}>
-              <View style={styles.beforeAfterScheduleRow}>
-                <Text style={styles.beforeAfterScheduleLabel}>Arrival Time</Text>
-                <Text style={styles.beforeAfterScheduleValue}>7:12 AM</Text>
-              </View>
-              <View style={styles.beforeAfterScheduleRow}>
-                <Text style={styles.beforeAfterScheduleLabel}>School Dismissal Time</Text>
-                <Text style={styles.beforeAfterScheduleValue}>3:15 PM</Text>
-              </View>
-              <View style={styles.beforeAfterScheduleRow}>
-                <Text style={styles.beforeAfterScheduleLabel}>Pickup Time</Text>
-                <Text style={styles.beforeAfterScheduleValue}>5:45 PM</Text>
-              </View>
-              <View style={styles.beforeAfterScheduleNotes}>
-                <Text style={styles.beforeAfterScheduleLabel}>Notes</Text>
-                <Text style={styles.beforeAfterScheduleNoteText}>
-                  Mia has a regular after care schedule today.
-                </Text>
-              </View>
-            </View>
-          </View>
+            {loading ? (
+              <Text style={styles.parentAttendanceStateText}>Loading Before & After Care...</Text>
+            ) : error ? (
+              <Text style={styles.errorText}>{error}</Text>
+            ) : records.length ? (
+              <View style={styles.profileList}>
+                {records.map((record) => (
+                  <View key={record.id} style={styles.profileCardInner}>
+                    <View style={styles.parentSectionHeaderRow}>
+                      <Text style={styles.parentSectionHeaderTitle}>{record.childName}</Text>
+                      {renderStatusPill(record.status)}
+                    </View>
 
-          <View style={styles.profileCard}>
-            <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Weekly Hours</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>This week</Text>
-            </View>
-
-            <View style={styles.beforeAfterHoursList}>
-              {BEFORE_AFTER_WEEKLY_HOURS.map((entry) => (
-                <View key={entry.day} style={styles.beforeAfterHoursRow}>
-                  <Text style={styles.beforeAfterHoursDay}>{entry.day}</Text>
-                  <Text style={styles.beforeAfterHoursValue}>{entry.hours}</Text>
-                </View>
-              ))}
-            </View>
-
-            <View style={styles.beforeAfterTotalRow}>
-              <Text style={styles.beforeAfterTotalLabel}>Weekly Total</Text>
-              <Text style={styles.beforeAfterTotalValue}>33.0 Hours</Text>
-            </View>
-
-            <Pressable
-              accessibilityRole="button"
-              onPress={onOpenBilling}
-              style={({ pressed }) => [
-                styles.beforeAfterBillingButton,
-                pressed && styles.pressedButton,
-              ]}
-            >
-              <Text style={styles.beforeAfterBillingButtonText}>View Billing</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.profileCard}>
-            <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Authorized Pickup Today</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>3 people</Text>
-            </View>
-
-            <View style={styles.beforeAfterPickupList}>
-              {AUTHORIZED_PICKUPS_TODAY.map((person) => (
-                <View key={person.name} style={styles.beforeAfterPickupRow}>
-                  <View style={styles.beforeAfterPickupAvatar}>
-                    <Text style={styles.beforeAfterPickupAvatarText}>
-                      {person.name.charAt(0)}
-                    </Text>
+                    <View style={styles.beforeAfterStatusList}>
+                      <View style={styles.beforeAfterStatusRow}>
+                        <Text style={styles.beforeAfterStatusLabel}>Drop Off Time</Text>
+                        <Text style={styles.beforeAfterStatusValue}>
+                          {formatTime(record.drop_off_time)}
+                        </Text>
+                      </View>
+                      <View style={styles.beforeAfterStatusRow}>
+                        <Text style={styles.beforeAfterStatusLabel}>Put On Bus Time</Text>
+                        <Text style={styles.beforeAfterStatusValue}>
+                          {formatTime(record.bus_departure_time)}
+                        </Text>
+                      </View>
+                      <View style={styles.beforeAfterStatusRow}>
+                        <Text style={styles.beforeAfterStatusLabel}>Morning Time</Text>
+                        <Text style={styles.beforeAfterStatusValue}>
+                          {formatMinutes(record.morning_minutes)}
+                        </Text>
+                      </View>
+                      <View style={styles.beforeAfterStatusRow}>
+                        <Text style={styles.beforeAfterStatusLabel}>Returned Time</Text>
+                        <Text style={styles.beforeAfterStatusValue}>
+                          {formatTime(record.returned_time)}
+                        </Text>
+                      </View>
+                      <View style={styles.beforeAfterStatusRow}>
+                        <Text style={styles.beforeAfterStatusLabel}>Parent Pickup Time</Text>
+                        <Text style={styles.beforeAfterStatusValue}>
+                          {formatTime(record.pickup_time)}
+                        </Text>
+                      </View>
+                      <View style={styles.beforeAfterStatusRow}>
+                        <Text style={styles.beforeAfterStatusLabel}>Afternoon Time</Text>
+                        <Text style={styles.beforeAfterStatusValue}>
+                          {formatMinutes(record.afternoon_minutes)}
+                        </Text>
+                      </View>
+                      <View style={styles.beforeAfterStatusRow}>
+                        <Text style={styles.beforeAfterStatusLabel}>Total Time Today</Text>
+                        <Text style={styles.beforeAfterStatusValue}>
+                          {formatMinutes(record.total_minutes)}
+                        </Text>
+                      </View>
+                    </View>
                   </View>
-                  <View style={styles.beforeAfterPickupTextBlock}>
-                    <Text style={styles.beforeAfterPickupName}>{person.name}</Text>
-                    <Text style={styles.beforeAfterPickupRelationship}>
-                      {person.relationship}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.parentAttendanceStateText}>
+                No Before &amp; After Care record for today.
+              </Text>
+            )}
           </View>
 
           <Pressable
@@ -782,9 +1003,15 @@ function StaffHomeScreen({
   onOpenClock,
   onOpenBeforeAfter,
   onOpenCamp,
+  onOpenMessages,
   onOpenNotes,
   onOpenHours,
   staffStatus,
+  messages,
+  loading,
+  error,
+  expandedMessageId,
+  onToggleMessage,
 }) {
   return (
     <View style={styles.parentHomePage}>
@@ -828,6 +1055,8 @@ function StaffHomeScreen({
                       ? onOpenBeforeAfter()
                     : card.title === 'Summer Camp Group Check-In'
                         ? onOpenCamp()
+                        : card.title === 'Messages'
+                          ? onOpenMessages()
                         : card.title === 'Daily Notes'
                           ? onOpenNotes()
                           : card.title === 'My Hours'
@@ -837,6 +1066,16 @@ function StaffHomeScreen({
               />
             ))}
           </View>
+
+          <RecipientMessagesSection
+            title="Messages"
+            subtitle="Recent updates sent to this account."
+            messages={messages}
+            loading={loading}
+            error={error}
+            expandedMessageId={expandedMessageId}
+            onToggleMessage={onToggleMessage}
+          />
 
           <Pressable
             accessibilityRole="button"
@@ -860,7 +1099,7 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
   const [selectedChildId, setSelectedChildId] = useState(STAFF_DAILY_NOTE_CHILDREN[0]?.id ?? null);
   const [selectedQuickNotes, setSelectedQuickNotes] = useState([]);
   const [customNote, setCustomNote] = useState('');
-  const [visibility, setVisibility] = useState({ parent: true, owner: true });
+  const visibility = { parent: false, owner: true };
   const [savedFormKey, setSavedFormKey] = useState('');
   const [savedFormKey, setSavedFormKey] = useState('');
   const [savedFormKey, setSavedFormKey] = useState('');
@@ -917,7 +1156,7 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
   const canSave = Boolean(selectedChild) && hasContent;
   const isSaveDisabled = !canSave || isSaved;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedChild) {
       Alert.alert('Select a child first.');
       return;
@@ -927,7 +1166,7 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
       return;
     }
 
-    const savedEntry = onSaveNote({
+    const savedEntry = await onSaveNote({
       childId: selectedChild.id,
       childName: selectedChild.name,
       quickNotes: selectedQuickNotes,
@@ -1239,15 +1478,69 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
 */
 
 function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
-  const [selectedChildId, setSelectedChildId] = useState(STAFF_DAILY_NOTE_CHILDREN[0]?.id ?? null);
+  const [staffDailyNoteChildren, setStaffDailyNoteChildren] = useState([]);
+  const [staffDailyNotesLoading, setStaffDailyNotesLoading] = useState(true);
+  const [staffDailyNotesError, setStaffDailyNotesError] = useState('');
+  const [selectedChildId, setSelectedChildId] = useState(null);
   const [selectedQuickNotes, setSelectedQuickNotes] = useState([]);
   const [customNote, setCustomNote] = useState('');
-  const [visibility, setVisibility] = useState({ parent: true, owner: true });
+  const visibility = { parent: false, owner: true };
   const [savedFormKey, setSavedFormKey] = useState('');
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadChildren = async () => {
+      setStaffDailyNotesLoading(true);
+      setStaffDailyNotesError('');
+
+      const { data, error } = await supabase
+        .from('children')
+        .select('id, first_name, last_name, room, status, profile_accent_color')
+        .eq('status', 'active');
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (error) {
+        setStaffDailyNoteChildren([]);
+        setStaffDailyNotesError(error.message || 'Could not load children.');
+        setStaffDailyNotesLoading(false);
+        return;
+      }
+
+      const loadedChildren = (Array.isArray(data) ? data : []).map((child, index) => {
+        const firstName = child.first_name?.trim() || '';
+        const lastName = child.last_name?.trim() || '';
+        const name = `${firstName} ${lastName}`.trim() || 'Unnamed Student';
+
+        return {
+          id: child.id ?? `${name}-${index}`,
+          name,
+          room: child.room?.trim() || 'Room not set',
+          status: child.status?.trim() || 'active',
+          accentGroup: child.profile_accent_color || 'blue',
+          first_name: child.first_name || '',
+          last_name: child.last_name || '',
+        };
+      });
+
+      setStaffDailyNoteChildren(loadedChildren);
+      setSelectedChildId((current) => current || loadedChildren[0]?.id || null);
+      setStaffDailyNotesLoading(false);
+    };
+
+    loadChildren();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const selectedChild =
-    STAFF_DAILY_NOTE_CHILDREN.find((child) => child.id === selectedChildId) ||
-    STAFF_DAILY_NOTE_CHILDREN[0] ||
+    staffDailyNoteChildren.find((child) => child.id === selectedChildId) ||
+    staffDailyNoteChildren[0] ||
     null;
 
   const toggleQuickNote = (note) => {
@@ -1256,21 +1549,11 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
     );
   };
 
-  const toggleVisibility = (key) => {
-    setVisibility((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  };
-
   const previewQuickNotes = selectedQuickNotes.length
     ? selectedQuickNotes.join(' • ')
     : 'No quick notes selected';
   const previewCustomNote = customNote.trim() || 'No custom note added';
-  const previewVisibility = [
-    visibility.parent ? 'Parent' : null,
-    visibility.owner ? 'Owner' : null,
-  ].filter(Boolean);
+  const previewVisibility = ['Owner Review'];
   const currentFormKey = [
     selectedChild?.id || '',
     [...selectedQuickNotes].sort().join('|'),
@@ -1283,7 +1566,7 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
   const canSave = Boolean(selectedChild) && hasContent;
   const isSaveDisabled = !canSave || isSaved;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedChild) {
       Alert.alert('Select a child first.');
       return;
@@ -1293,7 +1576,7 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
       return;
     }
 
-    const savedEntry = onSaveNote({
+    const savedEntry = await onSaveNote({
       childId: selectedChild.id,
       childName: selectedChild.name,
       quickNotes: selectedQuickNotes,
@@ -1306,7 +1589,9 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
       return;
     }
 
-    Alert.alert(`Daily note saved for ${selectedChild.name}.`);
+    Alert.alert('Daily note sent to owner for review.');
+    setSelectedQuickNotes([]);
+    setCustomNote('');
     setSavedFormKey(currentFormKey);
   };
 
@@ -1355,8 +1640,13 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
               <Text style={styles.parentSectionHeaderSubtle}>Tap one child</Text>
             </View>
 
-            <View style={styles.staffDailyNotesChildGrid}>
-              {STAFF_DAILY_NOTE_CHILDREN.map((child) => {
+            {staffDailyNotesLoading ? (
+              <Text style={styles.staffDailyNotesPreviewFooter}>Loading children...</Text>
+            ) : staffDailyNotesError ? (
+              <Text style={styles.errorText}>{staffDailyNotesError}</Text>
+            ) : (
+              <View style={styles.staffDailyNotesChildGrid}>
+                {staffDailyNoteChildren.map((child) => {
                 const isSelected = child.id === selectedChild?.id;
                 const theme = getChildGroupTheme(child.accentGroup);
 
@@ -1368,7 +1658,6 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
                       setSelectedChildId(child.id);
                       setSelectedQuickNotes([]);
                       setCustomNote('');
-                      setVisibility({ parent: true, owner: true });
                       setSavedFormKey('');
                     }}
                     style={({ pressed }) => [
@@ -1383,10 +1672,11 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
                     <Text style={styles.staffDailyNotesChildMeta}>
                       {isSelected ? 'Selected' : 'Tap to select'}
                     </Text>
-                  </Pressable>
+                    </Pressable>
                 );
               })}
-            </View>
+              </View>
+            )}
           </View>
 
           <View style={styles.profileCard}>
@@ -1449,42 +1739,17 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
 
           <View style={styles.profileCard}>
             <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Visibility</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>Default: Parent + Owner</Text>
+              <Text style={styles.parentSectionHeaderTitle}>Owner Review</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Sent to owner for approval</Text>
             </View>
 
-            <View style={styles.staffDailyNotesVisibilityRow}>
-              {[
-                { key: 'parent', label: 'Parent' },
-                { key: 'owner', label: 'Owner' },
-              ].map((item) => {
-                const active = visibility[item.key];
-
-                return (
-                  <Pressable
-                    key={item.key}
-                    accessibilityRole="button"
-                    onPress={() => {
-                      toggleVisibility(item.key);
-                      setSavedFormKey('');
-                    }}
-                    style={({ pressed }) => [
-                      styles.staffDailyNotesVisibilityChip,
-                      active && styles.staffDailyNotesVisibilityChipActive,
-                      pressed && styles.pressedButton,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.staffDailyNotesVisibilityText,
-                        active && styles.staffDailyNotesVisibilityTextActive,
-                      ]}
-                    >
-                      {item.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            <View style={styles.staffDailyNotesTagRow}>
+              <View style={styles.staffDailyNotesTag}>
+                <Text style={styles.staffDailyNotesTagText}>Pending</Text>
+              </View>
+              <View style={styles.staffDailyNotesTag}>
+                <Text style={styles.staffDailyNotesTagText}>Owner Review</Text>
+              </View>
             </View>
           </View>
 
@@ -1514,7 +1779,7 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
                 </Text>
               </View>
               <View style={styles.staffDailyNotesPreviewBlock}>
-                <Text style={styles.staffDailyNotesPreviewLabel}>Sync targets</Text>
+                <Text style={styles.staffDailyNotesPreviewLabel}>Review targets</Text>
                 <View style={styles.staffDailyNotesTagRow}>
                   {previewVisibility.length ? (
                     previewVisibility.map((target) => (
@@ -1523,14 +1788,14 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
                       </View>
                     ))
                   ) : (
-                    <Text style={styles.staffDailyNotesPreviewValue}>No visibility selected</Text>
+                    <Text style={styles.staffDailyNotesPreviewValue}>Owner Review</Text>
                   )}
                 </View>
               </View>
             </View>
 
             <Text style={styles.staffDailyNotesPreviewFooter}>
-              This note can later sync to Parent Notifications, Child Timeline, and the Owner Dashboard.
+              This note is sent to the owner for review before parents can see it.
             </Text>
 
             <View style={styles.staffDailyNotesSavedHeader}>
@@ -1548,18 +1813,11 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
                     </View>
                     <Text style={styles.staffDailyNotesSavedSummary}>{note.summary}</Text>
                     <View style={styles.staffDailyNotesTagRow}>
-                      {note.visibility.parent ? (
-                        <View style={styles.staffDailyNotesTag}>
-                          <Text style={styles.staffDailyNotesTagText}>Parent</Text>
-                        </View>
-                      ) : null}
-                      {note.visibility.owner ? (
-                        <View style={styles.staffDailyNotesTag}>
-                          <Text style={styles.staffDailyNotesTagText}>Owner</Text>
-                        </View>
-                      ) : null}
                       <View style={styles.staffDailyNotesTag}>
-                        <Text style={styles.staffDailyNotesTagText}>Timeline</Text>
+                        <Text style={styles.staffDailyNotesTagText}>Owner Review</Text>
+                      </View>
+                      <View style={styles.staffDailyNotesTag}>
+                        <Text style={styles.staffDailyNotesTagText}>Pending</Text>
                       </View>
                     </View>
                   </View>
@@ -1746,8 +2004,14 @@ function OwnerDashboardScreen({
   onOpenInviteCodes,
   onOpenReports,
   onOpenSummerCampCheckIn,
+  onOpenDailyNotesReview,
   ownerSummerCampSummary,
   staffSummerCampGroups,
+  ownerPendingDailyNotesCount,
+  ownerDailyNotesPendingLoading,
+  ownerBeforeAfterCounts,
+  ownerBeforeAfterCountsLoading,
+  ownerBeforeAfterCountsError,
 }) {
   const [openSection, setOpenSection] = useState(null);
 
@@ -1791,7 +2055,7 @@ function OwnerDashboardScreen({
       accent: 'blue',
       badge: 'D',
       title: 'Dropped Off',
-      value: '12',
+      value: ownerBeforeAfterCountsLoading ? 'Loading...' : String(ownerBeforeAfterCounts.droppedOff),
       note: 'Morning check-in',
       fill: 'Before & After Care',
     },
@@ -1799,7 +2063,7 @@ function OwnerDashboardScreen({
       accent: 'green',
       badge: 'B',
       title: 'On Bus',
-      value: '8',
+      value: ownerBeforeAfterCountsLoading ? 'Loading...' : String(ownerBeforeAfterCounts.onBus),
       note: 'In transit',
       fill: 'Morning',
     },
@@ -1807,7 +2071,7 @@ function OwnerDashboardScreen({
       accent: 'orange',
       badge: 'R',
       title: 'Returned',
-      value: '8',
+      value: ownerBeforeAfterCountsLoading ? 'Loading...' : String(ownerBeforeAfterCounts.returned),
       note: 'Back on site',
       fill: 'Afternoon',
     },
@@ -1815,13 +2079,13 @@ function OwnerDashboardScreen({
       accent: 'purple',
       badge: 'P',
       title: 'Picked Up',
-      value: '4',
+      value: ownerBeforeAfterCountsLoading ? 'Loading...' : String(ownerBeforeAfterCounts.pickedUp),
       note: 'Released to parent',
       fill: 'Closed',
     },
   ];
 
-  const campConfirmedCounts = STAFF_CAMP_GROUP_NAMES.reduce((acc, groupName) => {
+  const campConfirmedCounts = OWNER_SUMMER_CAMP_GROUP_NAMES.reduce((acc, groupName) => {
     acc[groupName] = (staffSummerCampGroups[groupName] || []).filter(
       (child) =>
         child.checkInStatus === 'Checked In' &&
@@ -1831,20 +2095,33 @@ function OwnerDashboardScreen({
   }, {});
 
   const campAccentByGroup = {
-    'Blue Group': 'blue',
-    'Green Group': 'green',
-    'Red Group': 'red',
     'Yellow Group': 'yellow',
+    'Orange Group': 'orange',
+    'Green Group': 'green',
+    'Blue Group': 'blue',
+    'Red Group': 'red',
+    'Pink Group': 'pink',
+    'Purple Group': 'purple',
   };
 
-  const campCards = STAFF_CAMP_GROUP_NAMES.map((groupName) => {
+  const campCards = OWNER_SUMMER_CAMP_GROUP_NAMES.map((groupName) => {
+    const ownerCount = Number(ownerSummerCampSummary[groupName] || 0);
+    const counselorCount = Number(campConfirmedCounts[groupName] || 0);
+    const status =
+      ownerCount === 0 || counselorCount === 0
+        ? 'Pending'
+        : counselorCount === ownerCount
+          ? 'Complete'
+          : 'Discrepancy';
+
     return {
       accent: campAccentByGroup[groupName] || 'blue',
       badge: groupName[0],
       title: groupName,
-      value: `Owner Checked In ${ownerSummerCampSummary[groupName] || 0}`,
-      note: `Counselor Confirmed ${campConfirmedCounts[groupName] || 0}`,
-      fill: 'Camp Headcount',
+      value: `Owner: ${ownerCount}`,
+      note: `Counselor: ${counselorCount}`,
+      fill: `Status: ${status}`,
+      status,
     };
   });
 
@@ -1911,6 +2188,12 @@ function OwnerDashboardScreen({
     },
   ];
 
+  const dailyNotesReviewSummary = ownerDailyNotesPendingLoading
+    ? 'Loading pending notes...'
+    : ownerPendingDailyNotesCount > 0
+      ? `${ownerPendingDailyNotesCount} pending note${ownerPendingDailyNotesCount === 1 ? '' : 's'}`
+      : 'No pending notes';
+
   const ownerSections = [
     {
       key: 'center-status',
@@ -1935,21 +2218,30 @@ function OwnerDashboardScreen({
     {
       key: 'before-after',
       title: 'Before & After Care',
-      summary: 'Daily attendance flow for school-year care',
+      summary: ownerBeforeAfterCountsLoading
+        ? 'Loading live counts...'
+        : ownerBeforeAfterCountsError
+          ? 'Could not load live counts'
+          : 'Daily attendance flow for school-year care',
       details: (
-        <View style={styles.ownerSectionDetailsGrid}>
-          {beforeAfterCards.map((card) => (
-            <SummaryTile
-              key={card.title}
-              accent={card.accent}
-              badge={card.badge}
-              title={card.title}
-              value={card.value}
-              note={card.note}
-              fill={card.fill}
-            />
-          ))}
-        </View>
+        <>
+          {ownerBeforeAfterCountsError ? (
+            <Text style={styles.errorText}>{ownerBeforeAfterCountsError}</Text>
+          ) : null}
+          <View style={styles.ownerSectionDetailsGrid}>
+            {beforeAfterCards.map((card) => (
+              <SummaryTile
+                key={card.title}
+                accent={card.accent}
+                badge={card.badge}
+                title={card.title}
+                value={card.value}
+                note={card.note}
+                fill={card.fill}
+              />
+            ))}
+          </View>
+        </>
       ),
     },
     {
@@ -1957,7 +2249,26 @@ function OwnerDashboardScreen({
       title: 'Summer Camp Headcounts',
       summary: 'Group confirmations by camp color',
       details: (
-        <View style={styles.ownerSectionDetailsGrid}>
+        <>
+          <View style={styles.staffCampSummaryRow}>
+            {[
+              { label: 'Pending', value: campCards.filter((card) => card.status === 'Pending').length },
+              { label: 'Complete', value: campCards.filter((card) => card.status === 'Complete').length },
+              {
+                label: 'Discrepancies',
+                value: campCards.filter((card) => card.status === 'Discrepancy').length,
+              },
+            ].map((item) => (
+              <View
+                key={item.label}
+                style={[styles.staffCampSummaryPill, { backgroundColor: OWNER_MODULE_COLORS['Camp Events'] }]}
+              >
+                <Text style={styles.staffCampSummaryLabel}>{item.label}</Text>
+                <Text style={styles.staffCampSummaryValue}>{item.value}</Text>
+              </View>
+            ))}
+          </View>
+          <View style={styles.ownerSectionDetailsGrid}>
           {campCards.map((card) => (
             <SummaryTile
               key={card.title}
@@ -1969,7 +2280,8 @@ function OwnerDashboardScreen({
               fill={card.fill}
             />
           ))}
-        </View>
+          </View>
+        </>
       ),
     },
     {
@@ -2007,6 +2319,24 @@ function OwnerDashboardScreen({
               fill={card.fill}
             />
           ))}
+        </View>
+      ),
+    },
+    {
+      key: 'daily-notes-review',
+      title: 'Daily Notes Review',
+      summary: dailyNotesReviewSummary,
+      details: (
+        <View style={styles.ownerSummerCampActionBlock}>
+          <Text style={styles.ownerSummerCampActionText}>
+            Approve staff notes before parents see them.
+          </Text>
+          <OwnerNavCard
+            accentColor={COLORS.warning}
+            title="Open Daily Notes Review"
+            subtitle="Review pending staff notes"
+            onPress={onOpenDailyNotesReview}
+          />
         </View>
       ),
     },
@@ -2158,7 +2488,166 @@ function OwnerDashboardScreen({
   );
 }
 
-function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
+function OwnerDailyNotesReviewScreen({
+  onBack,
+  pendingNotes,
+  loading,
+  error,
+  onApprove,
+  onReject,
+  actionNoteId,
+}) {
+  const pendingCount = pendingNotes.length;
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.ownerDailyNotesReviewStickyHeader}>
+          <View style={styles.ownerDailyNotesReviewHeaderTopRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <View style={[styles.ownerAccessPill, { backgroundColor: COLORS.warning }]}>
+              <Text style={styles.ownerAccessPillText}>Owner Access</Text>
+            </View>
+          </View>
+
+          <View style={styles.ownerDailyNotesReviewHeroMain}>
+            <View style={styles.ownerDailyNotesReviewHeroCopy}>
+              <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+              <Text style={styles.shellHeroTitle}>Daily Notes Review</Text>
+              <Text style={styles.ownerDailyNotesReviewSubtitle}>
+                Approve staff notes before parents see them
+              </Text>
+            </View>
+
+            <View style={[styles.ownerDailyNotesReviewCountBadge, { backgroundColor: COLORS.warning }]}>
+              <Text style={styles.ownerDailyNotesReviewCountValue}>{pendingCount}</Text>
+              <Text style={styles.ownerDailyNotesReviewCountLabel}>Pending</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Pending Notes</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                {loading ? 'Loading...' : `${pendingCount} waiting`}
+              </Text>
+            </View>
+            <Text style={styles.notificationsIntroText}>
+              Review each note and approve or reject it for parent visibility.
+            </Text>
+          </View>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          {loading ? <Text style={styles.ownerStudentsStateText}>Loading daily notes...</Text> : null}
+
+          {!loading && pendingCount === 0 ? (
+            <Text style={styles.ownerStudentsStateText}>No pending notes.</Text>
+          ) : null}
+
+          {!loading && pendingCount > 0 ? (
+            <View style={styles.ownerDailyNotesReviewList}>
+              {pendingNotes.map((note) => {
+                const quickNotes = Array.isArray(note.quick_notes) ? note.quick_notes : [];
+                const isSaving = actionNoteId === note.id;
+
+                return (
+                  <View key={note.id} style={styles.profileCard}>
+                    <View style={styles.parentSectionHeaderRow}>
+                      <View style={styles.ownerDailyNotesReviewCardHeading}>
+                        <Text style={styles.parentSectionHeaderTitle}>{note.childName}</Text>
+                        <Text style={styles.parentSectionHeaderSubtle}>
+                          {formatDailyNoteDateLabel(note.date || note.created_at)}
+                        </Text>
+                      </View>
+
+                      <View style={[styles.ownerAccessPill, { backgroundColor: COLORS.warning }]}>
+                        <Text style={styles.ownerAccessPillText}>Pending Review</Text>
+                      </View>
+                    </View>
+
+                    {quickNotes.length ? (
+                      <View style={styles.ownerFilterPillRow}>
+                        {quickNotes.map((item) => (
+                          <View key={`${note.id}-${item}`} style={styles.ownerFilterPill}>
+                            <Text style={styles.ownerFilterPillText}>{item}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+
+                    {note.custom_note ? (
+                      <Text style={styles.ownerDailyNotesReviewCustomNote}>{note.custom_note}</Text>
+                    ) : null}
+
+                    <View style={styles.ownerDailyNotesReviewActionRow}>
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={isSaving}
+                        onPress={() => onApprove(note)}
+                        style={({ pressed }) => [
+                          styles.ownerDailyNotesReviewApproveButton,
+                          pressed && !isSaving && styles.buttonPressed,
+                          isSaving && styles.ownerDailyNotesReviewButtonDisabled,
+                        ]}
+                      >
+                        <Text style={styles.ownerDailyNotesReviewApproveButtonText}>
+                          {isSaving ? 'Saving...' : 'Approve'}
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={isSaving}
+                        onPress={() => onReject(note)}
+                        style={({ pressed }) => [
+                          styles.ownerDailyNotesReviewRejectButton,
+                          pressed && !isSaving && styles.buttonPressed,
+                          isSaving && styles.ownerDailyNotesReviewButtonDisabled,
+                        ]}
+                      >
+                        <Text style={styles.ownerDailyNotesReviewRejectButtonText}>
+                          {isSaving ? 'Saving...' : 'Reject'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function OwnerStudentsScreen({
+  onBack,
+  onLogout,
+  onShowComingSoon,
+  authorizedPickupRows,
+  authorizedPickupRowsLoading,
+  authorizedPickupRowsError,
+}) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
   const [studentRows, setStudentRows] = useState([]);
@@ -2174,9 +2663,18 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
   const [selectedParentProfileId, setSelectedParentProfileId] = useState('');
   const [linkParentError, setLinkParentError] = useState('');
   const [isLinkingParent, setIsLinkingParent] = useState(false);
+  const [manageOpenStudentId, setManageOpenStudentId] = useState(null);
   const [showStudentForm, setShowStudentForm] = useState(false);
   const [isSavingStudent, setIsSavingStudent] = useState(false);
+  const [attendanceSavingStudentId, setAttendanceSavingStudentId] = useState(null);
+  const [attendanceSavingType, setAttendanceSavingType] = useState('');
   const [isArchivingStudentId, setIsArchivingStudentId] = useState(null);
+  const [showDailyNoteModal, setShowDailyNoteModal] = useState(false);
+  const [selectedStudentForDailyNote, setSelectedStudentForDailyNote] = useState(null);
+  const [selectedDailyNoteChips, setSelectedDailyNoteChips] = useState([]);
+  const [dailyNoteCustomNote, setDailyNoteCustomNote] = useState('');
+  const [dailyNoteError, setDailyNoteError] = useState('');
+  const [isSavingDailyNote, setIsSavingDailyNote] = useState(false);
   const [createStudentError, setCreateStudentError] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [createStudentForm, setCreateStudentForm] = useState({
@@ -2198,6 +2696,14 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
   const studentViewPills = [
     { label: 'Active Students', value: 'active' },
     { label: 'Archived Students', value: 'archived' },
+  ];
+  const dailyNoteChips = [
+    'Great day',
+    'Participated in activity',
+    'Ate snack',
+    'Needs extra clothes',
+    'Bring water bottle tomorrow',
+    'Rested quietly',
   ];
 
   const loadStudents = useCallback(async () => {
@@ -2354,6 +2860,15 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
     };
   }, {});
 
+  const authorizedPickupsByStudentId = (Array.isArray(authorizedPickupRows) ? authorizedPickupRows : []).reduce(
+    (acc, pickupRow) => {
+      const current = acc[pickupRow.child_id] || [];
+      acc[pickupRow.child_id] = [...current, pickupRow];
+      return acc;
+    },
+    {}
+  );
+
   const visibleRealStudents = realStudents.filter((student) => {
     const query = searchQuery.trim().toLowerCase();
     const normalizedStatus = (student.status || '').trim().toLowerCase();
@@ -2398,6 +2913,7 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
   const handleOpenStudentForm = () => {
     setCreateStudentError('');
     setSelectedStudent(null);
+    setManageOpenStudentId(null);
     setCreateStudentForm({
       firstName: '',
       lastName: '',
@@ -2409,6 +2925,7 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
 
   const handleEditStudent = (student) => {
     setCreateStudentError('');
+    setManageOpenStudentId(null);
     setSelectedStudent(student);
     setCreateStudentForm({
       firstName: student.first_name?.trim() || '',
@@ -2423,6 +2940,7 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
     setCreateStudentError('');
     setShowStudentForm(false);
     setSelectedStudent(null);
+    setManageOpenStudentId(null);
     setCreateStudentForm({
       firstName: '',
       lastName: '',
@@ -2436,6 +2954,7 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
       return;
     }
 
+    setManageOpenStudentId(null);
     Alert.alert('Archive this student?', undefined, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -2524,6 +3043,130 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
     setSelectedStudentForLink(student);
     setSelectedParentProfileId('');
     setShowLinkParentModal(true);
+    setManageOpenStudentId(null);
+  };
+
+  const handleToggleStudentActions = (studentId) => {
+    setManageOpenStudentId((current) => (current === studentId ? null : studentId));
+  };
+
+  const handleViewStudentDetails = () => {
+    Alert.alert('Owner student profile coming next.');
+  };
+
+  const handleOpenDailyNote = (student) => {
+    if (!student?.id) {
+      return;
+    }
+
+    setDailyNoteError('');
+    setSelectedStudentForDailyNote(student);
+    setSelectedDailyNoteChips([]);
+    setDailyNoteCustomNote('');
+    setShowDailyNoteModal(true);
+    setManageOpenStudentId(null);
+  };
+
+  const handleCloseDailyNoteModal = () => {
+    setDailyNoteError('');
+    setSelectedStudentForDailyNote(null);
+    setSelectedDailyNoteChips([]);
+    setDailyNoteCustomNote('');
+    setIsSavingDailyNote(false);
+    setShowDailyNoteModal(false);
+  };
+
+  const toggleDailyNoteChip = (chip) => {
+    setSelectedDailyNoteChips((current) =>
+      current.includes(chip) ? current.filter((item) => item !== chip) : [...current, chip]
+    );
+  };
+
+  const handleSaveDailyNote = async () => {
+    if (!selectedStudentForDailyNote?.id) {
+      return;
+    }
+
+    const trimmedCustomNote = dailyNoteCustomNote.trim();
+
+    if (!selectedDailyNoteChips.length && !trimmedCustomNote) {
+      setDailyNoteError('Please add a quick note or custom note.');
+      return;
+    }
+
+    setIsSavingDailyNote(true);
+    setDailyNoteError('');
+
+    const { error } = await supabase.from('daily_notes').insert({
+      child_id: selectedStudentForDailyNote.id,
+      date: new Date().toISOString().split('T')[0],
+      quick_notes: selectedDailyNoteChips,
+      custom_note: trimmedCustomNote,
+      visibility: 'both',
+      review_status: 'approved',
+    });
+
+    if (error) {
+      setDailyNoteError(error.message || 'Could not save daily note.');
+      setIsSavingDailyNote(false);
+      return;
+    }
+
+    Alert.alert('Daily note saved.');
+    handleCloseDailyNoteModal();
+  };
+
+  const handleRecordAttendance = async (student, eventType) => {
+    if (!student?.id) {
+      return;
+    }
+
+    setManageOpenStudentId(null);
+    setAttendanceSavingStudentId(student.id);
+    setAttendanceSavingType(eventType);
+
+    const { data: latestEvents, error: latestEventError } = await supabase
+      .from('attendance_events')
+      .select('event_type, event_time')
+      .eq('child_id', student.id)
+      .order('event_time', { ascending: false })
+      .limit(1);
+
+    if (latestEventError) {
+      Alert.alert('Could not save attendance.');
+      setAttendanceSavingStudentId(null);
+      setAttendanceSavingType('');
+      return;
+    }
+
+    const latestEvent = Array.isArray(latestEvents) && latestEvents.length ? latestEvents[0] : null;
+
+    if (latestEvent?.event_type === eventType) {
+      Alert.alert(
+        eventType === 'check_in'
+          ? 'Student is already checked in.'
+          : 'Student is already checked out.'
+      );
+      setAttendanceSavingStudentId(null);
+      setAttendanceSavingType('');
+      return;
+    }
+
+    const { error } = await supabase.from('attendance_events').insert({
+      child_id: student.id,
+      event_type: eventType,
+      event_time: new Date().toISOString(),
+    });
+
+    setAttendanceSavingStudentId(null);
+    setAttendanceSavingType('');
+
+    if (error) {
+      Alert.alert('Could not save attendance.');
+      return;
+    }
+
+    Alert.alert(eventType === 'check_in' ? 'Checked in' : 'Checked out');
   };
 
   const handleCloseLinkParentModal = () => {
@@ -2541,6 +3184,7 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
 
     setIsLinkingParent(true);
     setLinkParentError('');
+    setManageOpenStudentId(null);
 
     const { data: existingLinks, error: existingLinkError } = await supabase
       .from('child_parent_links')
@@ -2844,68 +3488,172 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
                       </View>
                     </View>
 
-                    <View style={styles.ownerLinkedParentsBlock}>
-                      <Text style={styles.ownerLinkedParentsLabel}>Linked Parents</Text>
-                      {linkedParentsByStudentId[student.id]?.length ? (
-                        linkedParentsByStudentId[student.id].map((parent) => (
-                          <Text key={parent.id} style={styles.ownerLinkedParentsValue}>
-                            {parent.email}
-                          </Text>
-                        ))
-                      ) : (
-                        <Text style={styles.ownerLinkedParentsValue}>None</Text>
-                      )}
-                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => handleToggleStudentActions(student.id)}
+                      style={({ pressed }) => [
+                        styles.ownerStudentProfileButton,
+                        { backgroundColor: COLORS.navy, alignSelf: 'flex-start' },
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text style={styles.ownerStudentProfileButtonText}>
+                        {manageOpenStudentId === student.id ? 'Manage ▴' : 'Manage ▾'}
+                      </Text>
+                    </Pressable>
 
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => Alert.alert('Owner student profile coming next.')}
-                      style={({ pressed }) => [
-                        styles.ownerStudentProfileButton,
-                        { backgroundColor: studentAccent },
-                        pressed && styles.pressedButton,
-                      ]}
-                    >
-                      <Text style={styles.ownerStudentProfileButtonText}>View Profile</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => handleEditStudent(student)}
-                      style={({ pressed }) => [
-                        styles.ownerStudentProfileButton,
-                        { backgroundColor: COLORS.navy },
-                        { marginTop: 10 },
-                        pressed && styles.pressedButton,
-                      ]}
-                    >
-                      <Text style={styles.ownerStudentProfileButtonText}>Edit</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => handleOpenLinkParent(student)}
-                      style={({ pressed }) => [
-                        styles.ownerStudentProfileButton,
-                        { backgroundColor: COLORS.success },
-                        { marginTop: 10 },
-                        pressed && styles.pressedButton,
-                      ]}
-                    >
-                      <Text style={styles.ownerStudentProfileButtonText}>Link Parent</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={isArchivingStudentId === student.id}
-                      onPress={() => handleArchiveStudent(student)}
-                      style={({ pressed }) => [
-                        styles.ownerStudentProfileButton,
-                        { backgroundColor: COLORS.danger },
-                        { marginTop: 10 },
-                        pressed && styles.pressedButton,
-                        isArchivingStudentId === student.id && { opacity: 0.7 },
-                      ]}
-                    >
-                      <Text style={styles.ownerStudentProfileButtonText}>Archive</Text>
-                    </Pressable>
+                    {manageOpenStudentId === student.id ? (
+                      <View style={[styles.ownerStudentActionMenu, styles.studentActionDropdown]}>
+                        <View style={styles.ownerLinkedParentsBlock}>
+                          <Text style={styles.ownerLinkedParentsLabel}>Linked Parents</Text>
+                          {linkedParentsByStudentId[student.id]?.length ? (
+                            linkedParentsByStudentId[student.id].map((parent) => (
+                              <Text key={parent.id} style={styles.ownerLinkedParentsValue}>
+                                {parent.email}
+                              </Text>
+                            ))
+                          ) : (
+                            <Text style={styles.ownerLinkedParentsValue}>None</Text>
+                          )}
+                        </View>
+
+                        <View style={styles.ownerLinkedParentsBlock}>
+                          <Text style={styles.ownerLinkedParentsLabel}>Authorized Pickups</Text>
+                          {authorizedPickupRowsLoading ? (
+                            <Text style={styles.ownerLinkedParentsValue}>Loading pickups...</Text>
+                          ) : authorizedPickupRowsError ? (
+                            <Text style={styles.ownerLinkedParentsValue}>
+                              {authorizedPickupRowsError}
+                            </Text>
+                          ) : authorizedPickupsByStudentId[student.id]?.length ? (
+                            authorizedPickupsByStudentId[student.id].map((pickup) => (
+                              <View key={pickup.id} style={styles.ownerPickupItem}>
+                                <Text style={styles.ownerLinkedParentsValue}>
+                                  {pickup.full_name}
+                                </Text>
+                                <Text style={styles.ownerPickupMeta}>
+                                  {pickup.relationship} · {pickup.phone_number}
+                                </Text>
+                              </View>
+                            ))
+                          ) : (
+                            <Text style={styles.ownerLinkedParentsValue}>
+                              No authorized pickups on file.
+                            </Text>
+                          )}
+                        </View>
+
+                        <View style={styles.studentActionRow}>
+                          {student.status?.trim().toLowerCase() !== 'inactive' ? (
+                            <>
+                              <Pressable
+                                accessibilityRole="button"
+                                disabled={
+                                  attendanceSavingStudentId === student.id &&
+                                  attendanceSavingType === 'check_in'
+                                }
+                                onPress={() => handleRecordAttendance(student, 'check_in')}
+                                style={({ pressed }) => [
+                                  styles.studentActionPill,
+                                  styles.studentActionPillGreen,
+                                  pressed && styles.pressedButton,
+                                  attendanceSavingStudentId === student.id &&
+                                    attendanceSavingType === 'check_in' &&
+                                    { opacity: 0.75 },
+                                ]}
+                              >
+                                <Text style={styles.ownerStudentProfileButtonText}>
+                                  {attendanceSavingStudentId === student.id &&
+                                  attendanceSavingType === 'check_in'
+                                    ? 'Checking In...'
+                                    : 'Check In'}
+                                </Text>
+                              </Pressable>
+                              <Pressable
+                                accessibilityRole="button"
+                                disabled={
+                                  attendanceSavingStudentId === student.id &&
+                                  attendanceSavingType === 'check_out'
+                                }
+                                onPress={() => handleRecordAttendance(student, 'check_out')}
+                                style={({ pressed }) => [
+                                  styles.studentActionPill,
+                                  styles.studentActionPillNavy,
+                                  pressed && styles.pressedButton,
+                                  attendanceSavingStudentId === student.id &&
+                                    attendanceSavingType === 'check_out' &&
+                                    { opacity: 0.75 },
+                                ]}
+                              >
+                                <Text style={styles.ownerStudentProfileButtonText}>
+                                  {attendanceSavingStudentId === student.id &&
+                                  attendanceSavingType === 'check_out'
+                                    ? 'Checking Out...'
+                                    : 'Check Out'}
+                                </Text>
+                              </Pressable>
+                            </>
+                          ) : null}
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => handleViewStudentDetails()}
+                            style={({ pressed }) => [
+                              styles.studentActionPill,
+                              styles.studentActionPillBlue,
+                              pressed && styles.pressedButton,
+                            ]}
+                            >
+                              <Text style={styles.ownerStudentProfileButtonText}>View Details</Text>
+                            </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => handleOpenDailyNote(student)}
+                            style={({ pressed }) => [
+                              styles.studentActionPill,
+                              styles.studentActionPillPurple,
+                              pressed && styles.pressedButton,
+                            ]}
+                          >
+                            <Text style={styles.ownerStudentProfileButtonText}>Daily Note</Text>
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => handleEditStudent(student)}
+                            style={({ pressed }) => [
+                              styles.studentActionPill,
+                              styles.studentActionPillNavy,
+                              pressed && styles.pressedButton,
+                            ]}
+                          >
+                            <Text style={styles.ownerStudentProfileButtonText}>Edit</Text>
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => handleOpenLinkParent(student)}
+                            style={({ pressed }) => [
+                              styles.studentActionPill,
+                              styles.studentActionPillGreen,
+                              pressed && styles.pressedButton,
+                            ]}
+                          >
+                            <Text style={styles.ownerStudentProfileButtonText}>Link Parent</Text>
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            disabled={isArchivingStudentId === student.id}
+                            onPress={() => handleArchiveStudent(student)}
+                            style={({ pressed }) => [
+                              styles.studentActionPill,
+                              styles.studentActionPillRed,
+                              pressed && styles.pressedButton,
+                              isArchivingStudentId === student.id && { opacity: 0.7 },
+                            ]}
+                          >
+                            <Text style={styles.ownerStudentProfileButtonText}>Archive</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : null}
                   </View>
                 ))
               ) : displayMockFallback ? (
@@ -2945,60 +3693,79 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
                       </View>
                     </View>
 
-                    <View style={styles.ownerLinkedParentsBlock}>
-                      <Text style={styles.ownerLinkedParentsLabel}>Linked Parents</Text>
-                      <Text style={styles.ownerLinkedParentsValue}>None</Text>
-                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => handleToggleStudentActions(student.id)}
+                      style={({ pressed }) => [
+                        styles.ownerStudentProfileButton,
+                        { backgroundColor: COLORS.navy, alignSelf: 'flex-start' },
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text style={styles.ownerStudentProfileButtonText}>
+                        {manageOpenStudentId === student.id ? 'Manage ▴' : 'Manage ▾'}
+                      </Text>
+                    </Pressable>
 
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => Alert.alert('Owner student profile coming next.')}
-                      style={({ pressed }) => [
-                        styles.ownerStudentProfileButton,
-                        { backgroundColor: studentAccent },
-                        pressed && styles.pressedButton,
-                      ]}
-                    >
-                      <Text style={styles.ownerStudentProfileButtonText}>View Profile</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => handleEditStudent(student)}
-                      style={({ pressed }) => [
-                        styles.ownerStudentProfileButton,
-                        { backgroundColor: COLORS.navy },
-                        { marginTop: 10 },
-                        pressed && styles.pressedButton,
-                      ]}
-                    >
-                      <Text style={styles.ownerStudentProfileButtonText}>Edit</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled
-                      onPress={() => {}}
-                      style={({ pressed }) => [
-                        styles.ownerStudentProfileButton,
-                        { backgroundColor: COLORS.success },
-                        { marginTop: 10, opacity: 0.45 },
-                        pressed && styles.pressedButton,
-                      ]}
-                    >
-                      <Text style={styles.ownerStudentProfileButtonText}>Link Parent</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled
-                      onPress={() => {}}
-                      style={({ pressed }) => [
-                        styles.ownerStudentProfileButton,
-                        { backgroundColor: COLORS.danger },
-                        { marginTop: 10, opacity: 0.45 },
-                        pressed && styles.pressedButton,
-                      ]}
-                    >
-                      <Text style={styles.ownerStudentProfileButtonText}>Archive</Text>
-                    </Pressable>
+                    {manageOpenStudentId === student.id ? (
+                      <View style={[styles.ownerStudentActionMenu, styles.studentActionDropdown]}>
+                        <View style={styles.ownerLinkedParentsBlock}>
+                          <Text style={styles.ownerLinkedParentsLabel}>Linked Parents</Text>
+                          <Text style={styles.ownerLinkedParentsValue}>None</Text>
+                        </View>
+
+                        <View style={styles.studentActionRow}>
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => handleViewStudentDetails()}
+                            style={({ pressed }) => [
+                              styles.studentActionPill,
+                              styles.studentActionPillBlue,
+                              pressed && styles.pressedButton,
+                            ]}
+                          >
+                            <Text style={styles.ownerStudentProfileButtonText}>View Details</Text>
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => handleEditStudent(student)}
+                            style={({ pressed }) => [
+                              styles.studentActionPill,
+                              styles.studentActionPillNavy,
+                              pressed && styles.pressedButton,
+                            ]}
+                          >
+                            <Text style={styles.ownerStudentProfileButtonText}>Edit</Text>
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            disabled
+                            onPress={() => {}}
+                            style={({ pressed }) => [
+                              styles.studentActionPill,
+                              styles.studentActionPillGreen,
+                              pressed && styles.pressedButton,
+                              { opacity: 0.45 },
+                            ]}
+                          >
+                            <Text style={styles.ownerStudentProfileButtonText}>Link Parent</Text>
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            disabled
+                            onPress={() => {}}
+                            style={({ pressed }) => [
+                              styles.studentActionPill,
+                              styles.studentActionPillRed,
+                              pressed && styles.pressedButton,
+                              { opacity: 0.45 },
+                            ]}
+                          >
+                            <Text style={styles.ownerStudentProfileButtonText}>Archive</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : null}
                   </View>
                 ))
               ) : null}
@@ -3076,6 +3843,97 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
                   >
                     <Text style={styles.primaryButtonText}>
                       {isLinkingParent ? 'Linking...' : 'Link'}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          <Modal
+            animationType="fade"
+            onRequestClose={handleCloseDailyNoteModal}
+            transparent
+            visible={showDailyNoteModal}
+          >
+            <View style={styles.ownerLinkParentModalOverlay}>
+              <View style={styles.ownerLinkParentModalCard}>
+                <Text style={styles.ownerLinkParentModalTitle}>Daily Note</Text>
+                <Text style={styles.ownerLinkParentModalSubtitle}>
+                  {selectedStudentForDailyNote ? selectedStudentForDailyNote.name : ''}
+                </Text>
+
+                <Text style={styles.ownerStudentFormLabel}>Quick Notes</Text>
+                <View style={styles.staffDailyNotesChipWrap}>
+                  {dailyNoteChips.map((chip) => {
+                    const isActive = selectedDailyNoteChips.includes(chip);
+
+                    return (
+                      <Pressable
+                        key={chip}
+                        accessibilityRole="button"
+                        onPress={() => toggleDailyNoteChip(chip)}
+                        style={({ pressed }) => [
+                          styles.staffDailyNotesChip,
+                          isActive && styles.staffDailyNotesChipActive,
+                          pressed && styles.pressedButton,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.staffDailyNotesChipText,
+                            isActive && styles.staffDailyNotesChipTextActive,
+                          ]}
+                        >
+                          {chip}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Text style={styles.ownerStudentFormLabel}>Custom Note</Text>
+                <TextInput
+                  multiline
+                  onChangeText={setDailyNoteCustomNote}
+                  placeholder="Write a note for the parent..."
+                  placeholderTextColor={COLORS.muted}
+                  style={[styles.ownerSearchInput, styles.ownerDailyNoteInput]}
+                  textAlignVertical="top"
+                  value={dailyNoteCustomNote}
+                />
+
+                {dailyNoteError ? (
+                  <Text style={[styles.errorText, { marginTop: 12 }]}>{dailyNoteError}</Text>
+                ) : null}
+
+                <View style={styles.ownerLinkParentModalButtonRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={isSavingDailyNote}
+                    onPress={handleCloseDailyNoteModal}
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      { flex: 1, marginTop: 0 },
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text style={styles.secondaryButtonText}>Cancel</Text>
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={isSavingDailyNote}
+                    onPress={handleSaveDailyNote}
+                    style={({ pressed }) => [
+                      styles.primaryButton,
+                      { flex: 1, marginTop: 0 },
+                      pressed && styles.pressedButton,
+                      isSavingDailyNote && { opacity: 0.75 },
+                    ]}
+                  >
+                    <Text style={styles.primaryButtonText}>
+                      {isSavingDailyNote ? 'Saving...' : 'Save Daily Note'}
                     </Text>
                   </Pressable>
                 </View>
@@ -3524,22 +4382,24 @@ function StaffClockInOutScreen({
 function StaffBeforeAfterAttendanceScreen({
   onBack,
   onLogout,
+  loading,
+  error,
   attendanceChildren,
   selectedChildId,
   onSelectChild,
   pickupChild,
+  authorizedPickupsLoading,
   onAction,
   onConfirmPickup,
+  savingChildId,
 }) {
-  const actionByStage = {
-    0: 'drop-off',
-    1: 'put-on-bus',
-    2: 'returned',
-    3: 'parent-pickup',
-    4: null,
+  const getButtonState = (child, action) => {
+    if (action === 'drop-off') return !!child.canDropOff;
+    if (action === 'put-on-bus') return !!child.canPutOnBus;
+    if (action === 'returned') return !!child.canReturned;
+    if (action === 'parent-pickup') return !!child.canParentPickup;
+    return false;
   };
-
-  const getButtonState = (child, action) => actionByStage[child.stage] === action;
 
   const getDetailValue = (value, fallback = '—') => (value ? value : fallback);
 
@@ -3548,9 +4408,20 @@ function StaffBeforeAfterAttendanceScreen({
       ? attendanceChildren.find((child) => child.id === selectedChildId) || null
       : null;
 
+  const summaryCounts = attendanceChildren.reduce(
+    (acc, child) => {
+      if (child.stage >= 1) acc.droppedOff += 1;
+      if (child.stage >= 2) acc.onBus += 1;
+      if (child.stage >= 3) acc.returned += 1;
+      if (child.stage >= 4) acc.pickedUp += 1;
+      return acc;
+    },
+    { droppedOff: 0, onBus: 0, returned: 0, pickedUp: 0 }
+  );
+
   const renderActionButton = (child, action, label) => {
     const enabled = getButtonState(child, action);
-    const disabled = !enabled;
+    const disabled = !enabled || savingChildId === child.id;
 
     return (
       <Pressable
@@ -3564,13 +4435,13 @@ function StaffBeforeAfterAttendanceScreen({
           pressed && !disabled && styles.pressedButton,
         ]}
       >
-        <Text
+      <Text
           style={[
             styles.staffAttendanceActionButtonText,
             disabled && styles.staffAttendanceActionButtonTextDisabled,
           ]}
         >
-          {label}
+          {savingChildId === child.id ? 'Saving...' : label}
         </Text>
       </Pressable>
     );
@@ -3656,19 +4527,19 @@ function StaffBeforeAfterAttendanceScreen({
 
             <View style={styles.staffAttendanceSummaryGrid}>
               <View style={styles.staffAttendanceSummaryItem}>
-                <Text style={styles.staffAttendanceSummaryValue}>12</Text>
+                <Text style={styles.staffAttendanceSummaryValue}>{summaryCounts.droppedOff}</Text>
                 <Text style={styles.staffAttendanceSummaryLabel}>Dropped Off</Text>
               </View>
               <View style={styles.staffAttendanceSummaryItem}>
-                <Text style={styles.staffAttendanceSummaryValue}>8</Text>
+                <Text style={styles.staffAttendanceSummaryValue}>{summaryCounts.onBus}</Text>
                 <Text style={styles.staffAttendanceSummaryLabel}>On Bus</Text>
               </View>
               <View style={styles.staffAttendanceSummaryItem}>
-                <Text style={styles.staffAttendanceSummaryValue}>8</Text>
+                <Text style={styles.staffAttendanceSummaryValue}>{summaryCounts.returned}</Text>
                 <Text style={styles.staffAttendanceSummaryLabel}>Returned From Bus</Text>
               </View>
               <View style={styles.staffAttendanceSummaryItem}>
-                <Text style={styles.staffAttendanceSummaryValue}>4</Text>
+                <Text style={styles.staffAttendanceSummaryValue}>{summaryCounts.pickedUp}</Text>
                 <Text style={styles.staffAttendanceSummaryLabel}>Picked Up</Text>
               </View>
             </View>
@@ -3681,7 +4552,14 @@ function StaffBeforeAfterAttendanceScreen({
             </View>
 
             <View style={styles.staffAttendanceList}>
-              {attendanceChildren.map((child) => {
+              {loading ? (
+                <Text style={styles.parentAttendanceStateText}>
+                  Loading before & after care students...
+                </Text>
+              ) : error ? (
+                <Text style={styles.errorText}>{error}</Text>
+              ) : attendanceChildren.length ? (
+                attendanceChildren.map((child) => {
                 const isSelected = child.id === selectedChild?.id;
                 const theme = getChildGroupTheme(child.accentGroup);
 
@@ -3700,16 +4578,16 @@ function StaffBeforeAfterAttendanceScreen({
                         <View style={styles.staffAttendanceNameBlock}>
                           <Text style={styles.staffAttendanceName}>{child.name}</Text>
                           <Text style={styles.staffAttendanceTime}>
-                            Last update: {child.lastUpdateTime}
+                            Last update: {formatTime(child.lastUpdateTime)}
                           </Text>
                         </View>
                         {renderStatusPill(child.status)}
                       </View>
 
-                      <View style={styles.staffAttendanceMiniRow}>
-                        <View
-                          style={[
-                            styles.staffAttendanceAccentPill,
+                        <View style={styles.staffAttendanceMiniRow}>
+                          <View
+                            style={[
+                              styles.staffAttendanceAccentPill,
                             {
                               backgroundColor: theme.soft,
                               borderColor: theme.border,
@@ -3721,26 +4599,28 @@ function StaffBeforeAfterAttendanceScreen({
                           </Text>
                         </View>
                         <Text style={styles.staffAttendanceMiniMeta}>
-                          {isSelected ? 'Expanded below' : 'Tap to expand'}
+                          {isSelected
+                            ? 'Expanded below'
+                            : `Manage · Total today: ${formatMinutes(child.totalMinutes)}`}
                         </Text>
-                      </View>
-                    </Pressable>
+                        </View>
+                      </Pressable>
 
-                    {isSelected ? (
-                      <View style={styles.staffAttendanceExpandedPanel}>
+                      {isSelected ? (
+                        <View style={styles.staffAttendanceExpandedPanel}>
                         <View style={styles.staffAttendanceExpandedHeader}>
                           <Text style={styles.staffAttendanceExpandedTitle}>{child.name}</Text>
                           {renderStatusPill(child.status)}
                         </View>
 
                         <View style={styles.staffAttendanceDetailList}>
-                          {renderDetailRow('Drop Off Time', child.dropOffTime)}
-                          {renderDetailRow('Put On Bus Time', child.busTime)}
-                          {renderDetailRow('Morning Time in Class', child.morningDuration, 'Pending')}
-                          {renderDetailRow('Returned Time', child.returnedTime)}
-                          {renderDetailRow('Parent Pickup Time', child.pickupTime)}
-                          {renderDetailRow('Afternoon Time in Class', child.afternoonDuration, 'Pending')}
-                          {renderDetailRow('Total Time Today', child.totalDailyTime, 'Pending')}
+                          {renderDetailRow('Drop Off Time', formatTime(child.dropOffTime))}
+                          {renderDetailRow('Put On Bus Time', formatTime(child.busTime))}
+                          {renderDetailRow('Morning Time in Class', formatMinutes(child.morningMinutes))}
+                          {renderDetailRow('Returned Time', formatTime(child.returnedTime))}
+                          {renderDetailRow('Parent Pickup Time', formatTime(child.pickupTime))}
+                          {renderDetailRow('Afternoon Time in Class', formatMinutes(child.afternoonMinutes))}
+                          {renderDetailRow('Total Time Today', formatMinutes(child.totalMinutes))}
                         </View>
 
                         <View style={styles.staffAttendanceActionsRow}>
@@ -3753,7 +4633,7 @@ function StaffBeforeAfterAttendanceScreen({
                         {pickupChild && pickupChild.id === child.id ? (
                           <View style={styles.profileCardInner}>
                             <View style={styles.parentSectionHeaderRow}>
-                              <Text style={styles.parentSectionHeaderTitle}>Pickup Safety</Text>
+                              <Text style={styles.parentSectionHeaderTitle}>Authorized Pickups</Text>
                               <View style={styles.staffAttendanceStatusPill}>
                                 <Text style={styles.staffAttendanceStatusPillText}>Review</Text>
                               </View>
@@ -3765,26 +4645,34 @@ function StaffBeforeAfterAttendanceScreen({
                             </Text>
 
                             <View style={styles.staffAttendancePreviewList}>
-                              <View style={styles.staffAttendancePreviewBlock}>
-                                <Text style={styles.staffAttendancePreviewLabel}>
-                                  Authorized pickup people
-                                </Text>
+                              {authorizedPickupsLoading ? (
                                 <Text style={styles.staffAttendancePreviewValue}>
-                                  {pickupChild.pickup.authorizedPickups.join(', ')}
+                                  Loading pickups...
                                 </Text>
-                              </View>
-                              <View style={styles.staffAttendancePreviewBlock}>
-                                <Text style={styles.staffAttendancePreviewLabel}>Emergency contact</Text>
+                              ) : pickupChild.authorizedPickups?.length ? (
+                                pickupChild.authorizedPickups.map((pickup) => (
+                                  <View key={pickup.id} style={styles.staffAttendancePreviewBlock}>
+                                    <Text style={styles.staffAttendancePreviewLabel}>
+                                      {pickup.full_name}
+                                    </Text>
+                                    <Text style={styles.staffAttendancePreviewValue}>
+                                      {pickup.relationship}
+                                    </Text>
+                                    <Text style={styles.staffAttendancePreviewValue}>
+                                      {pickup.phone_number}
+                                    </Text>
+                                    {pickup.notes ? (
+                                      <Text style={styles.staffAttendancePreviewValue}>
+                                        {pickup.notes}
+                                      </Text>
+                                    ) : null}
+                                  </View>
+                                ))
+                              ) : (
                                 <Text style={styles.staffAttendancePreviewValue}>
-                                  {pickupChild.pickup.emergencyContact}
+                                  No authorized pickups on file.
                                 </Text>
-                              </View>
-                              <View style={styles.staffAttendancePreviewBlock}>
-                                <Text style={styles.staffAttendancePreviewLabel}>Medical alerts</Text>
-                                <Text style={styles.staffAttendancePreviewValue}>
-                                  {pickupChild.pickup.medicalAlerts.join(', ')}
-                                </Text>
-                              </View>
+                              )}
                             </View>
 
                             <Pressable
@@ -3801,11 +4689,16 @@ function StaffBeforeAfterAttendanceScreen({
                             </Pressable>
                           </View>
                         ) : null}
-                      </View>
-                    ) : null}
-                  </View>
+                        </View>
+                      ) : null}
+                    </View>
                 );
-              })}
+                })
+              ) : (
+                <Text style={styles.parentAttendanceStateText}>
+                  No active before & after care students found.
+                </Text>
+              )}
             </View>
           </View>
 
@@ -3835,6 +4728,10 @@ function StaffSummerCampGroupCheckInScreen({
   onConfirmPresent,
   onSendHeadcount,
   ownerStatus,
+  loading,
+  error,
+  savingChildId,
+  sendingGroup,
 }) {
   const roster = groups[selectedGroup] || [];
   const theme = getChildGroupTheme(selectedGroup);
@@ -3902,6 +4799,7 @@ function StaffSummerCampGroupCheckInScreen({
                   <Pressable
                     key={groupName}
                     accessibilityRole="button"
+                    disabled={loading}
                     onPress={() => onSelectGroup(groupName)}
                     style={({ pressed }) => [
                       styles.staffCampGroupButton,
@@ -3930,8 +4828,26 @@ function StaffSummerCampGroupCheckInScreen({
             <View style={styles.parentSectionHeaderRow}>
               <Text style={styles.parentSectionHeaderTitle}>Campers Ready for Headcount</Text>
               <Text style={styles.parentSectionHeaderSubtle}>
-                {ownerCheckedInRoster.length} owner check-ins ready
+                {ownerStatus[selectedGroup]?.ownerCheckedInCount ?? ownerCheckedInRoster.length}{' '}
+                owner check-ins ready
               </Text>
+            </View>
+
+            <View style={styles.staffCampSummaryRow}>
+              <View style={[styles.staffCampSummaryPill, { backgroundColor: theme.soft }]}>
+                <Text style={[styles.staffCampSummaryLabel, { color: theme.accent }]}>
+                  Owner Checked In
+                </Text>
+                <Text style={styles.staffCampSummaryValue}>
+                  {ownerStatus[selectedGroup]?.ownerCheckedInCount ?? ownerCheckedInRoster.length}
+                </Text>
+              </View>
+              <View style={[styles.staffCampSummaryPill, { backgroundColor: COLORS.softGreen }]}>
+                <Text style={[styles.staffCampSummaryLabel, { color: COLORS.success }]}>
+                  Counselor Confirmed
+                </Text>
+                <Text style={styles.staffCampSummaryValue}>{confirmedCount}</Text>
+              </View>
             </View>
 
             <View style={styles.staffCampRosterList}>
@@ -3945,7 +4861,7 @@ function StaffSummerCampGroupCheckInScreen({
                       <View style={styles.staffCampChildNameBlock}>
                         <Text style={styles.staffCampChildName}>{child.name}</Text>
                         <Text style={styles.staffCampChildTime}>
-                          Last update: {child.lastUpdateTime}
+                          Checked in: {formatTime(child.checkedInAt || child.lastUpdateTime)}
                         </Text>
                       </View>
 
@@ -3996,15 +4912,21 @@ function StaffSummerCampGroupCheckInScreen({
 
                     <Pressable
                       accessibilityRole="button"
+                      disabled={confirmed || savingChildId === child.id}
                       onPress={() => onConfirmPresent(selectedGroup, child.id)}
                       style={({ pressed }) => [
                         styles.staffCampConfirmButton,
-                        confirmed && styles.staffCampConfirmButtonDisabled,
-                        pressed && styles.pressedButton,
+                        (confirmed || savingChildId === child.id) &&
+                          styles.staffCampConfirmButtonDisabled,
+                        pressed && !confirmed && savingChildId !== child.id && styles.pressedButton,
                       ]}
                     >
                       <Text style={styles.staffCampConfirmButtonText}>
-                        {confirmed ? 'Confirmed' : 'Confirm Present'}
+                        {savingChildId === child.id
+                          ? 'Confirming...'
+                          : confirmed
+                            ? 'Confirmed'
+                            : 'Confirm Present'}
                       </Text>
                     </Pressable>
                   </View>
@@ -4038,19 +4960,27 @@ function StaffSummerCampGroupCheckInScreen({
 
             <Pressable
               accessibilityRole="button"
+              disabled={sendingGroup === selectedGroup}
               onPress={() => onSendHeadcount(selectedGroup)}
               style={({ pressed }) => [
                 styles.staffCampSendButton,
-                pressed && styles.pressedButton,
+                sendingGroup === selectedGroup && styles.staffCampConfirmButtonDisabled,
+                pressed && sendingGroup !== selectedGroup && styles.pressedButton,
               ]}
             >
-              <Text style={styles.staffCampSendButtonText}>Send Headcount to Owner</Text>
+              <Text style={styles.staffCampSendButtonText}>
+                {sendingGroup === selectedGroup ? 'Sending...' : 'Send Headcount to Owner'}
+              </Text>
             </Pressable>
 
             <Text style={styles.staffCampOwnerUpdate}>
-              {ownerStatus[selectedGroup]?.status === 'Sent'
-                ? `Owner master list updated at ${ownerStatus[selectedGroup].sentAt}.`
-                : 'Headcount not sent yet.'}
+              {ownerStatus[selectedGroup]?.status === 'submitted'
+                ? `Headcount submitted at ${formatDateTime(ownerStatus[selectedGroup].submittedAt)}.`
+                : ownerStatus[selectedGroup]?.status === 'discrepancy'
+                  ? `Headcount sent with discrepancy at ${formatDateTime(
+                      ownerStatus[selectedGroup].submittedAt
+                    )}.`
+                  : 'Headcount not sent yet.'}
             </Text>
           </View>
 
@@ -4393,78 +5323,695 @@ function OwnerParentsScreen({ onBack, onLogout, onShowComingSoon }) {
     </View>
   );
 }
-
-function OwnerMessagesScreen({ onBack, onLogout }) {
+ 
+/*
+function OwnerMessagesScreen({
+  onBack,
+  onLogout,
+  currentUserId,
+  expandedRecentMessageId,
+  onToggleRecentMessage,
+}) {
   const messagesAccent = OWNER_MODULE_COLORS.Messages;
-  const [selectedRecipients, setSelectedRecipients] = useState(['All Parents']);
-  const [selectedMessageType, setSelectedMessageType] = useState('Announcement');
-  const [messageText, setMessageText] = useState('');
-  const [recentMessages, setRecentMessages] = useState([
-    {
-      id: 'camp-reminder',
-      title: 'Camp Reminder',
-      audience: 'Summer Camp Parents',
-      time: 'Today 9:30 AM',
-      type: 'Reminder',
-    },
-    {
-      id: 'billing-notice',
-      title: 'Billing Notice',
-      audience: 'Before & After Care Parents',
-      time: 'Yesterday 4:15 PM',
-      type: 'Billing Notice',
-    },
-    {
-      id: 'staff-reminder',
-      title: 'Staff Reminder',
-      audience: 'All Staff',
-      time: 'Yesterday 8:00 AM',
-      type: 'Reminder',
-    },
-  ]);
+  const [selectedAudienceType, setSelectedAudienceType] = useState('all_parents');
+  const [selectedParentId, setSelectedParentId] = useState('');
+  const [selectedStaffId, setSelectedStaffId] = useState('');
+  const [selectedMessageType, setSelectedMessageType] = useState('announcement');
+  const [messageTitle, setMessageTitle] = useState('');
+  const [messageBody, setMessageBody] = useState('');
+  const [activeParents, setActiveParents] = useState([]);
+  const [activeStaff, setActiveStaff] = useState([]);
+  const [profilesLoading, setProfilesLoading] = useState(true);
+  const [profilesError, setProfilesError] = useState('');
+  const [recentMessages, setRecentMessages] = useState([]);
+  const [recentMessagesLoading, setRecentMessagesLoading] = useState(true);
+  const [recentMessagesError, setRecentMessagesError] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [sendMessageError, setSendMessageError] = useState('');
 
-  const recipientChips = [
-    'All Parents',
-    'All Staff',
-    'Blue Group Parents',
-    'Before & After Care Parents',
-    'Summer Camp Parents',
+  const recipientAudienceOptions = [
+    { value: 'all_parents', label: 'All Parents' },
+    { value: 'all_staff', label: 'All Staff' },
+    { value: 'one_parent', label: 'One Parent' },
+    { value: 'one_staff', label: 'One Staff' },
   ];
 
-  const messageTypeChips = [
-    'Announcement',
-    'Reminder',
-    'Billing Notice',
-    'Camp Update',
-    'Emergency',
+  const messageTypeOptions = [
+    { value: 'announcement', label: 'announcement' },
+    { value: 'reminder', label: 'reminder' },
+    { value: 'camp_update', label: 'camp_update' },
+    { value: 'emergency', label: 'emergency' },
   ];
 
-  const toggleRecipient = (recipient) => {
-    setSelectedRecipients((current) =>
-      current.includes(recipient)
-        ? current.filter((item) => item !== recipient)
-        : [...current, recipient]
-    );
+  const loadActiveProfiles = useCallback(async () => {
+    setProfilesLoading(true);
+    setProfilesError('');
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, role, account_status')
+      .eq('account_status', 'active')
+      .in('role', ['parent', 'staff']);
+
+    if (error) {
+      setActiveParents([]);
+      setActiveStaff([]);
+      setProfilesError(error.message || 'Could not load recipients.');
+      setProfilesLoading(false);
+      return;
+    }
+
+    const rows = Array.isArray(data) ? data : [];
+    setActiveParents(rows.filter((row) => row.role === 'parent'));
+    setActiveStaff(rows.filter((row) => row.role === 'staff'));
+    setProfilesLoading(false);
+  }, []);
+
+  const loadRecentMessages = useCallback(async () => {
+    setRecentMessagesLoading(true);
+    setRecentMessagesError('');
+
+    const { data, error } = await supabase
+      .from('messages')
+      .select('id, sender_profile_id, title, body, message_type, audience_type, created_at')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      setRecentMessages([]);
+      setRecentMessagesError(error.message || 'Could not load messages.');
+      setRecentMessagesLoading(false);
+      return;
+    }
+
+    const rows = Array.isArray(data) ? data : [];
+    setRecentMessages(rows);
+    setRecentMessagesLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadActiveProfiles();
+    loadRecentMessages();
+  }, [loadActiveProfiles, loadRecentMessages]);
+
+  const handleAudienceTypeChange = (audienceType) => {
+    setSelectedAudienceType(audienceType);
+    setSendMessageError('');
+
+    if (audienceType !== 'one_parent') {
+      setSelectedParentId('');
+    }
+
+    if (audienceType !== 'one_staff') {
+      setSelectedStaffId('');
+    }
   };
 
-  const handleSendMessage = () => {
-    Alert.alert('Message sent.');
+  const handleSendMessage = async () => {
+    const cleanTitle = messageTitle.trim();
+    const cleanBody = messageBody.trim();
 
-    const audience = selectedRecipients.length ? selectedRecipients.join(', ') : 'All Parents';
-    const time = 'Today 10:00 AM';
-    const title = messageText.trim() || selectedMessageType;
+    if (!currentUserId) {
+      setSendMessageError('No owner session found.');
+      return;
+    }
 
-    setRecentMessages((prev) => [
-      {
-        id: `message-${Date.now()}`,
-        title,
-        audience,
-        time,
-        type: selectedMessageType,
-      },
-      ...prev,
-    ].slice(0, 6));
-    setMessageText('');
+    if (!cleanTitle || !cleanBody) {
+      setSendMessageError('Title and message body are required.');
+      return;
+    }
+
+    let recipientIds = [];
+
+    if (selectedAudienceType === 'all_parents') {
+      recipientIds = activeParents.map((profile) => profile.id);
+    } else if (selectedAudienceType === 'all_staff') {
+      recipientIds = activeStaff.map((profile) => profile.id);
+    } else if (selectedAudienceType === 'one_parent') {
+      if (!selectedParentId) {
+        setSendMessageError('Select a parent recipient.');
+        return;
+      }
+      recipientIds = [selectedParentId];
+    } else if (selectedAudienceType === 'one_staff') {
+      if (!selectedStaffId) {
+        setSendMessageError('Select a staff recipient.');
+        return;
+      }
+      recipientIds = [selectedStaffId];
+    }
+
+    if (!recipientIds.length) {
+      setSendMessageError('No active recipients found.');
+      return;
+    }
+
+    setSendingMessage(true);
+    setSendMessageError('');
+
+    try {
+      const { data: messageRow, error: messageError } = await supabase
+        .from('messages')
+        .insert({
+          sender_profile_id: currentUserId,
+          title: cleanTitle,
+          body: cleanBody,
+          message_type: selectedMessageType,
+          audience_type: selectedAudienceType,
+        })
+        .select('id')
+        .single();
+
+      if (messageError || !messageRow) {
+        throw new Error(messageError?.message || 'Could not send message.');
+      }
+
+      const deliveredAt = new Date().toISOString();
+      const recipientRows = recipientIds.map((recipientId) => ({
+        message_id: messageRow.id,
+        recipient_profile_id: recipientId,
+        delivered_at: deliveredAt,
+      }));
+
+      const { error: recipientsError } = await supabase
+        .from('message_recipients')
+        .insert(recipientRows);
+
+      if (recipientsError) {
+        throw new Error(recipientsError.message || 'Could not save recipients.');
+      }
+
+      Alert.alert('Message sent.');
+      setMessageTitle('');
+      setMessageBody('');
+      setSelectedAudienceType('all_parents');
+      setSelectedParentId('');
+      setSelectedStaffId('');
+      setSelectedMessageType('announcement');
+      await loadRecentMessages();
+    } catch (sendError) {
+      const message = sendError?.message || 'Could not send message.';
+      setSendMessageError(message);
+      Alert.alert('Could not send message.', message);
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const renderRecipientSelection = () => {
+    if (selectedAudienceType === 'one_parent') {
+      return (
+        <View style={styles.ownerMessageRecipientSection}>
+          <Text style={styles.ownerChipGroupLabel}>Select Parent</Text>
+          {profilesLoading ? (
+            <Text style={styles.ownerMessagesStateText}>Loading recipients...</Text>
+          ) : null}
+          {!profilesLoading && activeParents.length === 0 ? (
+            <Text style={styles.ownerMessagesStateText}>No active parents found.</Text>
+          ) : null}
+          <View style={styles.ownerMessageRecipientList}>
+            {activeParents.map((profile) => {
+              const isActive = selectedParentId === profile.id;
+
+              return (
+                <Pressable
+                  key={profile.id}
+                  accessibilityRole=\"button\"
+                  onPress={() => setSelectedParentId(profile.id)}
+                  style={({ pressed }) => [
+                    styles.ownerMessageRecipientCard,
+                    isActive && styles.ownerMessageRecipientCardActive,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <Text style={styles.ownerMessageRecipientEmail}>{profile.email}</Text>
+                  <Text
+                    style={[
+                      styles.ownerMessageRecipientRole,
+                      isActive && styles.ownerMessageRecipientRoleActive,
+                    ]}
+                  >
+                    Parent
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      );
+    }
+
+    if (selectedAudienceType === 'one_staff') {
+      return (
+        <View style={styles.ownerMessageRecipientSection}>
+          <Text style={styles.ownerChipGroupLabel}>Select Staff</Text>
+          {profilesLoading ? (
+            <Text style={styles.ownerMessagesStateText}>Loading recipients...</Text>
+          ) : null}
+          {!profilesLoading && activeStaff.length === 0 ? (
+            <Text style={styles.ownerMessagesStateText}>No active staff found.</Text>
+          ) : null}
+          <View style={styles.ownerMessageRecipientList}>
+            {activeStaff.map((profile) => {
+              const isActive = selectedStaffId === profile.id;
+
+              return (
+                <Pressable
+                  key={profile.id}
+                  accessibilityRole=\"button\"
+                  onPress={() => setSelectedStaffId(profile.id)}
+                  style={({ pressed }) => [
+                    styles.ownerMessageRecipientCard,
+                    isActive && styles.ownerMessageRecipientCardActive,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <Text style={styles.ownerMessageRecipientEmail}>{profile.email}</Text>
+                  <Text
+                    style={[
+                      styles.ownerMessageRecipientRole,
+                      isActive && styles.ownerMessageRecipientRoleActive,
+                    ]}
+                  >
+                    Staff
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <View style={styles.page}>
+      <View style={styles.ownerMessagesHero}>
+        <View style={styles.heroOrbLarge} />
+        <View style={styles.heroOrbSmall} />
+
+        <View style={styles.childProfileHeaderRow}>
+          <Pressable
+            accessibilityRole=\"button\"
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.childProfileBackButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.childProfileBackButtonText}>Back</Text>
+          </Pressable>
+
+          <Text style={styles.childProfileHeaderLabel}>Messages</Text>
+        </View>
+
+        <View style={styles.ownerDashboardHeroCopy}>
+          <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+          <Text style={styles.shellHeroTitle}>Messages</Text>
+          <Text style={styles.shellHeroSubtitle}>Center-wide communication</Text>
+          <View
+            style={[
+              styles.shellHeroPill,
+              styles.ownerMessagesHeroPill,
+              { marginTop: 10 },
+            ]}
+          >
+            <Text style={styles.ownerMessagesHeroPillText}>Owner Access</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps=\"handled\">
+        <View style={styles.contentStack}>
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Message Summary</Text>
+            <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
+              {[
+                { title: 'All Parents', value: String(activeParents.length) },
+                { title: 'All Staff', value: String(activeStaff.length) },
+                { title: 'Recent Messages', value: String(recentMessages.length) },
+                { title: 'Drafts', value: '0' },
+              ].map((card) => (
+                <SummaryTile
+                  key={card.title}
+                  accent=\"blue\"
+                  badge={card.title.charAt(0)}
+                  title={card.title}
+                  value={card.value}
+                  note=\"Center-wide totals\"
+                  fill=\"Owner\"\n                />\n              ))}\n            </View>\n          </View>\n\n          <View style={styles.ownerAccordionCard}>\n            <Text style={styles.ownerAccordionTitle}>Send New Message</Text>\n            <Text style={styles.ownerAccordionSummary}>Pick recipients and a message type</Text>\n\n            {profilesError ? <Text style={styles.ownerMessagesErrorText}>{profilesError}</Text> : null}\n            {sendMessageError ? <Text style={styles.ownerMessagesErrorText}>{sendMessageError}</Text> : null}\n\n            <View style={styles.ownerChipGroup}>\n              <Text style={styles.ownerChipGroupLabel}>Recipients</Text>\n              <View style={styles.ownerFilterPillRow}>\n                {recipientAudienceOptions.map((option) => {\n                  const isActive = selectedAudienceType === option.value;\n\n                  return (\n                    <Pressable\n                      key={option.value}\n                      accessibilityRole=\"button\"\n                      onPress={() => handleAudienceTypeChange(option.value)}\n                      style={({ pressed }) => [\n                        styles.ownerFilterPill,\n                        isActive && styles.ownerFilterPillActive,\n                        pressed && styles.pressedButton,\n                      ]}\n                    >\n                      <Text\n                        style={[\n                          styles.ownerFilterPillText,\n                          isActive && styles.ownerFilterPillTextActive,\n                        ]}\n                      >\n                        {option.label}\n                      </Text>\n                    </Pressable>\n                  );\n                })}\n              </View>\n            </View>\n\n            {renderRecipientSelection()}\n\n            <View style={styles.ownerChipGroup}>\n              <Text style={styles.ownerChipGroupLabel}>Title</Text>\n              <TextInput\n                placeholder=\"Message title\"\n                placeholderTextColor={COLORS.muted}\n                value={messageTitle}\n                onChangeText={setMessageTitle}\n                style={styles.ownerTitleInput}\n              />\n            </View>\n\n            <View style={styles.ownerChipGroup}>\n              <Text style={styles.ownerChipGroupLabel}>Message Type</Text>\n              <View style={styles.ownerFilterPillRow}>\n                {messageTypeOptions.map((option) => {\n                  const isActive = selectedMessageType === option.value;\n                  return (\n                    <Pressable\n                      key={option.value}\n                      accessibilityRole=\"button\"\n                      onPress={() => setSelectedMessageType(option.value)}\n                      style={({ pressed }) => [\n                        styles.ownerFilterPill,\n                        isActive && styles.ownerFilterPillActive,\n                        pressed && styles.pressedButton,\n                      ]}\n                    >\n                      <Text\n                        style={[\n                          styles.ownerFilterPillText,\n                          isActive && styles.ownerFilterPillTextActive,\n                        ]}\n                      >\n                        {option.label}\n                      </Text>\n                    </Pressable>\n                  );\n                })}\n              </View>\n            </View>\n\n            <TextInput\n              placeholder=\"Write a message...\"\n              placeholderTextColor={COLORS.muted}\n              value={messageBody}\n              onChangeText={setMessageBody}\n              multiline\n              style={styles.ownerMessageInput}\n            />\n\n            <Pressable\n              accessibilityRole=\"button\"\n              disabled={sendingMessage}\n              onPress={handleSendMessage}\n              style={({ pressed }) => [\n                styles.primaryButton,\n                { backgroundColor: messagesAccent },\n                pressed && !sendingMessage && styles.pressedButton,\n                sendingMessage && styles.ownerMessageSendDisabled,\n              ]}\n            >\n              <Text style={styles.primaryButtonText}>\n                {sendingMessage ? 'Sending...' : 'Send Message'}\n              </Text>\n            </Pressable>\n          </View>\n\n          <View style={styles.ownerAccordionCard}>\n            <Text style={styles.ownerAccordionTitle}>Recent Messages</Text>\n            {recentMessagesLoading ? (\n              <Text style={styles.ownerMessagesStateText}>Loading messages...</Text>\n            ) : null}\n            {recentMessagesError ? (\n              <Text style={styles.ownerMessagesErrorText}>{recentMessagesError}</Text>\n            ) : null}\n            {!recentMessagesLoading && recentMessages.length === 0 ? (\n              <Text style={styles.ownerMessagesStateText}>No messages yet.</Text>\n            ) : null}\n            <View style={styles.ownerRecentMessageList}>\n              {recentMessages.map((message) => (\n                <View key={message.id} style={styles.ownerRecentMessageCard}>\n                  <View style={styles.ownerRecentMessageTopRow}>\n                    <View style={styles.ownerRecentMessageTextBlock}>\n                      <Text style={styles.ownerRecentMessageTitle}>{message.title}</Text>\n                      <Text style={styles.ownerRecentMessageAudience}>\n                        Sent to {formatAudienceLabel(message.audience_type)}\n                      </Text>\n                    </View>\n                    <View style={[styles.ownerRecentMessageBadge, { backgroundColor: messagesAccent }]}>\n                      <Text style={styles.ownerRecentMessageBadgeText}>\n                        {formatMessageTypeLabel(message.message_type)}\n                      </Text>\n                    </View>\n                  </View>\n                  <Text style={styles.ownerRecentMessageTime}>\n                    {formatMessageDateTime(message.created_at)}\n                  </Text>\n                </View>\n              ))}\n            </View>\n          </View>\n\n          <View style={styles.ownerAccordionCard}>\n            <Text style={styles.ownerAccordionTitle}>Communication Notes</Text>\n            <Text style={styles.ownerCommunicationNote}>\n              Messages sent here are stored in Supabase with recipient rows for the selected audience.\n            </Text>\n          </View>\n\n          <Pressable\n            accessibilityRole=\"button\"\n            onPress={onLogout}\n            style={({ pressed }) => [\n              styles.primaryButton,\n              styles.logoutButton,\n              pressed && styles.pressedButton,\n            ]}\n          >\n            <Text style={styles.primaryButtonText}>Logout</Text>\n          </Pressable>\n        </View>\n      </ScrollView>\n    </View>\n  );\n}\n*** End Patch
+*/
+
+function OwnerMessagesScreen({
+  onBack,
+  onLogout,
+  currentUserId,
+  expandedRecentMessageId,
+  onToggleRecentMessage,
+}) {
+  const messagesAccent = OWNER_MODULE_COLORS.Messages;
+  const [selectedAudienceType, setSelectedAudienceType] = useState('all_parents');
+  const [selectedParentId, setSelectedParentId] = useState('');
+  const [selectedStaffId, setSelectedStaffId] = useState('');
+  const [selectedMessageType, setSelectedMessageType] = useState('announcement');
+  const [messageTitle, setMessageTitle] = useState('');
+  const [messageBody, setMessageBody] = useState('');
+  const [activeParents, setActiveParents] = useState([]);
+  const [activeStaff, setActiveStaff] = useState([]);
+  const [profilesLoading, setProfilesLoading] = useState(true);
+  const [profilesError, setProfilesError] = useState('');
+  const [recentMessages, setRecentMessages] = useState([]);
+  const [recentMessagesLoading, setRecentMessagesLoading] = useState(true);
+  const [recentMessagesError, setRecentMessagesError] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [sendMessageError, setSendMessageError] = useState('');
+
+  const recipientAudienceOptions = [
+    { value: 'all_parents', label: 'All Parents' },
+    { value: 'all_staff', label: 'All Staff' },
+    { value: 'one_parent', label: 'One Parent' },
+    { value: 'one_staff', label: 'One Staff' },
+  ];
+
+  const messageTypeOptions = [
+    { value: 'announcement', label: 'announcement' },
+    { value: 'reminder', label: 'reminder' },
+    { value: 'camp_update', label: 'camp_update' },
+    { value: 'emergency', label: 'emergency' },
+  ];
+
+  const loadActiveProfiles = useCallback(async () => {
+    setProfilesLoading(true);
+    setProfilesError('');
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, role, account_status')
+      .eq('account_status', 'active')
+      .in('role', ['parent', 'staff']);
+
+    if (error) {
+      setActiveParents([]);
+      setActiveStaff([]);
+      setProfilesError(error.message || 'Could not load recipients.');
+      setProfilesLoading(false);
+      return;
+    }
+
+    const rows = Array.isArray(data) ? data : [];
+    setActiveParents(rows.filter((row) => row.role === 'parent'));
+    setActiveStaff(rows.filter((row) => row.role === 'staff'));
+    setProfilesLoading(false);
+  }, []);
+
+  const loadRecentMessages = useCallback(async () => {
+    setRecentMessagesLoading(true);
+    setRecentMessagesError('');
+
+    try {
+      const { data: messagesData, error: messagesError } = await supabase
+        .from('messages')
+        .select('id, sender_profile_id, title, body, message_type, audience_type, created_at')
+        .order('created_at', { ascending: false });
+
+      if (messagesError) {
+        throw new Error(messagesError.message || 'Could not load messages.');
+      }
+
+      const messageRows = Array.isArray(messagesData) ? messagesData : [];
+      const messageIds = messageRows.map((message) => message.id).filter(Boolean);
+
+      if (!messageIds.length) {
+        setRecentMessages([]);
+        return;
+      }
+
+      const { data: recipientData, error: recipientError } = await supabase
+        .from('message_recipients')
+        .select('id, message_id, recipient_profile_id, delivered_at, read_at')
+        .in('message_id', messageIds);
+
+      if (recipientError) {
+        throw new Error(recipientError.message || 'Could not load message receipts.');
+      }
+
+      const recipientRows = Array.isArray(recipientData) ? recipientData : [];
+      const recipientIds = Array.from(
+        new Set(recipientRows.map((recipient) => recipient.recipient_profile_id).filter(Boolean))
+      );
+
+      let profilesById = {};
+
+      if (recipientIds.length) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, email')
+          .in('id', recipientIds);
+
+        if (profileError) {
+          throw new Error(profileError.message || 'Could not load recipient profiles.');
+        }
+
+        profilesById = (Array.isArray(profileData) ? profileData : []).reduce((acc, profile) => {
+          acc[profile.id] = profile;
+          return acc;
+        }, {});
+      }
+
+      const recipientsByMessageId = recipientRows.reduce((acc, recipient) => {
+        if (!acc[recipient.message_id]) {
+          acc[recipient.message_id] = [];
+        }
+
+        const profile = profilesById[recipient.recipient_profile_id];
+        acc[recipient.message_id].push({
+          id: recipient.id,
+          email: profile?.email || recipient.recipient_profile_id || 'Unknown Recipient',
+          readAt: recipient.read_at,
+          deliveredAt: recipient.delivered_at,
+        });
+        return acc;
+      }, {});
+
+      setRecentMessages(
+        messageRows.map((message) => {
+          const recipients = recipientsByMessageId[message.id] || [];
+          const readCount = recipients.filter((recipient) => Boolean(recipient.readAt)).length;
+          const totalRecipients = recipients.length;
+
+          return {
+            ...message,
+            recipients,
+            totalRecipients,
+            readCount,
+            unreadCount: Math.max(totalRecipients - readCount, 0),
+          };
+        })
+      );
+    } catch (loadError) {
+      setRecentMessages([]);
+      setRecentMessagesError(loadError?.message || 'Could not load messages.');
+    } finally {
+      setRecentMessagesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadActiveProfiles();
+    loadRecentMessages();
+  }, [loadActiveProfiles, loadRecentMessages]);
+
+  const handleAudienceTypeChange = (audienceType) => {
+    setSelectedAudienceType(audienceType);
+    setSendMessageError('');
+
+    if (audienceType !== 'one_parent') {
+      setSelectedParentId('');
+    }
+
+    if (audienceType !== 'one_staff') {
+      setSelectedStaffId('');
+    }
+  };
+
+  const handleSendMessage = async () => {
+    const cleanTitle = messageTitle.trim();
+    const cleanBody = messageBody.trim();
+
+    if (!currentUserId) {
+      setSendMessageError('No owner session found.');
+      return;
+    }
+
+    if (!cleanTitle || !cleanBody) {
+      setSendMessageError('Title and message body are required.');
+      return;
+    }
+
+    let recipientIds = [];
+
+    if (selectedAudienceType === 'all_parents') {
+      recipientIds = activeParents.map((profile) => profile.id);
+    } else if (selectedAudienceType === 'all_staff') {
+      recipientIds = activeStaff.map((profile) => profile.id);
+    } else if (selectedAudienceType === 'one_parent') {
+      if (!selectedParentId) {
+        setSendMessageError('Select a parent recipient.');
+        return;
+      }
+      recipientIds = [selectedParentId];
+    } else if (selectedAudienceType === 'one_staff') {
+      if (!selectedStaffId) {
+        setSendMessageError('Select a staff recipient.');
+        return;
+      }
+      recipientIds = [selectedStaffId];
+    }
+
+    if (!recipientIds.length) {
+      setSendMessageError('No active recipients found.');
+      return;
+    }
+
+    setSendingMessage(true);
+    setSendMessageError('');
+
+    try {
+      const { data: messageRow, error: messageError } = await supabase
+        .from('messages')
+        .insert({
+          sender_profile_id: currentUserId,
+          title: cleanTitle,
+          body: cleanBody,
+          message_type: selectedMessageType,
+          audience_type: selectedAudienceType,
+        })
+        .select('id')
+        .single();
+
+      if (messageError || !messageRow) {
+        throw new Error(messageError?.message || 'Could not send message.');
+      }
+
+      const deliveredAt = new Date().toISOString();
+      const recipientRows = recipientIds.map((recipientId) => ({
+        message_id: messageRow.id,
+        recipient_profile_id: recipientId,
+        delivered_at: deliveredAt,
+      }));
+
+      const { error: recipientsError } = await supabase
+        .from('message_recipients')
+        .insert(recipientRows);
+
+      if (recipientsError) {
+        throw new Error(recipientsError.message || 'Could not save recipients.');
+      }
+
+      Alert.alert('Message sent.');
+      setMessageTitle('');
+      setMessageBody('');
+      setSelectedAudienceType('all_parents');
+      setSelectedParentId('');
+      setSelectedStaffId('');
+      setSelectedMessageType('announcement');
+      await loadRecentMessages();
+    } catch (sendError) {
+      const message = sendError?.message || 'Could not send message.';
+      setSendMessageError(message);
+      Alert.alert('Could not send message.', message);
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const renderRecipientSelection = () => {
+    if (selectedAudienceType === 'one_parent') {
+      return (
+        <View style={styles.ownerMessageRecipientSection}>
+          <Text style={styles.ownerChipGroupLabel}>Select Parent</Text>
+          {profilesLoading ? (
+            <Text style={styles.ownerMessagesStateText}>Loading recipients...</Text>
+          ) : null}
+          {!profilesLoading && activeParents.length === 0 ? (
+            <Text style={styles.ownerMessagesStateText}>No active parents found.</Text>
+          ) : null}
+          <View style={styles.ownerMessageRecipientList}>
+            {activeParents.map((profile) => {
+              const isActive = selectedParentId === profile.id;
+
+              return (
+                <Pressable
+                  key={profile.id}
+                  accessibilityRole="button"
+                  onPress={() => setSelectedParentId(profile.id)}
+                  style={({ pressed }) => [
+                    styles.ownerMessageRecipientCard,
+                    isActive && styles.ownerMessageRecipientCardActive,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <Text style={styles.ownerMessageRecipientEmail}>{profile.email}</Text>
+                  <Text
+                    style={[
+                      styles.ownerMessageRecipientRole,
+                      isActive && styles.ownerMessageRecipientRoleActive,
+                    ]}
+                  >
+                    Parent
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      );
+    }
+
+    if (selectedAudienceType === 'one_staff') {
+      return (
+        <View style={styles.ownerMessageRecipientSection}>
+          <Text style={styles.ownerChipGroupLabel}>Select Staff</Text>
+          {profilesLoading ? (
+            <Text style={styles.ownerMessagesStateText}>Loading recipients...</Text>
+          ) : null}
+          {!profilesLoading && activeStaff.length === 0 ? (
+            <Text style={styles.ownerMessagesStateText}>No active staff found.</Text>
+          ) : null}
+          <View style={styles.ownerMessageRecipientList}>
+            {activeStaff.map((profile) => {
+              const isActive = selectedStaffId === profile.id;
+
+              return (
+                <Pressable
+                  key={profile.id}
+                  accessibilityRole="button"
+                  onPress={() => setSelectedStaffId(profile.id)}
+                  style={({ pressed }) => [
+                    styles.ownerMessageRecipientCard,
+                    isActive && styles.ownerMessageRecipientCardActive,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <Text style={styles.ownerMessageRecipientEmail}>{profile.email}</Text>
+                  <Text
+                    style={[
+                      styles.ownerMessageRecipientRole,
+                      isActive && styles.ownerMessageRecipientRoleActive,
+                    ]}
+                  >
+                    Staff
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      );
+    }
+
+    return null;
   };
 
   return (
@@ -4504,19 +6051,16 @@ function OwnerMessagesScreen({ onBack, onLogout }) {
         </View>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.contentStack}>
           <View style={styles.ownerAccordionCard}>
             <Text style={styles.ownerAccordionTitle}>Message Summary</Text>
             <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
               {[
-                { title: 'Unread Parent Messages', value: '4' },
-                { title: 'Staff Announcements', value: '2' },
-                { title: 'Parent Announcements', value: '3' },
-                { title: 'Drafts', value: '1' },
+                { title: 'All Parents', value: String(activeParents.length) },
+                { title: 'All Staff', value: String(activeStaff.length) },
+                { title: 'Recent Messages', value: String(recentMessages.length) },
+                { title: 'Drafts', value: '0' },
               ].map((card) => (
                 <SummaryTile
                   key={card.title}
@@ -4535,16 +6079,20 @@ function OwnerMessagesScreen({ onBack, onLogout }) {
             <Text style={styles.ownerAccordionTitle}>Send New Message</Text>
             <Text style={styles.ownerAccordionSummary}>Pick recipients and a message type</Text>
 
+            {profilesError ? <Text style={styles.ownerMessagesErrorText}>{profilesError}</Text> : null}
+            {sendMessageError ? <Text style={styles.ownerMessagesErrorText}>{sendMessageError}</Text> : null}
+
             <View style={styles.ownerChipGroup}>
               <Text style={styles.ownerChipGroupLabel}>Recipients</Text>
               <View style={styles.ownerFilterPillRow}>
-                {recipientChips.map((chip) => {
-                  const isActive = selectedRecipients.includes(chip);
+                {recipientAudienceOptions.map((option) => {
+                  const isActive = selectedAudienceType === option.value;
+
                   return (
                     <Pressable
-                      key={chip}
+                      key={option.value}
                       accessibilityRole="button"
-                      onPress={() => toggleRecipient(chip)}
+                      onPress={() => handleAudienceTypeChange(option.value)}
                       style={({ pressed }) => [
                         styles.ownerFilterPill,
                         isActive && styles.ownerFilterPillActive,
@@ -4557,7 +6105,7 @@ function OwnerMessagesScreen({ onBack, onLogout }) {
                           isActive && styles.ownerFilterPillTextActive,
                         ]}
                       >
-                        {chip}
+                        {option.label}
                       </Text>
                     </Pressable>
                   );
@@ -4565,16 +6113,29 @@ function OwnerMessagesScreen({ onBack, onLogout }) {
               </View>
             </View>
 
+            {renderRecipientSelection()}
+
+            <View style={styles.ownerChipGroup}>
+              <Text style={styles.ownerChipGroupLabel}>Title</Text>
+              <TextInput
+                placeholder="Message title"
+                placeholderTextColor={COLORS.muted}
+                value={messageTitle}
+                onChangeText={setMessageTitle}
+                style={styles.ownerTitleInput}
+              />
+            </View>
+
             <View style={styles.ownerChipGroup}>
               <Text style={styles.ownerChipGroupLabel}>Message Type</Text>
               <View style={styles.ownerFilterPillRow}>
-                {messageTypeChips.map((chip) => {
-                  const isActive = selectedMessageType === chip;
+                {messageTypeOptions.map((option) => {
+                  const isActive = selectedMessageType === option.value;
                   return (
                     <Pressable
-                      key={chip}
+                      key={option.value}
                       accessibilityRole="button"
-                      onPress={() => setSelectedMessageType(chip)}
+                      onPress={() => setSelectedMessageType(option.value)}
                       style={({ pressed }) => [
                         styles.ownerFilterPill,
                         isActive && styles.ownerFilterPillActive,
@@ -4587,7 +6148,7 @@ function OwnerMessagesScreen({ onBack, onLogout }) {
                           isActive && styles.ownerFilterPillTextActive,
                         ]}
                       >
-                        {chip}
+                        {option.label}
                       </Text>
                     </Pressable>
                   );
@@ -4598,43 +6159,110 @@ function OwnerMessagesScreen({ onBack, onLogout }) {
             <TextInput
               placeholder="Write a message..."
               placeholderTextColor={COLORS.muted}
-              value={messageText}
-              onChangeText={setMessageText}
+              value={messageBody}
+              onChangeText={setMessageBody}
               multiline
               style={styles.ownerMessageInput}
             />
 
             <Pressable
               accessibilityRole="button"
+              disabled={sendingMessage}
               onPress={handleSendMessage}
               style={({ pressed }) => [
                 styles.primaryButton,
                 { backgroundColor: messagesAccent },
-                pressed && styles.pressedButton,
+                pressed && !sendingMessage && styles.pressedButton,
+                sendingMessage && styles.ownerMessageSendDisabled,
               ]}
             >
-              <Text style={styles.primaryButtonText}>Send Message</Text>
+              <Text style={styles.primaryButtonText}>
+                {sendingMessage ? 'Sending...' : 'Send Message'}
+              </Text>
             </Pressable>
           </View>
 
           <View style={styles.ownerAccordionCard}>
             <Text style={styles.ownerAccordionTitle}>Recent Messages</Text>
+            {recentMessagesLoading ? (
+              <Text style={styles.ownerMessagesStateText}>Loading messages...</Text>
+            ) : null}
+            {recentMessagesError ? (
+              <Text style={styles.ownerMessagesErrorText}>{recentMessagesError}</Text>
+            ) : null}
+            {!recentMessagesLoading && recentMessages.length === 0 ? (
+              <Text style={styles.ownerMessagesStateText}>No messages yet.</Text>
+            ) : null}
             <View style={styles.ownerRecentMessageList}>
               {recentMessages.map((message) => (
-                <View key={message.id} style={styles.ownerRecentMessageCard}>
+                <Pressable
+                  key={message.id}
+                  accessibilityRole="button"
+                  onPress={() => onToggleRecentMessage(message.id)}
+                  style={({ pressed }) => [
+                    styles.ownerRecentMessageCard,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
                   <View style={styles.ownerRecentMessageTopRow}>
                     <View style={styles.ownerRecentMessageTextBlock}>
                       <Text style={styles.ownerRecentMessageTitle}>{message.title}</Text>
                       <Text style={styles.ownerRecentMessageAudience}>
-                        Sent to {message.audience}
+                        Sent to {formatAudienceLabel(message.audience_type)}
                       </Text>
                     </View>
                     <View style={[styles.ownerRecentMessageBadge, { backgroundColor: messagesAccent }]}>
-                      <Text style={styles.ownerRecentMessageBadgeText}>{message.type}</Text>
+                      <Text style={styles.ownerRecentMessageBadgeText}>
+                        {formatMessageTypeLabel(message.message_type)}
+                      </Text>
                     </View>
                   </View>
-                  <Text style={styles.ownerRecentMessageTime}>{message.time}</Text>
-                </View>
+
+                  <Text style={styles.ownerRecentMessageTime}>
+                    {formatMessageDateTime(message.created_at)}
+                  </Text>
+
+                  <View style={styles.ownerRecentMessageReceiptRow}>
+                    <Text style={styles.ownerRecentMessageReceiptText}>
+                      Read: {message.readCount} / {message.totalRecipients}
+                    </Text>
+                    <Text style={styles.ownerRecentMessageReceiptText}>
+                      Unread: {message.unreadCount}
+                    </Text>
+                  </View>
+
+                  {expandedRecentMessageId === message.id ? (
+                    <View style={styles.ownerRecentMessageExpandedBody}>
+                      <Text style={styles.ownerRecentMessageExpandedLabel}>Message</Text>
+                      <Text style={styles.ownerRecentMessageExpandedMessage}>{message.body}</Text>
+
+                      <Text style={styles.ownerRecentMessageExpandedLabel}>Recipients</Text>
+                      {message.recipients.length ? (
+                        <View style={styles.ownerRecentMessageRecipientList}>
+                          {message.recipients.map((recipient) => (
+                            <View key={recipient.id} style={styles.ownerRecentMessageRecipientRow}>
+                              <Text style={styles.ownerRecentMessageRecipientEmail}>
+                                {recipient.email}
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.ownerRecentMessageRecipientStatus,
+                                  recipient.readAt
+                                    ? styles.ownerRecentMessageRecipientStatusRead
+                                    : styles.ownerRecentMessageRecipientStatusUnread,
+                                ]}
+                              >
+                                {recipient.readAt ? 'Read' : 'Unread'}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      ) : (
+                        <Text style={styles.ownerMessagesStateText}>No recipients found.</Text>
+                      )}
+                    </View>
+                  ) : null}
+                </Pressable>
               ))}
             </View>
           </View>
@@ -4642,8 +6270,7 @@ function OwnerMessagesScreen({ onBack, onLogout }) {
           <View style={styles.ownerAccordionCard}>
             <Text style={styles.ownerAccordionTitle}>Communication Notes</Text>
             <Text style={styles.ownerCommunicationNote}>
-              Messages sent here will eventually appear in parent notifications, staff notifications,
-              and child timelines when connected.
+              Messages sent here are stored in Supabase with recipient rows for the selected audience.
             </Text>
           </View>
 
@@ -5892,6 +7519,14 @@ function OwnerSummerCampCheckInScreen({
   onLogout,
   ownerSummerCampChildren,
   ownerSummerCampSummary,
+  ownerSummerCampGroups,
+  loading,
+  error,
+  savingChildId,
+  selectedGroupByChildId,
+  groupPickerChildId,
+  onToggleGroupPicker,
+  onSelectGroupForChild,
   onCheckInChild,
 }) {
   const totalAccent = OWNER_MODULE_COLORS['Camp Events'];
@@ -5901,15 +7536,23 @@ function OwnerSummerCampCheckInScreen({
       accent: 'blue',
       badge: 'T',
       title: 'Total Campers Checked In',
-      value: String(ownerSummerCampSummary.total),
+      value: String(ownerSummerCampSummary.total || 0),
       note: 'Owner access only',
       fill: 'Live',
     },
     {
-      accent: 'blue',
-      badge: 'B',
-      title: 'Blue Group',
-      value: String(ownerSummerCampSummary['Blue Group'] || 0),
+      accent: 'yellow',
+      badge: 'Y',
+      title: 'Yellow Group',
+      value: String(ownerSummerCampSummary['Yellow Group'] || 0),
+      note: 'Owner checked in',
+      fill: 'Camp',
+    },
+    {
+      accent: 'orange',
+      badge: 'O',
+      title: 'Orange Group',
+      value: String(ownerSummerCampSummary['Orange Group'] || 0),
       note: 'Owner checked in',
       fill: 'Camp',
     },
@@ -5922,6 +7565,14 @@ function OwnerSummerCampCheckInScreen({
       fill: 'Camp',
     },
     {
+      accent: 'blue',
+      badge: 'B',
+      title: 'Blue Group',
+      value: String(ownerSummerCampSummary['Blue Group'] || 0),
+      note: 'Owner checked in',
+      fill: 'Camp',
+    },
+    {
       accent: 'red',
       badge: 'R',
       title: 'Red Group',
@@ -5930,10 +7581,18 @@ function OwnerSummerCampCheckInScreen({
       fill: 'Camp',
     },
     {
-      accent: 'yellow',
-      badge: 'Y',
-      title: 'Yellow Group',
-      value: String(ownerSummerCampSummary['Yellow Group'] || 0),
+      accent: 'pink',
+      badge: 'P',
+      title: 'Pink Group',
+      value: String(ownerSummerCampSummary['Pink Group'] || 0),
+      note: 'Owner checked in',
+      fill: 'Camp',
+    },
+    {
+      accent: 'purple',
+      badge: 'P',
+      title: 'Purple Group',
+      value: String(ownerSummerCampSummary['Purple Group'] || 0),
       note: 'Owner checked in',
       fill: 'Camp',
     },
@@ -5977,10 +7636,29 @@ function OwnerSummerCampCheckInScreen({
         </View>
 
         <View style={styles.parentHomeContent}>
+          {loading ? <Text style={styles.sectionHelperText}>Loading camp check-ins...</Text> : null}
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
           <View style={styles.profileCard}>
             <View style={styles.parentSectionHeaderRow}>
               <Text style={styles.parentSectionHeaderTitle}>Camp Check-In Summary</Text>
               <Text style={styles.parentSectionHeaderSubtle}>Live totals across the center</Text>
+            </View>
+
+            <View style={styles.staffCampSummaryRow}>
+              {[
+                { label: 'Pending', value: 0 },
+                { label: 'Complete', value: 0 },
+                { label: 'Discrepancies', value: 0 },
+              ].map((item) => (
+                <View
+                  key={item.label}
+                  style={[styles.staffCampSummaryPill, { backgroundColor: totalAccent }]}
+                >
+                  <Text style={styles.staffCampSummaryLabel}>{item.label}</Text>
+                  <Text style={styles.staffCampSummaryValue}>{item.value}</Text>
+                </View>
+              ))}
             </View>
 
             <View style={styles.ownerSectionDetailsGrid}>
@@ -6008,8 +7686,11 @@ function OwnerSummerCampCheckInScreen({
 
             <View style={styles.ownerSummerCampChildList}>
               {ownerSummerCampChildren.map((child) => {
-                const theme = getChildGroupTheme(child.groupName);
+                const theme = getChildGroupTheme(child.assignedGroupName || child.groupName);
                 const checkedIn = child.checkInStatus === 'Checked In';
+                const selectedGroupId = selectedGroupByChildId?.[child.id] || child.selectedGroupId;
+                const selectedGroup = ownerSummerCampGroups.find((group) => group.id === selectedGroupId);
+                const isPickerOpen = groupPickerChildId === child.id;
 
                 return (
                   <View key={child.id} style={styles.staffCampChildCard}>
@@ -6017,7 +7698,10 @@ function OwnerSummerCampCheckInScreen({
                       <View style={styles.staffCampChildNameBlock}>
                         <Text style={styles.staffCampChildName}>{child.name}</Text>
                         <Text style={styles.staffCampChildTime}>
-                          Last update: {child.lastUpdateTime}
+                          Last update: {formatTime(child.lastUpdateTime)}
+                        </Text>
+                        <Text style={styles.staffCampChildTime}>
+                          Assigned group: {child.assignedGroupName || selectedGroup?.name || 'Not assigned'}
                         </Text>
                       </View>
 
@@ -6037,7 +7721,7 @@ function OwnerSummerCampCheckInScreen({
                               { color: theme.accent },
                             ]}
                           >
-                            {child.groupName}
+                            {child.assignedGroupName || selectedGroup?.name || child.groupName}
                           </Text>
                         </View>
 
@@ -6056,21 +7740,66 @@ function OwnerSummerCampCheckInScreen({
                       </View>
                     </View>
 
+                    <View style={styles.ownerSummerCampGroupPickerRow}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => onToggleGroupPicker(child.id)}
+                        style={({ pressed }) => [
+                          styles.ownerSummerCampGroupPickerButton,
+                          pressed && styles.pressedButton,
+                        ]}
+                      >
+                        <Text style={styles.ownerSummerCampGroupPickerButtonText}>
+                          {selectedGroup?.name || 'Assign Group'}
+                        </Text>
+                        <Text style={styles.ownerNavChevron}>{isPickerOpen ? '⌃' : '›'}</Text>
+                      </Pressable>
+                    </View>
+
+                    {isPickerOpen ? (
+                      <View style={styles.ownerSummerCampGroupPickerOptions}>
+                        {ownerSummerCampGroups.map((group) => {
+                          const isSelected = selectedGroup?.id === group.id;
+                          return (
+                            <Pressable
+                              key={group.id}
+                              accessibilityRole="button"
+                              onPress={() => onSelectGroupForChild(child.id, group.id)}
+                              style={({ pressed }) => [
+                                styles.ownerSummerCampGroupOption,
+                                isSelected && styles.ownerSummerCampGroupOptionActive,
+                                pressed && styles.pressedButton,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.ownerSummerCampGroupOptionText,
+                                  isSelected && styles.ownerSummerCampGroupOptionTextActive,
+                                ]}
+                              >
+                                {group.name || getCampGroupDisplayName(group) || 'Unnamed Group'}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    ) : null}
+
                     <Pressable
                       accessibilityRole="button"
-                      disabled={checkedIn}
-                      onPress={() => onCheckInChild(child.id)}
+                      disabled={checkedIn || savingChildId === child.id}
+                      onPress={() => onCheckInChild(child.id, child.name)}
                       style={({ pressed }) => [
                         styles.staffCampConfirmButton,
                         {
                           backgroundColor: checkedIn ? COLORS.success : totalAccent,
                         },
                         checkedIn && styles.staffCampConfirmButtonDisabled,
-                        pressed && !checkedIn && styles.pressedButton,
+                        (pressed && !checkedIn && savingChildId !== child.id) && styles.pressedButton,
                       ]}
                     >
                       <Text style={styles.staffCampConfirmButtonText}>
-                        {checkedIn ? 'Checked In' : 'Check In to Camp'}
+                        {savingChildId === child.id ? 'Checking In...' : checkedIn ? 'Checked In' : 'Check In to Camp'}
                       </Text>
                     </Pressable>
                   </View>
@@ -6252,6 +7981,11 @@ const CHILD_GROUP_THEMES = {
     border: '#BBF7D0',
     soft: '#ECFDF3',
   },
+  'Orange Group': {
+    accent: '#F59E0B',
+    border: '#FDE68A',
+    soft: '#FFF7ED',
+  },
   'Red Group': {
     accent: '#F97366',
     border: '#FECACA',
@@ -6262,10 +7996,38 @@ const CHILD_GROUP_THEMES = {
     border: '#FDE68A',
     soft: '#FFF8E1',
   },
+  'Pink Group': {
+    accent: '#EC4899',
+    border: '#F9A8D4',
+    soft: '#FDF2F8',
+  },
+  'Purple Group': {
+    accent: '#7C4DFF',
+    border: '#D8C7FF',
+    soft: '#F6F0FF',
+  },
 };
 
 function getChildGroupTheme(group) {
   return CHILD_GROUP_THEMES[group] || CHILD_GROUP_THEMES['Blue Group'];
+}
+
+function getCampGroupCanonicalName(value) {
+  const rawValue =
+    typeof value === 'string'
+      ? value
+      : value?.name || value?.group_name || value?.title || value?.label || value?.color || '';
+  const normalized = String(rawValue).toLowerCase();
+
+  if (normalized.includes('yellow')) return 'Yellow Group';
+  if (normalized.includes('orange')) return 'Orange Group';
+  if (normalized.includes('green')) return 'Green Group';
+  if (normalized.includes('blue')) return 'Blue Group';
+  if (normalized.includes('red')) return 'Red Group';
+  if (normalized.includes('pink')) return 'Pink Group';
+  if (normalized.includes('purple')) return 'Purple Group';
+
+  return '';
 }
 
 const STAFF_MEMBER = {
@@ -6301,17 +8063,16 @@ const STAFF_WORKSPACE_CARDS = [
   },
   {
     accent: 'blue',
+    title: 'Messages',
+    value: 'View updates',
+    note: 'View staff updates and center announcements',
+  },
+  {
+    accent: 'blue',
     title: 'My Hours',
     value: '28.5 hours this week',
     note: 'Pending owner review',
   },
-];
-
-const STAFF_DAILY_NOTE_CHILDREN = [
-  { id: 'note-mia', name: 'Mia Carter', accentGroup: 'Blue Group' },
-  { id: 'note-liam', name: 'Liam Wilson', accentGroup: 'Green Group' },
-  { id: 'note-emma', name: 'Emma Davis', accentGroup: 'Red Group' },
-  { id: 'note-noah', name: 'Noah Brown', accentGroup: 'Yellow Group' },
 ];
 
 const STAFF_HOURS_THIS_WEEK = [
@@ -6357,9 +8118,16 @@ const STAFF_DAILY_NOTE_CHIPS = [
 
 const STAFF_CLOCK_CURRENT_TIME = '7:24 AM';
 const STAFF_CLOCK_LOCATION_STATUS = 'At Work Location';
-const STAFF_MOCK_TIMES = ['7:30 AM', '7:42 AM', '8:05 AM', '8:18 AM', '8:30 AM', '8:45 AM', '9:02 AM', '9:15 AM', '9:28 AM', '9:40 AM'];
 
-const STAFF_CAMP_GROUP_NAMES = ['Blue Group', 'Green Group', 'Red Group', 'Yellow Group'];
+const STAFF_CAMP_GROUP_NAMES = [
+  'Yellow Group',
+  'Orange Group',
+  'Green Group',
+  'Blue Group',
+  'Red Group',
+  'Pink Group',
+  'Purple Group',
+];
 
 const STAFF_BA_MOCK_TIMES = {
   dropOff: '7:12 AM',
@@ -6699,51 +8467,6 @@ function createStaffSummerCampGroups() {
   };
 }
 
-function createOwnerSummerCampChildren() {
-  return [
-    {
-      id: 'owner-summer-blue-mia',
-      name: 'Mia Carter',
-      groupName: 'Blue Group',
-      checkInStatus: 'Not Checked In',
-      checkInTime: 'Pending',
-      lastUpdateTime: 'Pending',
-    },
-    {
-      id: 'owner-summer-blue-ava',
-      name: 'Ava Martin',
-      groupName: 'Blue Group',
-      checkInStatus: 'Checked In',
-      checkInTime: '8:18 AM',
-      lastUpdateTime: '8:18 AM',
-    },
-    {
-      id: 'owner-summer-green-liam',
-      name: 'Liam Wilson',
-      groupName: 'Green Group',
-      checkInStatus: 'Not Checked In',
-      checkInTime: 'Pending',
-      lastUpdateTime: 'Pending',
-    },
-    {
-      id: 'owner-summer-red-emma',
-      name: 'Emma Davis',
-      groupName: 'Red Group',
-      checkInStatus: 'Checked In',
-      checkInTime: '8:11 AM',
-      lastUpdateTime: '8:11 AM',
-    },
-    {
-      id: 'owner-summer-yellow-noah',
-      name: 'Noah Brown',
-      groupName: 'Yellow Group',
-      checkInStatus: 'Not Checked In',
-      checkInTime: 'Pending',
-      lastUpdateTime: 'Pending',
-    },
-  ];
-}
-
 const OWNER_MODULES = [
   'Students',
   'Staff',
@@ -6767,12 +8490,37 @@ const OWNER_MODULE_COLORS = {
 };
 
 const OWNER_SUMMER_CAMP_INITIAL_SUMMARY = {
-  total: 32,
-  'Blue Group': 12,
-  'Green Group': 8,
-  'Red Group': 6,
-  'Yellow Group': 6,
+  total: 0,
+  'Yellow Group': 0,
+  'Orange Group': 0,
+  'Green Group': 0,
+  'Blue Group': 0,
+  'Red Group': 0,
+  'Pink Group': 0,
+  'Purple Group': 0,
 };
+
+const OWNER_SUMMER_CAMP_GROUP_NAMES = [
+  'Yellow Group',
+  'Orange Group',
+  'Green Group',
+  'Blue Group',
+  'Red Group',
+  'Pink Group',
+  'Purple Group',
+];
+
+function getCampGroupDisplayName(group) {
+  return (
+    group?.name ||
+    group?.group_name ||
+    group?.title ||
+    group?.label ||
+    group?.camp_group_name ||
+    group?.display_name ||
+    ''
+  );
+}
 
 const OFFICIAL_LOGO = require('./assets/images/logo.png');
 const HEADER_PHOTO = require('./assets/images/header_kids.jpg');
@@ -6782,6 +8530,7 @@ function SummaryTile({ accent, title, value, note, fill, onPress, badge }) {
     blue: styles.tileBlue,
     green: styles.tileGreen,
     orange: styles.tileOrange,
+    pink: styles.tilePink,
     purple: styles.tilePurple,
     red: styles.tileRed,
     yellow: styles.tileYellow,
@@ -6875,77 +8624,305 @@ function OwnerNavCard({ accentColor, title, subtitle, onPress }) {
   );
 }
 
-function NotificationCard({ item }) {
-  const theme = getNotificationTheme(item.category);
+function RecipientMessageCard({ item, expanded, onPress }) {
+  const theme = getNotificationTheme(item.messageType);
 
   return (
-    <View
-      style={[
-        styles.notificationCard,
-        !item.read && styles.notificationCardUnread,
-      ]}
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => onPress(item)}
+      style={({ pressed }) => [pressed && styles.buttonPressed]}
     >
       <View
         style={[
-          styles.notificationAccentBar,
-          { backgroundColor: theme.accent },
+          styles.notificationCard,
+          !item.readAt && styles.notificationCardUnread,
         ]}
-      />
+      >
+        <View
+          style={[
+            styles.notificationAccentBar,
+            { backgroundColor: theme.accent },
+          ]}
+        />
 
-      <View style={styles.notificationCardBody}>
-        <View style={styles.notificationCardTitleRow}>
-          <Text style={styles.notificationCardTitle}>{item.title}</Text>
-          <View
-            style={[
-              styles.notificationStatusPill,
-              item.read
-                ? styles.notificationStatusPillRead
-                : styles.notificationStatusPillUnread,
-            ]}
-          >
-            <Text
+        <View style={styles.notificationCardBody}>
+          <View style={styles.notificationCardTitleRow}>
+            <Text style={styles.notificationCardTitle}>{item.title}</Text>
+            <View
               style={[
-                styles.notificationStatusPillText,
-                item.read
-                  ? styles.notificationStatusPillTextRead
-                  : styles.notificationStatusPillTextUnread,
+                styles.notificationStatusPill,
+                item.readAt
+                  ? styles.notificationStatusPillRead
+                  : styles.notificationStatusPillUnread,
               ]}
             >
-              {item.read ? 'Read' : 'Unread'}
-            </Text>
+              <Text
+                style={[
+                  styles.notificationStatusPillText,
+                  item.readAt
+                    ? styles.notificationStatusPillTextRead
+                    : styles.notificationStatusPillTextUnread,
+                ]}
+              >
+                {item.readAt ? 'Read' : 'Unread'}
+              </Text>
+            </View>
           </View>
-        </View>
 
-        <Text style={styles.notificationCardMessage}>{item.message}</Text>
-
-        <View style={styles.notificationMetaRow}>
-          <View
-            style={[
-              styles.notificationCategoryPill,
-              {
-                backgroundColor: theme.soft,
-                borderColor: theme.border,
-              },
-            ]}
+          <Text
+            style={styles.notificationCardMessage}
+            numberOfLines={expanded ? undefined : 2}
           >
-            <Text
+            {item.body || 'No message body provided.'}
+          </Text>
+
+          <View style={styles.notificationMetaRow}>
+            <View
               style={[
-                styles.notificationCategoryPillText,
-                { color: theme.accent },
+                styles.notificationCategoryPill,
+                {
+                  backgroundColor: theme.soft,
+                  borderColor: theme.border,
+                },
               ]}
             >
-              {item.category}
+              <Text
+                style={[
+                  styles.notificationCategoryPillText,
+                  { color: theme.accent },
+                ]}
+              >
+                {formatMessageTypeLabel(item.messageType)}
+              </Text>
+            </View>
+
+            <Text style={styles.notificationTime}>
+              {formatMessageDateTime(item.deliveredAt)}
             </Text>
           </View>
 
-          <Text style={styles.notificationTime}>{item.time}</Text>
+          {expanded ? (
+            <View style={styles.recipientMessageExpandedFooter}>
+              <Text style={styles.recipientMessageExpandedLabel}>
+                Delivered to your account
+              </Text>
+              <Text style={styles.recipientMessageExpandedValue}>
+                {item.readAt ? 'Opened' : 'Unread'}
+              </Text>
+            </View>
+          ) : null}
         </View>
       </View>
+    </Pressable>
+  );
+}
+
+function RecipientMessagesSection({
+  title,
+  subtitle,
+  messages = [],
+  loading,
+  error,
+  emptyText = 'No messages yet.',
+  expandedMessageId,
+  onToggleMessage,
+}) {
+  const unreadCount = messages.filter((item) => !item.readAt).length;
+
+  return (
+    <View style={styles.recipientMessagesSection}>
+      <View style={styles.parentSectionHeaderRow}>
+        <Text style={styles.parentSectionHeaderTitle}>{title}</Text>
+        <Text style={styles.parentSectionHeaderSubtle}>
+          {loading ? 'Loading...' : `${unreadCount} unread`}
+        </Text>
+      </View>
+
+      {subtitle ? <Text style={styles.notificationsIntroText}>{subtitle}</Text> : null}
+
+      {loading ? (
+        <Text style={styles.recipientMessagesStateText}>Loading messages...</Text>
+      ) : error ? (
+        <Text style={styles.errorText}>{error}</Text>
+      ) : messages.length ? (
+        <View style={styles.notificationsList}>
+          {messages.map((message) => (
+            <RecipientMessageCard
+              key={message.id}
+              item={message}
+              expanded={expandedMessageId === message.id}
+              onPress={onToggleMessage}
+            />
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.recipientMessagesStateText}>{emptyText}</Text>
+      )}
     </View>
   );
 }
 
-function NotificationsScreen({ onBack, onLogout }) {
+function ParentAuthorizedPickupsScreen({ onBack, onLogout, currentUserId }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [linkedChildren, setLinkedChildren] = useState([]);
+  const [selectedChildId, setSelectedChildId] = useState('');
+  const [pickupRows, setPickupRows] = useState([]);
+  const [fullName, setFullName] = useState('');
+  const [relationship, setRelationship] = useState('');
+  const [phone, setPhone] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const loadPickupData = useCallback(async () => {
+    if (!currentUserId) {
+      setLoading(false);
+      setError('');
+      setLinkedChildren([]);
+      setPickupRows([]);
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const { data: links, error: linksError } = await supabase
+        .from('child_parent_links')
+        .select('child_id')
+        .eq('parent_profile_id', currentUserId);
+
+      if (linksError) {
+        throw new Error(linksError.message || 'Could not load linked children.');
+      }
+
+      const childIds = Array.from(
+        new Set((Array.isArray(links) ? links : []).map((row) => row.child_id).filter(Boolean))
+      );
+
+      if (!childIds.length) {
+        setLinkedChildren([]);
+        setPickupRows([]);
+        setSelectedChildId('');
+        setLoading(false);
+        return;
+      }
+
+      const { data: childrenData, error: childrenError } = await supabase
+        .from('children')
+        .select('*')
+        .in('id', childIds);
+
+      if (childrenError) {
+        throw new Error(childrenError.message || 'Could not load linked children.');
+      }
+
+      const children = Array.isArray(childrenData) ? childrenData : [];
+      setLinkedChildren(children);
+      setSelectedChildId((current) => {
+        if (children.length === 1) {
+          return children[0].id;
+        }
+        if (current && children.some((child) => child.id === current)) {
+          return current;
+        }
+        return children[0]?.id || '';
+      });
+      if (!children.length) {
+        setPickupRows([]);
+      }
+    } catch (loadError) {
+      setError(loadError?.message || 'Could not load authorized pickups.');
+      setLinkedChildren([]);
+      setPickupRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUserId]);
+
+  useEffect(() => {
+    loadPickupData();
+  }, [loadPickupData]);
+
+  useEffect(() => {
+    const loadChildPickups = async () => {
+      if (!selectedChildId) {
+        setPickupRows([]);
+        return;
+      }
+
+      setLoading(true);
+      setError('');
+
+      const { data, error: pickupsError } = await supabase
+        .from('authorized_pickups')
+        .select('id, child_id, full_name, relationship, phone, created_at')
+        .eq('child_id', selectedChildId)
+        .order('created_at', { ascending: false });
+
+      if (pickupsError) {
+        setError(pickupsError.message || 'Could not load authorized pickups.');
+        setPickupRows([]);
+        setLoading(false);
+        return;
+      }
+
+      setPickupRows(Array.isArray(data) ? data : []);
+      setLoading(false);
+    };
+
+    if (linkedChildren.length) {
+      loadChildPickups();
+    }
+  }, [linkedChildren.length, selectedChildId]);
+
+  const selectedChild = linkedChildren.find((child) => child.id === selectedChildId) || null;
+  const selectedChildPickups = pickupRows.filter((row) => row.child_id === selectedChildId);
+
+  const handleCancel = () => {
+    setFullName('');
+    setRelationship('');
+    setPhone('');
+    setError('');
+  };
+
+  const handleSavePickup = async () => {
+    const cleanName = fullName.trim();
+    const cleanRelationship = relationship.trim();
+    const cleanPhone = phone.trim();
+
+    if (!selectedChild?.id) {
+      setError('Select a child first.');
+      return;
+    }
+
+    if (!cleanName || !cleanRelationship || !cleanPhone) {
+      setError('Please fill in the required fields.');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    const { error: insertError } = await supabase.from('authorized_pickups').insert({
+      child_id: selectedChild.id,
+      full_name: cleanName,
+      relationship: cleanRelationship,
+      phone: cleanPhone,
+    });
+
+    if (insertError) {
+      setError(insertError.message || 'Could not save authorized pickup.');
+      setSaving(false);
+      return;
+    }
+
+    await loadPickupData();
+    handleCancel();
+    setSaving(false);
+    Alert.alert('Authorized pickup saved.');
+  };
+
   return (
     <View style={styles.parentHomePage}>
       <ScrollView
@@ -6968,16 +8945,19 @@ function NotificationsScreen({ onBack, onLogout }) {
               <Text style={styles.childProfileBackButtonText}>Back</Text>
             </Pressable>
 
-            <Text style={styles.childProfileHeaderLabel}>Notifications</Text>
+            <Text style={styles.childProfileHeaderLabel}>Authorized Pickups</Text>
           </View>
 
           <View style={styles.notificationsHeroMain}>
             <View style={styles.notificationsHeroTextBlock}>
               <Text style={styles.parentHeroKicker}>Advanced Education</Text>
-              <Text style={styles.parentHeroGreeting}>Mia Carter</Text>
+              <Text style={styles.parentHeroGreeting}>Authorized Pickups</Text>
               <View style={styles.notificationsHeroTag}>
-                <Text style={styles.notificationsHeroTagText}>Messages</Text>
+                <Text style={styles.notificationsHeroTagText}>Family Access</Text>
               </View>
+              <Text style={styles.notificationsHeroSubtitle}>
+                Manage people allowed to pick up your child
+              </Text>
             </View>
 
             <View style={styles.parentHeroPhotoWrap}>
@@ -6991,23 +8971,664 @@ function NotificationsScreen({ onBack, onLogout }) {
         </View>
 
         <View style={styles.parentHomeContent}>
-          <View style={styles.notificationsIntroCard}>
+          <View style={styles.profileCard}>
             <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Inbox</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>
-                {MOCK_NOTIFICATIONS.filter((item) => !item.read).length} unread
-              </Text>
+              <Text style={styles.parentSectionHeaderTitle}>Select Child</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Linked accounts</Text>
             </View>
-            <Text style={styles.notificationsIntroText}>
-              Simple updates from Mia&apos;s day.
-            </Text>
+
+            {loading ? (
+              <Text style={styles.parentAttendanceStateText}>Loading authorized pickups...</Text>
+            ) : error ? (
+              <Text style={styles.errorText}>{error}</Text>
+            ) : linkedChildren.length ? (
+              <View style={styles.ownerFilterPillRow}>
+                {linkedChildren.map((child) => {
+                  const isActive = selectedChildId === child.id;
+                  return (
+                    <Pressable
+                      key={child.id}
+                      accessibilityRole="button"
+                      onPress={() => setSelectedChildId(child.id)}
+                      style={({ pressed }) => [
+                        styles.ownerFilterPill,
+                        isActive && styles.ownerFilterPillActive,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.ownerFilterPillText,
+                          isActive && styles.ownerFilterPillTextActive,
+                        ]}
+                      >
+                        {`${child.first_name || ''} ${child.last_name || ''}`.trim() || 'Unnamed Student'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={styles.parentAttendanceStateText}>
+                No children linked to this account.
+              </Text>
+            )}
           </View>
 
-          <View style={styles.notificationsList}>
-            {MOCK_NOTIFICATIONS.map((item) => (
-              <NotificationCard key={item.title} item={item} />
-            ))}
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>New Pickup Contact</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                {selectedChild ? `${selectedChild.first_name || ''} ${selectedChild.last_name || ''}`.trim() : 'No child selected'}
+              </Text>
+            </View>
+
+            <Text style={styles.ownerStudentFormLabel}>Full Name</Text>
+            <TextInput
+              placeholder="Full Name"
+              placeholderTextColor={COLORS.muted}
+              value={fullName}
+              onChangeText={setFullName}
+              style={styles.ownerSearchInput}
+            />
+
+            <Text style={styles.ownerStudentFormLabel}>Relationship</Text>
+            <TextInput
+              placeholder="Relationship"
+              placeholderTextColor={COLORS.muted}
+              value={relationship}
+              onChangeText={setRelationship}
+              style={styles.ownerSearchInput}
+            />
+
+            <Text style={styles.ownerStudentFormLabel}>Phone Number</Text>
+            <TextInput
+              placeholder="Phone Number"
+              placeholderTextColor={COLORS.muted}
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              style={styles.ownerSearchInput}
+            />
+
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={saving}
+              onPress={handleSavePickup}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && styles.pressedButton,
+                saving && { opacity: 0.75 },
+              ]}
+            >
+              <Text style={styles.primaryButtonText}>
+                {saving ? 'Saving Pickup...' : 'Save Pickup'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={saving}
+              onPress={handleCancel}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                pressed && styles.pressedButton,
+                { marginTop: 12 },
+              ]}
+            >
+              <Text style={styles.secondaryButtonText}>Cancel</Text>
+            </Pressable>
           </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Authorized Pickups</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                {selectedChildPickups.length} on file
+              </Text>
+            </View>
+
+            {loading ? (
+              <Text style={styles.parentAttendanceStateText}>Loading authorized pickups...</Text>
+            ) : selectedChildPickups.length ? (
+              <View style={styles.profileList}>
+                {selectedChildPickups.map((pickup) => (
+                  <View key={pickup.id} style={styles.profileListRow}>
+                    <View style={styles.profileListDot} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.profileListLabel}>{pickup.full_name}</Text>
+                      <Text style={styles.profileListValue}>{pickup.relationship}</Text>
+                      <Text style={styles.profileListValue}>{pickup.phone}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.parentAttendanceStateText}>No authorized pickups on file.</Text>
+            )}
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function ParentEmergencyContactsScreen({ onBack, onLogout, currentUserId }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [linkedChildren, setLinkedChildren] = useState([]);
+  const [selectedChildId, setSelectedChildId] = useState('');
+  const [contactRows, setContactRows] = useState([]);
+  const [fullName, setFullName] = useState('');
+  const [relationship, setRelationship] = useState('');
+  const [phone, setPhone] = useState('');
+  const [priority, setPriority] = useState('');
+  const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const loadEmergencyData = useCallback(async () => {
+    if (!currentUserId) {
+      setLoading(false);
+      setError('');
+      setLinkedChildren([]);
+      setContactRows([]);
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const { data: links, error: linksError } = await supabase
+        .from('child_parent_links')
+        .select('child_id')
+        .eq('parent_profile_id', currentUserId);
+
+      if (linksError) {
+        throw new Error(linksError.message || 'Could not load linked children.');
+      }
+
+      const childIds = Array.from(
+        new Set((Array.isArray(links) ? links : []).map((row) => row.child_id).filter(Boolean))
+      );
+
+      if (!childIds.length) {
+        setLinkedChildren([]);
+        setContactRows([]);
+        setSelectedChildId('');
+        setLoading(false);
+        return;
+      }
+
+      const { data: childrenData, error: childrenError } = await supabase
+        .from('children')
+        .select('*')
+        .in('id', childIds);
+
+      if (childrenError) {
+        throw new Error(childrenError.message || 'Could not load linked children.');
+      }
+
+      const children = Array.isArray(childrenData) ? childrenData : [];
+      setLinkedChildren(children);
+      setSelectedChildId((current) => {
+        if (children.length === 1) {
+          return children[0].id;
+        }
+        if (current && children.some((child) => child.id === current)) {
+          return current;
+        }
+        return children[0]?.id || '';
+      });
+      if (!children.length) {
+        setContactRows([]);
+      }
+    } catch (loadError) {
+      setError(loadError?.message || 'Could not load emergency contacts.');
+      setLinkedChildren([]);
+      setContactRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUserId]);
+
+  useEffect(() => {
+    loadEmergencyData();
+  }, [loadEmergencyData]);
+
+  useEffect(() => {
+    const loadChildContacts = async () => {
+      if (!selectedChildId) {
+        setContactRows([]);
+        return;
+      }
+
+      setLoading(true);
+      setError('');
+
+      const { data, error: contactsError } = await supabase
+        .from('emergency_contacts')
+        .select('id, child_id, full_name, relationship, phone, priority, created_at')
+        .eq('child_id', selectedChildId)
+        .order('created_at', { ascending: false });
+
+      if (contactsError) {
+        setError(contactsError.message || 'Could not load emergency contacts.');
+        setContactRows([]);
+        setLoading(false);
+        return;
+      }
+
+      setContactRows(Array.isArray(data) ? data : []);
+      setLoading(false);
+    };
+
+    if (linkedChildren.length) {
+      loadChildContacts();
+    }
+  }, [linkedChildren.length, selectedChildId]);
+
+  const selectedChild = linkedChildren.find((child) => child.id === selectedChildId) || null;
+  const selectedChildContacts = contactRows.filter((row) => row.child_id === selectedChildId);
+
+  const handleCancel = () => {
+    setFullName('');
+    setRelationship('');
+    setPhone('');
+    setPriority('');
+    setPriorityMenuOpen(false);
+    setError('');
+  };
+
+  const handleSaveContact = async () => {
+    const cleanName = fullName.trim();
+    const cleanRelationship = relationship.trim();
+    const cleanPhone = phone.trim();
+    const cleanPriority = Number(priority);
+
+    if (!selectedChild?.id) {
+      setError('Select a child first.');
+      return;
+    }
+
+    if (
+      !cleanName ||
+      !cleanRelationship ||
+      !cleanPhone ||
+      !EMERGENCY_CONTACT_PRIORITY_OPTIONS.some((option) => option.value === cleanPriority)
+    ) {
+      setError('Please fill in the required fields.');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    const { error: insertError } = await supabase.from('emergency_contacts').insert({
+      child_id: selectedChild.id,
+      full_name: cleanName,
+      relationship: cleanRelationship,
+      phone: cleanPhone,
+      priority: cleanPriority,
+    });
+
+    if (insertError) {
+      setError(insertError.message || 'Could not save emergency contact.');
+      setSaving(false);
+      return;
+    }
+
+    await loadEmergencyData();
+    handleCancel();
+    setSaving(false);
+    Alert.alert('Emergency contact saved.');
+  };
+
+  const selectedPriorityOption =
+    EMERGENCY_CONTACT_PRIORITY_OPTIONS.find((option) => option.value === Number(priority)) || null;
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.notificationsHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Emergency Contacts</Text>
+          </View>
+
+          <View style={styles.notificationsHeroMain}>
+            <View style={styles.notificationsHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Emergency Contacts</Text>
+              <View style={styles.notificationsHeroTag}>
+                <Text style={styles.notificationsHeroTagText}>Safety Access</Text>
+              </View>
+              <Text style={styles.notificationsHeroSubtitle}>
+                Manage emergency contacts for your child
+              </Text>
+            </View>
+
+            <View style={styles.parentHeroPhotoWrap}>
+              <Image source={HEADER_PHOTO} resizeMode="cover" style={styles.parentHeroPhoto} />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Select Child</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Linked accounts</Text>
+            </View>
+
+            {loading ? (
+              <Text style={styles.parentAttendanceStateText}>Loading emergency contacts...</Text>
+            ) : error ? (
+              <Text style={styles.errorText}>{error}</Text>
+            ) : linkedChildren.length ? (
+              <View style={styles.ownerFilterPillRow}>
+                {linkedChildren.map((child) => {
+                  const isActive = selectedChildId === child.id;
+                  return (
+                    <Pressable
+                      key={child.id}
+                      accessibilityRole="button"
+                      onPress={() => setSelectedChildId(child.id)}
+                      style={({ pressed }) => [
+                        styles.ownerFilterPill,
+                        isActive && styles.ownerFilterPillActive,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.ownerFilterPillText,
+                          isActive && styles.ownerFilterPillTextActive,
+                        ]}
+                      >
+                        {`${child.first_name || ''} ${child.last_name || ''}`.trim() ||
+                          'Unnamed Student'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={styles.parentAttendanceStateText}>
+                No children linked to this account.
+              </Text>
+            )}
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>New Emergency Contact</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                {selectedChild
+                  ? `${selectedChild.first_name || ''} ${selectedChild.last_name || ''}`.trim()
+                  : 'No child selected'}
+              </Text>
+            </View>
+
+            <Text style={styles.ownerStudentFormLabel}>Full Name</Text>
+            <TextInput
+              placeholder="Full Name"
+              placeholderTextColor={COLORS.muted}
+              value={fullName}
+              onChangeText={setFullName}
+              style={styles.ownerSearchInput}
+            />
+
+            <Text style={styles.ownerStudentFormLabel}>Relationship</Text>
+            <TextInput
+              placeholder="Relationship"
+              placeholderTextColor={COLORS.muted}
+              value={relationship}
+              onChangeText={setRelationship}
+              style={styles.ownerSearchInput}
+            />
+
+            <Text style={styles.ownerStudentFormLabel}>Phone Number</Text>
+            <TextInput
+              placeholder="Phone Number"
+              placeholderTextColor={COLORS.muted}
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              style={styles.ownerSearchInput}
+            />
+
+            <Text style={styles.ownerStudentFormLabel}>Priority</Text>
+            <View>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setPriorityMenuOpen((current) => !current)}
+                style={({ pressed }) => [
+                  styles.ownerSearchInput,
+                  styles.ownerPriorityDropdownTab,
+                  pressed && styles.pressedButton,
+                ]}
+              >
+                <Text style={styles.ownerPriorityDropdownTabText}>
+                  {selectedPriorityOption
+                    ? formatEmergencyContactPriority(selectedPriorityOption.value)
+                    : 'Select priority'}
+                </Text>
+                <Text style={styles.ownerPriorityDropdownChevron}>
+                  {priorityMenuOpen ? '▴' : '▾'}
+                </Text>
+              </Pressable>
+
+              {priorityMenuOpen ? (
+                <View style={styles.ownerPriorityDropdownMenu}>
+                  {EMERGENCY_CONTACT_PRIORITY_OPTIONS.map((option) => {
+                    const isActive = Number(priority) === option.value;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        accessibilityRole="button"
+                        onPress={() => {
+                          setPriority(String(option.value));
+                          setPriorityMenuOpen(false);
+                        }}
+                        style={({ pressed }) => [
+                          styles.ownerPriorityDropdownItem,
+                          isActive && styles.ownerPriorityDropdownItemActive,
+                          pressed && styles.pressedButton,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.ownerFilterPillText,
+                            isActive && styles.ownerFilterPillTextActive,
+                          ]}
+                        >
+                          {formatEmergencyContactPriority(option.value)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
+
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={saving}
+              onPress={handleSaveContact}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && styles.pressedButton,
+                saving && { opacity: 0.75 },
+              ]}
+            >
+              <Text style={styles.primaryButtonText}>
+                {saving ? 'Saving Contact...' : 'Save Contact'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={saving}
+              onPress={handleCancel}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                pressed && styles.pressedButton,
+                { marginTop: 12 },
+              ]}
+            >
+              <Text style={styles.secondaryButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Emergency Contacts</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                {selectedChildContacts.length} on file
+              </Text>
+            </View>
+
+            {loading ? (
+              <Text style={styles.parentAttendanceStateText}>Loading emergency contacts...</Text>
+            ) : selectedChildContacts.length ? (
+              <View style={styles.profileList}>
+                {selectedChildContacts.map((contact) => (
+                  <View key={contact.id} style={styles.profileListRow}>
+                    <View style={styles.profileListDot} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.profileListLabel}>{contact.full_name}</Text>
+                      <Text style={styles.profileListValue}>{contact.relationship}</Text>
+                      <Text style={styles.profileListValue}>{contact.phone}</Text>
+                      <Text style={styles.profileListValue}>
+                        {formatEmergencyContactPriority(contact.priority)}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.parentAttendanceStateText}>No emergency contacts on file.</Text>
+            )}
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function NotificationsScreen({
+  onBack,
+  onLogout,
+  messages,
+  loading,
+  error,
+  expandedMessageId,
+  onToggleMessage,
+  title = 'Notifications',
+  subtitle = 'Center updates and announcements',
+  introTitle = 'Inbox',
+  introText = 'Center updates and announcements',
+}) {
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.notificationsHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>{title}</Text>
+          </View>
+
+          <View style={styles.notificationsHeroMain}>
+            <View style={styles.notificationsHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Mia Carter</Text>
+              <View style={styles.notificationsHeroTag}>
+                <Text style={styles.notificationsHeroTagText}>Messages</Text>
+              </View>
+              <Text style={styles.notificationsHeroSubtitle}>{subtitle}</Text>
+            </View>
+
+            <View style={styles.parentHeroPhotoWrap}>
+              <Image
+                source={HEADER_PHOTO}
+                resizeMode="cover"
+                style={styles.parentHeroPhoto}
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <RecipientMessagesSection
+            title={introTitle}
+            subtitle={introText}
+            messages={messages}
+            loading={loading}
+            error={error}
+            expandedMessageId={expandedMessageId}
+            onToggleMessage={onToggleMessage}
+          />
 
           <Pressable
             accessibilityRole="button"
@@ -7028,10 +9649,10 @@ function NotificationsScreen({ onBack, onLogout }) {
 
 function LoginScreen({
   email,
-  inviteCode,
+  password,
   error,
   onChangeEmail,
-  onChangeInviteCode,
+  onChangePassword,
   onLogin,
   onFillTestAccount,
   onOpenActivateAccount,
@@ -7084,15 +9705,16 @@ function LoginScreen({
             value={email}
           />
 
-          <Text style={styles.inputLabel}>Invite Code</Text>
+          <Text style={styles.inputLabel}>Password</Text>
           <TextInput
-            autoCapitalize="characters"
+            autoCapitalize="none"
             autoCorrect={false}
-            onChangeText={onChangeInviteCode}
-            placeholder="MIA-4821"
+            secureTextEntry={true}
+            onChangeText={onChangePassword}
+            placeholder="Enter password"
             placeholderTextColor={COLORS.muted}
             style={styles.input}
-            value={inviteCode}
+            value={password}
           />
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -7105,14 +9727,14 @@ function LoginScreen({
             <Text style={styles.primaryButtonText}>Enter Portal</Text>
           </Pressable>
 
-          <View style={styles.loginActivationPrompt}>
-            <Text style={styles.loginActivationPromptText}>First time here?</Text>
+          <View style={styles.inviteCodePrompt}>
+            <Text style={styles.inviteCodeText}>Have an invite code?</Text>
             <Pressable
               accessibilityRole="button"
               onPress={onOpenActivateAccount}
-              style={({ pressed }) => [styles.loginActivationButton, pressed && styles.buttonPressed]}
+              style={({ pressed }) => [pressed && styles.buttonPressed]}
             >
-              <Text style={styles.loginActivationButtonText}>Activate Account</Text>
+              <Text style={styles.activateAccountText}>Activate Account</Text>
             </Pressable>
           </View>
         </View>
@@ -7204,7 +9826,7 @@ function ActivateAccountScreen({
               <TextInput
                 autoCapitalize="characters"
                 autoCorrect={false}
-                onChangeText={onChangeCode}
+                onChangeText={(text) => onChangeCode(text.toUpperCase())}
                 placeholder="MIA-4821"
                 placeholderTextColor={COLORS.muted}
                 style={styles.input}
@@ -7220,7 +9842,7 @@ function ActivateAccountScreen({
                 onChangeText={onChangePassword}
                 placeholder="Create password"
                 placeholderTextColor={COLORS.muted}
-                secureTextEntry
+                secureTextEntry={true}
                 style={styles.input}
                 value={password}
               />
@@ -7232,7 +9854,7 @@ function ActivateAccountScreen({
                 onChangeText={onChangeConfirmPassword}
                 placeholder="Confirm password"
                 placeholderTextColor={COLORS.muted}
-                secureTextEntry
+                secureTextEntry={true}
                 style={styles.input}
                 value={confirmPassword}
               />
@@ -7270,7 +9892,7 @@ function ActivateAccountScreen({
 
 export default function App() {
   const [email, setEmail] = useState('parent@test.com');
-  const [inviteCode, setInviteCode] = useState('MIA-4821');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [screen, setScreen] = useState('login');
   const [activationEmail, setActivationEmail] = useState('');
@@ -7283,7 +9905,6 @@ export default function App() {
   const [staffStatus, setStaffStatus] = useState(STAFF_MEMBER.status);
   const [lastClockInTime, setLastClockInTime] = useState('');
   const [lastClockOutTime, setLastClockOutTime] = useState('');
-  const [staffMockTimeIndex, setStaffMockTimeIndex] = useState(0);
   const [staffBeforeAfterChildren, setStaffBeforeAfterChildren] = useState(() =>
     createStaffBeforeAfterChildren()
   );
@@ -7291,12 +9912,24 @@ export default function App() {
     () => createStaffBeforeAfterChildren()[0]?.id ?? null
   );
   const [staffBeforeAfterPickupChildId, setStaffBeforeAfterPickupChildId] = useState(null);
+  const [staffBeforeAfterLoading, setStaffBeforeAfterLoading] = useState(true);
+  const [staffBeforeAfterError, setStaffBeforeAfterError] = useState('');
+  const [staffBeforeAfterSavingChildId, setStaffBeforeAfterSavingChildId] = useState('');
   const [staffSummerCampGroups, setStaffSummerCampGroups] = useState(() =>
     createStaffSummerCampGroups()
   );
-  const [ownerSummerCampChildren, setOwnerSummerCampChildren] = useState(() =>
-    createOwnerSummerCampChildren()
-  );
+  const [staffSummerCampLoading, setStaffSummerCampLoading] = useState(true);
+  const [staffSummerCampError, setStaffSummerCampError] = useState('');
+  const [staffSummerCampSavingChildId, setStaffSummerCampSavingChildId] = useState('');
+  const [staffSummerCampSendingGroup, setStaffSummerCampSendingGroup] = useState('');
+  const [ownerSummerCampChildren, setOwnerSummerCampChildren] = useState([]);
+  const [ownerSummerCampGroups, setOwnerSummerCampGroups] = useState([]);
+  const [ownerSummerCampLoading, setOwnerSummerCampLoading] = useState(true);
+  const [ownerSummerCampError, setOwnerSummerCampError] = useState('');
+  const [ownerSummerCampSavingChildId, setOwnerSummerCampSavingChildId] = useState('');
+  const [ownerSummerCampGroupPickerChildId, setOwnerSummerCampGroupPickerChildId] = useState('');
+  const [ownerSummerCampSelectedGroupByChildId, setOwnerSummerCampSelectedGroupByChildId] =
+    useState({});
   const [staffSummerCampSelectedGroup, setStaffSummerCampSelectedGroup] = useState(
     'Blue Group'
   );
@@ -7307,6 +9940,46 @@ export default function App() {
   const [staffDailyNotesSavedEntries, setStaffDailyNotesSavedEntries] = useState([]);
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [parentAttendanceLoading, setParentAttendanceLoading] = useState(true);
+  const [parentAttendanceError, setParentAttendanceError] = useState('');
+  const [parentAttendanceHistory, setParentAttendanceHistory] = useState([]);
+  const [parentBeforeAfterLoading, setParentBeforeAfterLoading] = useState(true);
+  const [parentBeforeAfterError, setParentBeforeAfterError] = useState('');
+  const [parentBeforeAfterRecords, setParentBeforeAfterRecords] = useState([]);
+  const [parentDailyNotesLoading, setParentDailyNotesLoading] = useState(true);
+  const [parentDailyNotesError, setParentDailyNotesError] = useState('');
+  const [parentDailyNotesHistory, setParentDailyNotesHistory] = useState([]);
+  const [parentTimelineLoading, setParentTimelineLoading] = useState(true);
+  const [parentTimelineError, setParentTimelineError] = useState('');
+  const [parentTimelineHistory, setParentTimelineHistory] = useState([]);
+  const [parentDetailSectionOpen, setParentDetailSectionOpen] = useState(null);
+  const [recipientMessages, setRecipientMessages] = useState([]);
+  const [recipientMessagesLoading, setRecipientMessagesLoading] = useState(true);
+  const [recipientMessagesError, setRecipientMessagesError] = useState('');
+  const [recipientMessagesExpandedId, setRecipientMessagesExpandedId] = useState(null);
+  const [ownerDailyNotesPending, setOwnerDailyNotesPending] = useState([]);
+  const [ownerDailyNotesPendingLoading, setOwnerDailyNotesPendingLoading] = useState(true);
+  const [ownerDailyNotesPendingError, setOwnerDailyNotesPendingError] = useState('');
+  const [ownerDailyNotesReviewActionId, setOwnerDailyNotesReviewActionId] = useState('');
+  const [ownerBeforeAfterCounts, setOwnerBeforeAfterCounts] = useState({
+    droppedOff: 0,
+    onBus: 0,
+    returned: 0,
+    pickedUp: 0,
+  });
+  const [ownerBeforeAfterCountsLoading, setOwnerBeforeAfterCountsLoading] = useState(true);
+  const [ownerBeforeAfterCountsError, setOwnerBeforeAfterCountsError] = useState('');
+  const [ownerMessagesExpandedId, setOwnerMessagesExpandedId] = useState(null);
+  const [authorizedPickupRows, setAuthorizedPickupRows] = useState([]);
+  const [authorizedPickupRowsLoading, setAuthorizedPickupRowsLoading] = useState(true);
+  const [authorizedPickupRowsError, setAuthorizedPickupRowsError] = useState('');
+  const [childProfilePickupRows, setChildProfilePickupRows] = useState([]);
+  const [childProfilePickupLoading, setChildProfilePickupLoading] = useState(true);
+  const [childProfilePickupError, setChildProfilePickupError] = useState('');
+  const [childProfileSelectedChild, setChildProfileSelectedChild] = useState(null);
+  const [childProfileEmergencyRows, setChildProfileEmergencyRows] = useState([]);
+  const [childProfileEmergencyLoading, setChildProfileEmergencyLoading] = useState(true);
+  const [childProfileEmergencyError, setChildProfileEmergencyError] = useState('');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -7328,6 +10001,1602 @@ export default function App() {
       return;
     }
   }, [authLoading, session]);
+
+  const loadParentAttendanceHistory = useCallback(async () => {
+    if (!session?.user?.id) {
+      setParentAttendanceHistory([]);
+      setParentAttendanceError('');
+      setParentAttendanceLoading(false);
+      return;
+    }
+
+    setParentAttendanceLoading(true);
+    setParentAttendanceError('');
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('id', session.user.id)
+      .single();
+
+    if (profileError || !profile || profile.role !== 'parent') {
+      setParentAttendanceHistory([]);
+      setParentAttendanceLoading(false);
+      return;
+    }
+
+    const { data: linkRows, error: linksError } = await supabase
+      .from('child_parent_links')
+      .select('child_id')
+      .eq('parent_profile_id', profile.id);
+
+    if (linksError) {
+      setParentAttendanceHistory([]);
+      setParentAttendanceError(linksError.message || 'Could not load attendance history.');
+      setParentAttendanceLoading(false);
+      return;
+    }
+
+    const childIds = Array.from(
+      new Set((Array.isArray(linkRows) ? linkRows : []).map((linkRow) => linkRow.child_id))
+    );
+
+    if (!childIds.length) {
+      setParentAttendanceHistory([]);
+      setParentAttendanceLoading(false);
+      return;
+    }
+
+    const { data: childrenData, error: childrenError } = await supabase
+      .from('children')
+      .select('id, first_name, last_name, room')
+      .in('id', childIds);
+
+    if (childrenError) {
+      setParentAttendanceHistory([]);
+      setParentAttendanceError(childrenError.message || 'Could not load attendance history.');
+      setParentAttendanceLoading(false);
+      return;
+    }
+
+    const children = Array.isArray(childrenData) ? childrenData : [];
+
+    const historyResults = await Promise.all(
+      children.map(async (child) => {
+        const { data: events, error: eventsError } = await supabase
+          .from('attendance_events')
+          .select('id, child_id, event_type, event_time')
+          .eq('child_id', child.id)
+          .order('event_time', { ascending: false });
+
+        return {
+          child,
+          events: Array.isArray(events) ? events : [],
+          error: eventsError,
+        };
+      })
+    );
+
+    const firstEventError = historyResults.find((result) => result.error)?.error;
+
+    if (firstEventError) {
+      setParentAttendanceError(firstEventError.message || 'Could not load attendance history.');
+    }
+
+    setParentAttendanceHistory(
+      historyResults.map(({ child, events }) => ({
+        id: child.id,
+        name: `${child.first_name || ''} ${child.last_name || ''}`.trim() || 'Unnamed Student',
+        room: child.room || 'Room not set',
+        events,
+      }))
+    );
+    setParentAttendanceLoading(false);
+  }, [session?.user?.id]);
+
+  const loadParentBeforeAfterData = useCallback(async () => {
+    if (!session?.user?.id) {
+      setParentBeforeAfterRecords([]);
+      setParentBeforeAfterError('');
+      setParentBeforeAfterLoading(false);
+      return;
+    }
+
+    setParentBeforeAfterLoading(true);
+    setParentBeforeAfterError('');
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError || !profile || profile.role !== 'parent') {
+        setParentBeforeAfterRecords([]);
+        setParentBeforeAfterLoading(false);
+        return;
+      }
+
+      const { data: linkRows, error: linksError } = await supabase
+        .from('child_parent_links')
+        .select('child_id')
+        .eq('parent_profile_id', profile.id);
+
+      if (linksError) {
+        throw new Error(linksError.message || 'Could not load Before & After Care.');
+      }
+
+      const childIds = Array.from(
+        new Set((Array.isArray(linkRows) ? linkRows : []).map((linkRow) => linkRow.child_id))
+      );
+
+      if (!childIds.length) {
+        setParentBeforeAfterRecords([]);
+        setParentBeforeAfterLoading(false);
+        return;
+      }
+
+      const { data: childrenData, error: childrenError } = await supabase
+        .from('children')
+        .select('id, first_name, last_name, room')
+        .in('id', childIds);
+
+      if (childrenError) {
+        throw new Error(childrenError.message || 'Could not load Before & After Care.');
+      }
+
+      const children = Array.isArray(childrenData) ? childrenData : [];
+
+      const { data: sessionRows, error: sessionError } = await supabase
+        .from('before_after_care_sessions')
+        .select(
+          'id, child_id, date, drop_off_time, bus_departure_time, returned_time, pickup_time, morning_minutes, afternoon_minutes, total_minutes, status, created_at'
+        )
+        .in('child_id', childIds)
+        .eq('date', today)
+        .order('created_at', { ascending: false });
+
+      if (sessionError) {
+        throw new Error(sessionError.message || 'Could not load Before & After Care.');
+      }
+
+      const sessions = Array.isArray(sessionRows) ? sessionRows : [];
+      const sessionsByChildId = sessions.reduce((acc, row) => {
+        if (!acc[row.child_id]) {
+          acc[row.child_id] = row;
+        }
+        return acc;
+      }, {});
+
+      const records = children
+        .map((child) => {
+          const sessionRow = sessionsByChildId[child.id];
+          if (!sessionRow) {
+            return null;
+          }
+
+          return {
+            id: sessionRow.id,
+            childId: child.id,
+            childName:
+              `${child.first_name || ''} ${child.last_name || ''}`.trim() || 'Unnamed Student',
+            room: child.room || 'Room not set',
+            status: sessionRow.status || 'ready_for_drop_off',
+            drop_off_time: sessionRow.drop_off_time,
+            bus_departure_time: sessionRow.bus_departure_time,
+            returned_time: sessionRow.returned_time,
+            pickup_time: sessionRow.pickup_time,
+            morning_minutes: sessionRow.morning_minutes,
+            afternoon_minutes: sessionRow.afternoon_minutes,
+            total_minutes: sessionRow.total_minutes,
+          };
+        })
+        .filter(Boolean);
+
+      setParentBeforeAfterRecords(records);
+    } catch (loadError) {
+      setParentBeforeAfterError(
+        loadError?.message || 'Could not load Before & After Care.'
+      );
+      setParentBeforeAfterRecords([]);
+    } finally {
+      setParentBeforeAfterLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const loadParentDailyNotes = useCallback(async () => {
+    if (!session?.user?.id) {
+      setParentDailyNotesHistory([]);
+      setParentDailyNotesError('');
+      setParentDailyNotesLoading(false);
+      return;
+    }
+
+    setParentDailyNotesLoading(true);
+    setParentDailyNotesError('');
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('id', session.user.id)
+      .single();
+
+    if (profileError || !profile || profile.role !== 'parent') {
+      setParentDailyNotesHistory([]);
+      setParentDailyNotesLoading(false);
+      return;
+    }
+
+    const { data: linkRows, error: linksError } = await supabase
+      .from('child_parent_links')
+      .select('child_id')
+      .eq('parent_profile_id', profile.id);
+
+    if (linksError) {
+      setParentDailyNotesHistory([]);
+      setParentDailyNotesError(linksError.message || 'Could not load daily notes.');
+      setParentDailyNotesLoading(false);
+      return;
+    }
+
+    const childIds = Array.from(
+      new Set((Array.isArray(linkRows) ? linkRows : []).map((linkRow) => linkRow.child_id))
+    );
+
+    if (!childIds.length) {
+      setParentDailyNotesHistory([]);
+      setParentDailyNotesLoading(false);
+      return;
+    }
+
+    const { data: childrenData, error: childrenError } = await supabase
+      .from('children')
+      .select('id, first_name, last_name')
+      .in('id', childIds);
+
+    if (childrenError) {
+      setParentDailyNotesHistory([]);
+      setParentDailyNotesError(childrenError.message || 'Could not load daily notes.');
+      setParentDailyNotesLoading(false);
+      return;
+    }
+
+    const children = Array.isArray(childrenData) ? childrenData : [];
+    const childById = children.reduce((acc, child) => {
+      acc[child.id] = child;
+      return acc;
+    }, {});
+
+    const { data: notesData, error: notesError } = await supabase
+      .from('daily_notes')
+      .select('id, child_id, date, quick_notes, custom_note, visibility, created_at')
+      .in('child_id', childIds)
+      .eq('review_status', 'approved')
+      .order('created_at', { ascending: false });
+
+    if (notesError) {
+      setParentDailyNotesHistory([]);
+      setParentDailyNotesError(notesError.message || 'Could not load daily notes.');
+      setParentDailyNotesLoading(false);
+      return;
+    }
+
+    const groupedNotes = (Array.isArray(notesData) ? notesData : []).reduce((acc, note) => {
+      if (!acc[note.child_id]) {
+        acc[note.child_id] = [];
+      }
+
+      acc[note.child_id].push(note);
+      return acc;
+    }, {});
+
+    setParentDailyNotesHistory(
+      childIds
+        .map((childId) => {
+          const child = childById[childId];
+
+          if (!child) {
+            return null;
+          }
+
+          return {
+            id: child.id,
+            name: `${child.first_name || ''} ${child.last_name || ''}`.trim() || 'Unnamed Student',
+            notes: groupedNotes[childId] || [],
+          };
+        })
+        .filter(Boolean)
+    );
+    setParentDailyNotesLoading(false);
+  }, [session?.user?.id]);
+
+  const loadParentTimeline = useCallback(async () => {
+    if (!session?.user?.id) {
+      setParentTimelineHistory([]);
+      setParentTimelineError('');
+      setParentTimelineLoading(false);
+      return;
+    }
+
+    setParentTimelineLoading(true);
+    setParentTimelineError('');
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('id', session.user.id)
+      .single();
+
+    if (profileError || !profile || profile.role !== 'parent') {
+      setParentTimelineHistory([]);
+      setParentTimelineLoading(false);
+      return;
+    }
+
+    const { data: linkRows, error: linksError } = await supabase
+      .from('child_parent_links')
+      .select('child_id')
+      .eq('parent_profile_id', profile.id);
+
+    if (linksError) {
+      setParentTimelineHistory([]);
+      setParentTimelineError(linksError.message || 'Could not load timeline.');
+      setParentTimelineLoading(false);
+      return;
+    }
+
+    const childIds = Array.from(
+      new Set((Array.isArray(linkRows) ? linkRows : []).map((linkRow) => linkRow.child_id))
+    );
+
+    if (!childIds.length) {
+      setParentTimelineHistory([]);
+      setParentTimelineLoading(false);
+      return;
+    }
+
+    const { data: childrenData, error: childrenError } = await supabase
+      .from('children')
+      .select('id, first_name, last_name, room')
+      .in('id', childIds);
+
+    if (childrenError) {
+      setParentTimelineHistory([]);
+      setParentTimelineError(childrenError.message || 'Could not load timeline.');
+      setParentTimelineLoading(false);
+      return;
+    }
+
+    const children = Array.isArray(childrenData) ? childrenData : [];
+
+    const timelineResults = await Promise.all(
+      children.map(async (child) => {
+        const [attendanceResult, notesResult] = await Promise.all([
+          supabase
+            .from('attendance_events')
+            .select('id, event_type, event_time, created_at')
+            .eq('child_id', child.id)
+            .order('event_time', { ascending: false }),
+          supabase
+            .from('daily_notes')
+            .select('id, quick_notes, custom_note, created_at')
+            .eq('child_id', child.id)
+            .eq('review_status', 'approved')
+            .order('created_at', { ascending: false }),
+        ]);
+
+        const attendanceEvents = Array.isArray(attendanceResult.data) ? attendanceResult.data : [];
+        const dailyNotes = Array.isArray(notesResult.data) ? notesResult.data : [];
+        const attendanceError = attendanceResult.error;
+        const notesError = notesResult.error;
+
+        return {
+          child,
+          items: [
+            ...attendanceEvents.map((event) => ({
+              id: `attendance-${event.id}`,
+              childId: child.id,
+              childName: `${child.first_name || ''} ${child.last_name || ''}`.trim() || 'Unnamed Student',
+              childRoom: child.room || 'Room not set',
+              type: 'attendance',
+              title: event.event_type === 'check_in' ? 'Checked In' : 'Checked Out',
+              timestamp: event.event_time || event.created_at,
+              quick_notes: [],
+              custom_note: '',
+            })),
+            ...dailyNotes.map((note) => ({
+              id: `daily-note-${note.id}`,
+              childId: child.id,
+              childName: `${child.first_name || ''} ${child.last_name || ''}`.trim() || 'Unnamed Student',
+              childRoom: child.room || 'Room not set',
+              type: 'daily_note',
+              title: 'Daily Note',
+              timestamp: note.created_at,
+              quick_notes: Array.isArray(note.quick_notes) ? note.quick_notes : [],
+              custom_note: note.custom_note || '',
+            })),
+          ],
+          error: attendanceError || notesError || null,
+        };
+      })
+    );
+
+    const firstTimelineError = timelineResults.find((result) => result.error)?.error;
+
+    if (firstTimelineError) {
+      setParentTimelineError(firstTimelineError.message || 'Could not load timeline.');
+    }
+
+    const mergedTimeline = timelineResults
+      .flatMap((result) => result.items)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    setParentTimelineHistory(mergedTimeline);
+    setParentTimelineLoading(false);
+  }, [session?.user?.id]);
+
+  const loadOwnerDailyNotesReview = useCallback(async () => {
+    if (!session?.user?.id) {
+      setOwnerDailyNotesPending([]);
+      setOwnerDailyNotesPendingError('');
+      setOwnerDailyNotesPendingLoading(false);
+      setOwnerDailyNotesReviewActionId('');
+      return;
+    }
+
+    setOwnerDailyNotesPendingLoading(true);
+    setOwnerDailyNotesPendingError('');
+    try {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError || !profile || profile.role !== 'owner') {
+        setOwnerDailyNotesPending([]);
+        setOwnerDailyNotesPendingError('');
+        setOwnerDailyNotesReviewActionId('');
+        return;
+      }
+
+      const { data: notesData, error: notesError } = await supabase
+        .from('daily_notes')
+        .select(
+          'id, child_id, date, quick_notes, custom_note, visibility, created_at, review_status, reviewed_at'
+        )
+        .eq('review_status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (notesError) {
+        setOwnerDailyNotesPending([]);
+        setOwnerDailyNotesPendingError(notesError.message || 'Could not load daily notes.');
+        return;
+      }
+
+      const pendingNotes = Array.isArray(notesData) ? notesData : [];
+      const childIds = Array.from(
+        new Set(pendingNotes.map((note) => note.child_id).filter(Boolean))
+      );
+
+      let childById = {};
+
+      if (childIds.length) {
+        const { data: childrenData } = await supabase
+          .from('children')
+          .select('id, first_name, last_name')
+          .in('id', childIds);
+
+        childById = (Array.isArray(childrenData) ? childrenData : []).reduce((acc, child) => {
+          acc[child.id] = child;
+          return acc;
+        }, {});
+      }
+
+      setOwnerDailyNotesPending(
+        pendingNotes.map((note) => {
+          const child = childById[note.child_id];
+          const childName = child
+            ? `${child.first_name || ''} ${child.last_name || ''}`.trim() || 'Unnamed Student'
+            : 'Unnamed Student';
+
+          return {
+            ...note,
+            childName,
+          };
+        })
+      );
+    } catch (loadError) {
+      const message = loadError?.message || 'Could not load daily notes.';
+      setOwnerDailyNotesPending([]);
+      setOwnerDailyNotesPendingError(message);
+    } finally {
+      setOwnerDailyNotesPendingLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const loadOwnerBeforeAfterCounts = useCallback(async () => {
+    if (!session?.user?.id) {
+      setOwnerBeforeAfterCounts({ droppedOff: 0, onBus: 0, returned: 0, pickedUp: 0 });
+      setOwnerBeforeAfterCountsError('');
+      setOwnerBeforeAfterCountsLoading(false);
+      return;
+    }
+
+    setOwnerBeforeAfterCountsLoading(true);
+    setOwnerBeforeAfterCountsError('');
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError || !profile || profile.role !== 'owner') {
+        setOwnerBeforeAfterCounts({ droppedOff: 0, onBus: 0, returned: 0, pickedUp: 0 });
+        setOwnerBeforeAfterCountsError('');
+        return;
+      }
+
+      const { data: sessionRows, error: sessionError } = await supabase
+        .from('before_after_care_sessions')
+        .select('id, status')
+        .eq('date', today);
+
+      if (sessionError) {
+        throw new Error(sessionError.message || 'Could not load Before & After Care counts.');
+      }
+
+      const counts = (Array.isArray(sessionRows) ? sessionRows : []).reduce(
+        (acc, row) => {
+          if (row.status === 'dropped_off') acc.droppedOff += 1;
+          if (row.status === 'on_bus') acc.onBus += 1;
+          if (row.status === 'returned') acc.returned += 1;
+          if (row.status === 'picked_up') acc.pickedUp += 1;
+          return acc;
+        },
+        { droppedOff: 0, onBus: 0, returned: 0, pickedUp: 0 }
+      );
+
+      setOwnerBeforeAfterCounts(counts);
+    } catch (loadError) {
+      setOwnerBeforeAfterCounts({ droppedOff: 0, onBus: 0, returned: 0, pickedUp: 0 });
+      setOwnerBeforeAfterCountsError(
+        loadError?.message || 'Could not load Before & After Care counts.'
+      );
+    } finally {
+      setOwnerBeforeAfterCountsLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const loadOwnerSummerCampData = useCallback(async () => {
+    if (!session?.user?.id) {
+      setOwnerSummerCampChildren([]);
+      setOwnerSummerCampGroups([]);
+      setOwnerSummerCampSummary(OWNER_SUMMER_CAMP_INITIAL_SUMMARY);
+      setOwnerSummerCampError('');
+      setOwnerSummerCampLoading(false);
+      setOwnerSummerCampGroupPickerChildId('');
+      setOwnerSummerCampSelectedGroupByChildId({});
+      return;
+    }
+
+    setOwnerSummerCampLoading(true);
+    setOwnerSummerCampError('');
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError || !profile || profile.role !== 'owner') {
+        setOwnerSummerCampChildren([]);
+        setOwnerSummerCampGroups([]);
+        setOwnerSummerCampSummary(OWNER_SUMMER_CAMP_INITIAL_SUMMARY);
+        setOwnerSummerCampGroupPickerChildId('');
+        setOwnerSummerCampSelectedGroupByChildId({});
+        setOwnerSummerCampLoading(false);
+        return;
+      }
+
+      const [childrenResponse, groupsResponse, sessionsResponse] = await Promise.all([
+        supabase
+          .from('children')
+          .select('id, first_name, last_name, room, profile_accent_color, status')
+          .eq('status', 'active'),
+        supabase.from('camp_groups').select('*'),
+        supabase
+          .from('camp_check_ins')
+          .select('id, child_id, camp_group_id, date, checked_in_at, status, camp_group:camp_groups(*)')
+          .eq('date', today)
+          .order('checked_in_at', { ascending: false }),
+      ]);
+
+      if (childrenResponse.error) {
+        throw new Error(
+          childrenResponse.error.message || 'Could not load Summer Camp check-in children.'
+        );
+      }
+
+      if (groupsResponse.error) {
+        throw new Error(groupsResponse.error.message || 'Could not load camp groups.');
+      }
+
+      if (sessionsResponse.error) {
+        throw new Error(sessionsResponse.error.message || 'Could not load camp check-ins.');
+      }
+
+      const children = Array.isArray(childrenResponse.data) ? childrenResponse.data : [];
+      const groups = Array.isArray(groupsResponse.data) ? groupsResponse.data : [];
+      const sessions = Array.isArray(sessionsResponse.data) ? sessionsResponse.data : [];
+
+      const groupById = groups.reduce((acc, group) => {
+        if (group?.id != null) {
+          acc[group.id] = group;
+        }
+        return acc;
+      }, {});
+
+      const sessionByChildId = sessions.reduce((acc, row) => {
+        if (!acc[row.child_id]) {
+          acc[row.child_id] = row;
+        }
+        return acc;
+      }, {});
+
+      const selectedGroupByChildId = {};
+      const mappedChildren = children.map((child) => {
+        const sessionRow = sessionByChildId[child.id] || null;
+        const sessionGroup = sessionRow?.camp_group || groupById[sessionRow?.camp_group_id] || null;
+        const assignedGroupName = getCampGroupDisplayName(sessionGroup);
+        const selectedGroupId = sessionRow?.camp_group_id || '';
+
+        if (selectedGroupId) {
+          selectedGroupByChildId[child.id] = selectedGroupId;
+        }
+
+        return {
+          id: child.id,
+          name:
+            `${child.first_name || ''} ${child.last_name || ''}`.trim() || 'Unnamed Student',
+          room: child.room || '',
+          status: sessionRow?.status === 'checked_in' ? 'Checked In' : 'Not Checked In',
+          checkInStatus: sessionRow?.status === 'checked_in' ? 'Checked In' : 'Not Checked In',
+          groupName: assignedGroupName || child.room || 'No group assigned',
+          selectedGroupId,
+          assignedGroupName: assignedGroupName || '',
+          checkInTime: sessionRow?.checked_in_at || '',
+          lastUpdateTime: sessionRow?.checked_in_at || 'Pending',
+          campCheckInStatus: sessionRow?.status === 'checked_in' ? 'Checked In' : 'Not Checked In',
+          sessionRow,
+        };
+      });
+
+      const summary = OWNER_SUMMER_CAMP_GROUP_NAMES.reduce(
+        (acc, groupName) => {
+          acc[groupName] = 0;
+          return acc;
+        },
+        { total: 0 }
+      );
+
+      sessions.forEach((row) => {
+        const groupName =
+          getCampGroupDisplayName(row.camp_group) ||
+          getCampGroupDisplayName(groupById[row.camp_group_id]) ||
+          '';
+
+        if (groupName && Object.prototype.hasOwnProperty.call(summary, groupName)) {
+          summary[groupName] += 1;
+        }
+
+        summary.total += 1;
+      });
+
+      setOwnerSummerCampChildren(mappedChildren);
+      setOwnerSummerCampGroups(groups);
+      setOwnerSummerCampSummary(summary);
+      setOwnerSummerCampSelectedGroupByChildId((current) => {
+        const next = { ...selectedGroupByChildId };
+
+        Object.keys(current).forEach((childId) => {
+          if (!next[childId] && current[childId]) {
+            next[childId] = current[childId];
+          }
+        });
+
+        return next;
+      });
+
+      setOwnerSummerCampGroupPickerChildId((current) =>
+        mappedChildren.some((child) => child.id === current) ? current : ''
+      );
+    } catch (loadError) {
+      setOwnerSummerCampChildren([]);
+      setOwnerSummerCampGroups([]);
+      setOwnerSummerCampSummary(OWNER_SUMMER_CAMP_INITIAL_SUMMARY);
+      setOwnerSummerCampError(loadError?.message || 'Could not load Summer Camp check-in data.');
+      setOwnerSummerCampSelectedGroupByChildId({});
+      setOwnerSummerCampGroupPickerChildId('');
+    } finally {
+      setOwnerSummerCampLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const loadStaffSummerCampData = useCallback(async () => {
+    if (!session?.user?.id) {
+      setStaffSummerCampGroups(createStaffSummerCampGroups());
+      setStaffSummerCampOwnerStatus({});
+      setStaffSummerCampLoading(false);
+      setStaffSummerCampError('');
+      setStaffSummerCampSavingChildId('');
+      setStaffSummerCampSendingGroup('');
+      return;
+    }
+
+    setStaffSummerCampLoading(true);
+    setStaffSummerCampError('');
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError || !profile || (profile.role !== 'staff' && profile.role !== 'owner')) {
+        setStaffSummerCampGroups(createStaffSummerCampGroups());
+        setStaffSummerCampOwnerStatus({});
+        setStaffSummerCampLoading(false);
+        return;
+      }
+
+      const { data: campGroupsData, error: campGroupsError } = await supabase
+        .from('camp_groups')
+        .select('*');
+
+      if (campGroupsError) {
+        throw new Error(campGroupsError.message || 'Could not load camp groups.');
+      }
+
+      const campGroups = Array.isArray(campGroupsData) ? campGroupsData : [];
+      const groupById = campGroups.reduce((acc, group) => {
+        if (group?.id != null) {
+          acc[group.id] = group;
+        }
+        return acc;
+      }, {});
+
+      const groupIdByName = campGroups.reduce((acc, group) => {
+        const canonicalName = getCampGroupCanonicalName(group);
+        if (canonicalName) {
+          acc[canonicalName] = group.id;
+        }
+        return acc;
+      }, {});
+
+      const { data: checkInData, error: checkInError } = await supabase
+        .from('camp_check_ins')
+        .select('id, child_id, camp_group_id, date, checked_in_at, status')
+        .eq('date', today)
+        .eq('status', 'checked_in')
+        .order('checked_in_at', { ascending: false });
+
+      if (checkInError) {
+        throw new Error(checkInError.message || 'Could not load camp check-ins.');
+      }
+
+      const checkIns = Array.isArray(checkInData) ? checkInData : [];
+      const childIds = Array.from(new Set(checkIns.map((row) => row.child_id).filter(Boolean)));
+      const groupIds = Array.from(
+        new Set(checkIns.map((row) => row.camp_group_id).filter(Boolean))
+      );
+
+      const [childrenResult, headcountsResult] = await Promise.all([
+        childIds.length
+          ? supabase.from('children').select('id, first_name, last_name').in('id', childIds)
+          : Promise.resolve({ data: [], error: null }),
+        groupIds.length
+          ? supabase
+              .from('camp_headcounts')
+              .select(
+                'id, camp_group_id, date, status, owner_checked_in_count, counselor_confirmed_count, submitted_at'
+              )
+              .eq('date', today)
+              .in('camp_group_id', groupIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (childrenResult.error) {
+        throw new Error(childrenResult.error.message || 'Could not load camp children.');
+      }
+
+      if (headcountsResult.error) {
+        throw new Error(headcountsResult.error.message || 'Could not load camp headcounts.');
+      }
+
+      const children = Array.isArray(childrenResult.data) ? childrenResult.data : [];
+      const childById = children.reduce((acc, child) => {
+        acc[child.id] = child;
+        return acc;
+      }, {});
+
+      const headcountRows = Array.isArray(headcountsResult.data) ? headcountsResult.data : [];
+      const headcountByGroupId = headcountRows.reduce((acc, row) => {
+        acc[row.camp_group_id] = row;
+        return acc;
+      }, {});
+
+      const headcountIds = headcountRows.map((row) => row.id).filter(Boolean);
+      const confirmedRows = headcountIds.length
+        ? await supabase
+            .from('camp_headcount_children')
+            .select('id, camp_headcount_id, child_id, confirmed_present, confirmed_at')
+            .in('camp_headcount_id', headcountIds)
+        : { data: [], error: null };
+
+      if (confirmedRows.error) {
+        throw new Error(
+          confirmedRows.error.message || 'Could not load camp headcount confirmations.'
+        );
+      }
+
+      const confirmationByChildId = (Array.isArray(confirmedRows.data) ? confirmedRows.data : [])
+        .filter((row) => row.confirmed_present)
+        .reduce((acc, row) => {
+          acc[row.child_id] = row;
+          return acc;
+        }, {});
+
+      const groupedChildren = STAFF_CAMP_GROUP_NAMES.reduce((acc, groupName) => {
+        acc[groupName] = [];
+        return acc;
+      }, {});
+
+      checkIns.forEach((row) => {
+        const groupName =
+          getCampGroupCanonicalName(groupById[row.camp_group_id]) ||
+          getCampGroupCanonicalName(row.camp_group_id) ||
+          '';
+
+        if (!groupName) {
+          return;
+        }
+
+        const child = childById[row.child_id];
+        if (!child) {
+          return;
+        }
+
+        groupedChildren[groupName].push({
+          id: child.id,
+          name:
+            `${child.first_name || ''} ${child.last_name || ''}`.trim() || 'Unnamed Camper',
+          campGroupId: row.camp_group_id,
+          checkedInAt: row.checked_in_at || '',
+          checkInStatus: 'Checked In',
+          groupConfirmationStatus: confirmationByChildId[row.child_id]
+            ? 'Confirmed Present'
+            : 'Not Confirmed',
+          confirmedAt: confirmationByChildId[row.child_id]?.confirmed_at || '',
+          lastUpdateTime: row.checked_in_at || '',
+          campCheckInId: row.id,
+          headcountChildId: confirmationByChildId[row.child_id]?.id || null,
+        });
+      });
+
+      const nextSelectedGroup = STAFF_CAMP_GROUP_NAMES.includes(staffSummerCampSelectedGroup)
+        ? staffSummerCampSelectedGroup
+        : STAFF_CAMP_GROUP_NAMES[0] || 'Blue Group';
+
+      const nextOwnerStatus = STAFF_CAMP_GROUP_NAMES.reduce((acc, groupName) => {
+        const groupId = groupIdByName[groupName];
+        const headcountRow = groupId ? headcountByGroupId[groupId] : null;
+        const roster = groupedChildren[groupName] || [];
+        const confirmedCount = roster.filter(
+          (child) => child.groupConfirmationStatus === 'Confirmed Present'
+        ).length;
+
+        acc[groupName] = {
+          id: headcountRow?.id || null,
+          status: headcountRow?.status || 'pending',
+          submittedAt: headcountRow?.submitted_at || '',
+          ownerCheckedInCount: headcountRow?.owner_checked_in_count ?? roster.length,
+          counselorConfirmedCount:
+            headcountRow?.counselor_confirmed_count ?? confirmedCount,
+          campGroupId: groupId || null,
+        };
+
+        return acc;
+      }, {});
+
+      setStaffSummerCampGroups(groupedChildren);
+      setStaffSummerCampOwnerStatus(nextOwnerStatus);
+      setStaffSummerCampSelectedGroup(nextSelectedGroup);
+    } catch (loadError) {
+      setStaffSummerCampGroups(createStaffSummerCampGroups());
+      setStaffSummerCampOwnerStatus({});
+      setStaffSummerCampError(loadError?.message || 'Could not load summer camp headcount.');
+    } finally {
+      setStaffSummerCampLoading(false);
+      setStaffSummerCampSavingChildId('');
+      setStaffSummerCampSendingGroup('');
+    }
+  }, [session?.user?.id, staffSummerCampSelectedGroup]);
+
+  const loadRecipientMessages = useCallback(async () => {
+    if (!session?.user?.id) {
+      setRecipientMessages([]);
+      setRecipientMessagesError('');
+      setRecipientMessagesLoading(false);
+      setRecipientMessagesExpandedId(null);
+      return;
+    }
+
+    setRecipientMessagesLoading(true);
+    setRecipientMessagesError('');
+
+    try {
+      const { data, error } = await supabase
+        .from('message_recipients')
+        .select(
+          'id, delivered_at, read_at, recipient_profile_id, message_id, message:messages(id, title, body, message_type, audience_type, created_at)'
+        )
+        .eq('recipient_profile_id', session.user.id)
+        .order('delivered_at', { ascending: false });
+
+      if (error) {
+        setRecipientMessages([]);
+        setRecipientMessagesError(error.message || 'Could not load messages.');
+        return;
+      }
+
+      const rows = Array.isArray(data) ? data : [];
+      setRecipientMessages(
+        rows.map((row) => {
+          const message = Array.isArray(row.message) ? row.message[0] : row.message;
+          return {
+            id: row.id,
+            deliveredAt: row.delivered_at,
+            readAt: row.read_at,
+            recipientProfileId: row.recipient_profile_id,
+            messageId: row.message_id,
+            title: message?.title || 'Message',
+            body: message?.body || '',
+            messageType: message?.message_type || 'announcement',
+            audienceType: message?.audience_type || 'all_parents',
+            createdAt: message?.created_at || row.delivered_at,
+          };
+        })
+      );
+    } catch (loadError) {
+      setRecipientMessages([]);
+      setRecipientMessagesError(loadError?.message || 'Could not load messages.');
+    } finally {
+      setRecipientMessagesLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const loadAuthorizedPickupRows = useCallback(async () => {
+    if (!session?.user?.id) {
+      setAuthorizedPickupRows([]);
+      setAuthorizedPickupRowsError('');
+      setAuthorizedPickupRowsLoading(false);
+      return;
+    }
+
+    setAuthorizedPickupRowsLoading(true);
+    setAuthorizedPickupRowsError('');
+
+    try {
+      const { data, error } = await supabase
+        .from('authorized_pickups')
+        .select('id, child_id, full_name, relationship, phone_number, notes, created_at')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw new Error(error.message || 'Could not load authorized pickups.');
+      }
+
+      setAuthorizedPickupRows(Array.isArray(data) ? data : []);
+    } catch (loadError) {
+      setAuthorizedPickupRows([]);
+      setAuthorizedPickupRowsError(loadError?.message || 'Could not load authorized pickups.');
+    } finally {
+      setAuthorizedPickupRowsLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const loadStaffBeforeAfterData = useCallback(async () => {
+    if (!session?.user?.id) {
+      setStaffBeforeAfterChildren([]);
+      setStaffBeforeAfterSelectedChildId(null);
+      setStaffBeforeAfterLoading(false);
+      setStaffBeforeAfterError('');
+      return;
+    }
+
+    setStaffBeforeAfterLoading(true);
+    setStaffBeforeAfterError('');
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { data: childRows, error: childError } = await supabase
+        .from('children')
+        .select('id, first_name, last_name, room, status, profile_accent_color')
+        .eq('status', 'active')
+        .order('first_name', { ascending: true });
+
+      if (childError) {
+        throw new Error(childError.message || 'Could not load before & after care students.');
+      }
+
+      const children = Array.isArray(childRows) ? childRows : [];
+      const childIds = children.map((child) => child.id).filter(Boolean);
+
+      if (!childIds.length) {
+        setStaffBeforeAfterChildren([]);
+        setStaffBeforeAfterSelectedChildId(null);
+        return;
+      }
+
+      const { startIso, endIso } = getTodayIsoRange();
+
+      const [{ data: sessionRows, error: sessionError }, { data: eventRows, error: eventError }] =
+        await Promise.all([
+          supabase
+            .from('before_after_care_sessions')
+            .select(
+              'id, child_id, date, drop_off_time, bus_departure_time, returned_time, pickup_time, morning_minutes, afternoon_minutes, total_minutes, status, created_at'
+            )
+            .in('child_id', childIds)
+            .eq('date', today)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('attendance_events')
+            .select('id, child_id, event_type, event_time')
+            .in('child_id', childIds)
+            .gte('event_time', startIso)
+            .lt('event_time', endIso)
+            .order('event_time', { ascending: false }),
+        ]);
+
+      if (sessionError) {
+        throw new Error(sessionError.message || 'Could not load before & after care sessions.');
+      }
+
+      if (eventError) {
+        throw new Error(eventError.message || 'Could not load attendance events.');
+      }
+
+      const latestSessionByChildId = {};
+      (Array.isArray(sessionRows) ? sessionRows : []).forEach((row) => {
+        if (!latestSessionByChildId[row.child_id]) {
+          latestSessionByChildId[row.child_id] = row;
+        }
+      });
+
+      const eventsByChildId = (Array.isArray(eventRows) ? eventRows : []).reduce((acc, row) => {
+        if (!acc[row.child_id]) {
+          acc[row.child_id] = [];
+        }
+        acc[row.child_id].push(row);
+        return acc;
+      }, {});
+
+      const mappedChildren = children.map((child) => {
+        const sessionRow = latestSessionByChildId[child.id] || null;
+        const stage = deriveBeforeAfterStage(sessionRow);
+        const timeline = getBeforeAfterTimelineEntries(sessionRow, eventsByChildId[child.id]);
+
+        return {
+          id: child.id,
+          name:
+            `${child.first_name || ''} ${child.last_name || ''}`.trim() || 'Unnamed Student',
+          stage,
+          accentGroup: child.profile_accent_color || child.room || 'Blue Group',
+          status: getBeforeAfterStatusLabel(sessionRow),
+          lastUpdateTime: getBeforeAfterLatestTime(sessionRow),
+          programBadge: 'Before & After Care',
+          dropOffTime: sessionRow?.drop_off_time || '',
+          busTime: sessionRow?.bus_departure_time || '',
+          returnedTime: sessionRow?.returned_time || '',
+          pickupTime: sessionRow?.pickup_time || '',
+          morningMinutes: sessionRow?.morning_minutes ?? null,
+          afternoonMinutes: sessionRow?.afternoon_minutes ?? null,
+          totalMinutes: sessionRow?.total_minutes ?? null,
+          pickup: { authorizedPickups: [] },
+          timeline,
+          sessionRow,
+          canDropOff: !sessionRow?.drop_off_time,
+          canPutOnBus: !!sessionRow?.drop_off_time && !sessionRow?.bus_departure_time,
+          canReturned: !!sessionRow?.bus_departure_time && !sessionRow?.returned_time,
+          canParentPickup: !!sessionRow?.returned_time && !sessionRow?.pickup_time,
+        };
+      });
+
+      setStaffBeforeAfterChildren(mappedChildren);
+      setStaffBeforeAfterSelectedChildId((current) => {
+        if (current && mappedChildren.some((child) => child.id === current)) {
+          return current;
+        }
+        return mappedChildren[0]?.id ?? null;
+      });
+      setStaffBeforeAfterPickupChildId((current) =>
+        current && mappedChildren.some((child) => child.id === current) ? current : null
+      );
+    } catch (loadError) {
+      setStaffBeforeAfterError(
+        loadError?.message || 'Could not load before & after care students.'
+      );
+      setStaffBeforeAfterChildren([]);
+      setStaffBeforeAfterSelectedChildId(null);
+    } finally {
+      setStaffBeforeAfterLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const handleStaffBeforeAfterAction = useCallback(
+    async (childId, action) => {
+      const child = staffBeforeAfterChildren.find((entry) => entry.id === childId);
+
+      if (!child || staffBeforeAfterSavingChildId) {
+        return;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date().toISOString();
+      const existingSession = child.sessionRow || null;
+
+      const baseSessionPayload = {
+        child_id: childId,
+        date: today,
+        status: child.status,
+        drop_off_time: child.dropOffTime || null,
+        bus_departure_time: child.busTime || null,
+        returned_time: child.returnedTime || null,
+        pickup_time: child.pickupTime || null,
+        morning_minutes: Number.isFinite(Number(child.sessionRow?.morning_minutes))
+          ? Number(child.sessionRow.morning_minutes)
+          : null,
+        afternoon_minutes: Number.isFinite(Number(child.sessionRow?.afternoon_minutes))
+          ? Number(child.sessionRow.afternoon_minutes)
+          : null,
+        total_minutes: Number.isFinite(Number(child.sessionRow?.total_minutes))
+          ? Number(child.sessionRow.total_minutes)
+          : null,
+      };
+
+      let nextSessionPayload = null;
+      let nextEventType = null;
+
+      if (action === 'drop-off') {
+        if (existingSession?.drop_off_time) {
+          return;
+        }
+
+        nextSessionPayload = {
+          ...baseSessionPayload,
+          drop_off_time: now,
+          status: 'dropped_off',
+        };
+        nextEventType = 'parent_drop_off';
+      }
+
+      if (action === 'put-on-bus') {
+        if (!existingSession?.drop_off_time || existingSession?.bus_departure_time) {
+          return;
+        }
+
+        const morningMinutes = Math.max(
+          0,
+          Math.round((new Date(now).getTime() - new Date(existingSession.drop_off_time).getTime()) / 60000)
+        );
+
+        nextSessionPayload = {
+          ...baseSessionPayload,
+          drop_off_time: existingSession.drop_off_time,
+          bus_departure_time: now,
+          morning_minutes: morningMinutes,
+          status: 'on_bus',
+        };
+        nextEventType = 'put_on_bus';
+      }
+
+      if (action === 'returned') {
+        if (!existingSession?.bus_departure_time || existingSession?.returned_time) {
+          return;
+        }
+
+        nextSessionPayload = {
+          ...baseSessionPayload,
+          drop_off_time: existingSession.drop_off_time,
+          bus_departure_time: existingSession.bus_departure_time,
+          returned_time: now,
+          morning_minutes: Number.isFinite(Number(existingSession.morning_minutes))
+            ? Number(existingSession.morning_minutes)
+            : Math.max(
+                0,
+                Math.round(
+                  (new Date(existingSession.bus_departure_time).getTime() -
+                    new Date(existingSession.drop_off_time).getTime()) /
+                    60000
+                )
+              ),
+          status: 'returned',
+        };
+        nextEventType = 'returned_from_bus';
+      }
+
+      if (action === 'parent-pickup') {
+        if (!existingSession?.returned_time || existingSession?.pickup_time) {
+          return;
+        }
+
+        const afternoonMinutes = Math.max(
+          0,
+          Math.round((new Date(now).getTime() - new Date(existingSession.returned_time).getTime()) / 60000)
+        );
+        const morningMinutes = Number.isFinite(Number(existingSession.morning_minutes))
+          ? Number(existingSession.morning_minutes)
+          : Math.max(
+              0,
+              Math.round(
+                (new Date(existingSession.bus_departure_time).getTime() -
+                  new Date(existingSession.drop_off_time).getTime()) /
+                  60000
+              )
+            );
+
+        nextSessionPayload = {
+          ...baseSessionPayload,
+          drop_off_time: existingSession.drop_off_time,
+          bus_departure_time: existingSession.bus_departure_time,
+          returned_time: existingSession.returned_time,
+          pickup_time: now,
+          morning_minutes: morningMinutes,
+          afternoon_minutes: afternoonMinutes,
+          total_minutes: morningMinutes + afternoonMinutes,
+          status: 'picked_up',
+        };
+        nextEventType = 'parent_pickup';
+      }
+
+      if (!nextSessionPayload || !nextEventType) {
+        return;
+      }
+
+      setStaffBeforeAfterSavingChildId(childId);
+      setStaffBeforeAfterError('');
+
+      const sessionTable = supabase.from('before_after_care_sessions');
+      const { error: sessionSaveError } = existingSession?.id
+        ? await sessionTable.update(nextSessionPayload).eq('id', existingSession.id)
+        : await sessionTable.insert(nextSessionPayload);
+
+      if (sessionSaveError) {
+        setStaffBeforeAfterError(
+          sessionSaveError.message || 'Could not save before & after care session.'
+        );
+        setStaffBeforeAfterSavingChildId('');
+        return;
+      }
+
+      const { error: eventSaveError } = await supabase.from('attendance_events').insert({
+        child_id: childId,
+        event_type: nextEventType,
+        event_time: now,
+      });
+
+      if (eventSaveError) {
+        setStaffBeforeAfterError(eventSaveError.message || 'Could not save attendance event.');
+        setStaffBeforeAfterSavingChildId('');
+        return;
+      }
+
+      await loadStaffBeforeAfterData();
+      setStaffBeforeAfterSavingChildId('');
+    },
+    [
+      loadStaffBeforeAfterData,
+      staffBeforeAfterChildren,
+      staffBeforeAfterSavingChildId,
+    ]
+  );
+
+  const confirmBeforeAfterPickup = useCallback(async () => {
+    if (!staffBeforeAfterPickupChildId) {
+      return;
+    }
+
+    await handleStaffBeforeAfterAction(staffBeforeAfterPickupChildId, 'parent-pickup');
+    setStaffBeforeAfterPickupChildId(null);
+  }, [handleStaffBeforeAfterAction, staffBeforeAfterPickupChildId]);
+
+  const loadChildProfilePickups = useCallback(async () => {
+    if (!session?.user?.id) {
+      setChildProfilePickupRows([]);
+      setChildProfilePickupError('');
+      setChildProfilePickupLoading(false);
+      setChildProfileSelectedChild(null);
+      setChildProfileEmergencyRows([]);
+      setChildProfileEmergencyError('');
+      setChildProfileEmergencyLoading(false);
+      return;
+    }
+
+    setChildProfilePickupLoading(true);
+    setChildProfilePickupError('');
+    setChildProfileEmergencyLoading(true);
+    setChildProfileEmergencyError('');
+
+    try {
+      const { data: links, error: linksError } = await supabase
+        .from('child_parent_links')
+        .select('child_id')
+        .eq('parent_profile_id', session.user.id);
+
+      if (linksError) {
+        throw new Error(linksError.message || 'Could not load authorized pickups.');
+      }
+
+      const childIds = Array.from(
+        new Set((Array.isArray(links) ? links : []).map((link) => link.child_id).filter(Boolean))
+      );
+
+      if (!childIds.length) {
+        setChildProfilePickupRows([]);
+        setChildProfileEmergencyRows([]);
+        setChildProfileSelectedChild(null);
+        setChildProfilePickupLoading(false);
+        setChildProfileEmergencyLoading(false);
+        return;
+      }
+
+      const { data: childrenData, error: childrenError } = await supabase
+        .from('children')
+        .select('*')
+        .in('id', childIds);
+
+      if (childrenError) {
+        throw new Error(childrenError.message || 'Could not load authorized pickups.');
+      }
+
+      const children = Array.isArray(childrenData) ? childrenData : [];
+      const selectedChild = children[0] || null;
+
+      setChildProfileSelectedChild(selectedChild);
+
+      if (!selectedChild?.id) {
+        setChildProfilePickupRows([]);
+        setChildProfilePickupLoading(false);
+        return;
+      }
+
+      const { data: pickupsData, error: pickupsError } = await supabase
+        .from('authorized_pickups')
+        .select('id, child_id, full_name, relationship, phone, created_at')
+        .eq('child_id', selectedChild.id)
+        .order('created_at', { ascending: false });
+
+      if (pickupsError) {
+        throw new Error(pickupsError.message || 'Could not load authorized pickups.');
+      }
+
+      setChildProfilePickupRows(Array.isArray(pickupsData) ? pickupsData : []);
+
+      const { data: emergencyData, error: emergencyError } = await supabase
+        .from('emergency_contacts')
+        .select('id, child_id, full_name, relationship, phone, priority, created_at')
+        .eq('child_id', selectedChild.id)
+        .order('created_at', { ascending: false });
+
+      if (emergencyError) {
+        throw new Error(emergencyError.message || 'Could not load emergency contacts.');
+      }
+
+      setChildProfileEmergencyRows(Array.isArray(emergencyData) ? emergencyData : []);
+    } catch (loadError) {
+      setChildProfilePickupRows([]);
+      setChildProfileSelectedChild(null);
+      setChildProfilePickupError(loadError?.message || 'Could not load authorized pickups.');
+      setChildProfileEmergencyRows([]);
+      setChildProfileEmergencyError(loadError?.message || 'Could not load emergency contacts.');
+    } finally {
+      setChildProfilePickupLoading(false);
+      setChildProfileEmergencyLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const markRecipientMessageRead = useCallback(
+    async (recipientMessageId) => {
+      const currentItem = recipientMessages.find((item) => item.id === recipientMessageId);
+      if (!currentItem || currentItem.readAt) {
+        return;
+      }
+
+      const now = new Date().toISOString();
+
+      const { error } = await supabase
+        .from('message_recipients')
+        .update({ read_at: now })
+        .eq('id', recipientMessageId);
+
+      if (error) {
+        setRecipientMessagesError(error.message || 'Could not mark message as read.');
+        return;
+      }
+
+      setRecipientMessages((current) =>
+        current.map((item) =>
+          item.id === recipientMessageId
+            ? {
+                ...item,
+                readAt: now,
+              }
+            : item
+        )
+      );
+    },
+    [recipientMessages]
+  );
+
+  const handleToggleRecipientMessage = useCallback(
+    async (recipientMessage) => {
+      setRecipientMessagesExpandedId((current) =>
+        current === recipientMessage.id ? null : recipientMessage.id
+      );
+
+      if (!recipientMessage.readAt) {
+        await markRecipientMessageRead(recipientMessage.id);
+      }
+    },
+    [markRecipientMessageRead]
+  );
+
+  const markVisibleRecipientMessagesRead = useCallback(async () => {
+    if (!session?.user?.id) {
+      return;
+    }
+
+    if (screen !== 'parent-messages' && screen !== 'staff-messages') {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    console.log('Marking messages read');
+
+    const { data, error } = await supabase
+      .from('message_recipients')
+      .update({ read_at: now })
+      .eq('recipient_profile_id', session.user.id)
+      .is('read_at', null)
+      .select('id, message_id, recipient_profile_id, read_at');
+
+    console.log('Mark read result', { data, error });
+
+    if (error) {
+      console.log(error);
+      setRecipientMessagesError(error.message || 'Could not mark messages as read.');
+      return;
+    }
+
+    if (Array.isArray(data) && data.length) {
+      setRecipientMessages((current) =>
+        current.map((item) =>
+          item.readAt
+            ? item
+            : {
+                ...item,
+                readAt: now,
+              }
+        )
+      );
+    }
+
+    await loadRecipientMessages();
+  }, [loadRecipientMessages, screen, session?.user?.id]);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (screen !== 'parent-messages' && screen !== 'staff-messages') {
+      return;
+    }
+
+    markVisibleRecipientMessagesRead();
+  }, [authLoading, markVisibleRecipientMessagesRead, screen]);
+
+  const handleOwnerDailyNoteReviewDecision = useCallback(
+    async (note, reviewStatus) => {
+      setOwnerDailyNotesReviewActionId(note.id);
+
+      try {
+        const { error: updateError } = await supabase
+          .from('daily_notes')
+          .update(
+            reviewStatus === 'approved'
+              ? {
+                  review_status: 'approved',
+                  visibility: 'both',
+                  reviewed_at: new Date().toISOString(),
+                }
+              : {
+                  review_status: 'rejected',
+                  visibility: 'owner',
+                  reviewed_at: new Date().toISOString(),
+                }
+          )
+          .eq('id', note.id);
+
+        if (updateError) {
+          const message = updateError.message || 'Could not update daily note.';
+          setOwnerDailyNotesPendingError(message);
+          Alert.alert('Could not update daily note.', message);
+          return;
+        }
+
+        setOwnerDailyNotesPendingError('');
+        await loadOwnerDailyNotesReview();
+        Alert.alert(
+          reviewStatus === 'approved' ? 'Daily note approved.' : 'Daily note rejected.'
+        );
+      } finally {
+        setOwnerDailyNotesReviewActionId('');
+      }
+    },
+    [loadOwnerDailyNotesReview]
+  );
+
+  const handleToggleOwnerRecentMessage = useCallback((messageId) => {
+    setOwnerMessagesExpandedId((current) => (current === messageId ? null : messageId));
+  }, []);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    loadParentAttendanceHistory();
+    loadParentBeforeAfterData();
+    loadParentDailyNotes();
+    loadParentTimeline();
+    loadRecipientMessages();
+    loadAuthorizedPickupRows();
+    loadOwnerBeforeAfterCounts();
+    loadOwnerSummerCampData();
+    loadStaffSummerCampData();
+    loadStaffBeforeAfterData();
+    loadChildProfilePickups();
+    loadOwnerDailyNotesReview();
+  }, [
+    authLoading,
+    loadAuthorizedPickupRows,
+    loadStaffBeforeAfterData,
+    loadChildProfilePickups,
+    loadOwnerDailyNotesReview,
+    loadOwnerBeforeAfterCounts,
+    loadOwnerSummerCampData,
+    loadStaffSummerCampData,
+    loadParentAttendanceHistory,
+    loadParentBeforeAfterData,
+    loadParentDailyNotes,
+    loadParentTimeline,
+    loadRecipientMessages,
+  ]);
 
   async function handleSupabaseLogin(loginEmail, password) {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -7367,7 +11636,7 @@ export default function App() {
   }
 
   const handleLogin = async () => {
-    const supabaseLoginSucceeded = await handleSupabaseLogin(email, inviteCode);
+    const supabaseLoginSucceeded = await handleSupabaseLogin(email, password);
 
     if (supabaseLoginSucceeded) {
       return;
@@ -7375,7 +11644,7 @@ export default function App() {
 
     console.log('Using mock login');
     const cleanEmail = email.trim().toLowerCase();
-    const cleanCode = inviteCode.trim().toUpperCase();
+    const cleanCode = password.trim().toUpperCase();
 
     const match = MOCK_ACCESS_CODES.find(
       (entry) => entry.email === cleanEmail && entry.code === cleanCode
@@ -7403,7 +11672,7 @@ export default function App() {
 
   const fillTestAccount = (account) => {
     setEmail(account.email);
-    setInviteCode(account.code);
+    setPassword(account.code);
     setError('');
   };
 
@@ -7412,15 +11681,37 @@ export default function App() {
     setSession(null);
     setScreen('login');
     setError('');
+    setParentAttendanceLoading(true);
+    setParentAttendanceError('');
+    setParentAttendanceHistory([]);
+    setParentDailyNotesLoading(true);
+    setParentDailyNotesError('');
+    setParentDailyNotesHistory([]);
+    setParentTimelineLoading(true);
+    setParentTimelineError('');
+    setParentTimelineHistory([]);
+    setOwnerDailyNotesPendingLoading(true);
+    setOwnerDailyNotesPendingError('');
+    setOwnerDailyNotesPending([]);
+    setOwnerDailyNotesReviewActionId('');
     setStaffStatus(STAFF_MEMBER.status);
     setLastClockInTime('');
     setLastClockOutTime('');
-    setStaffMockTimeIndex(0);
     setStaffBeforeAfterChildren(createStaffBeforeAfterChildren());
     setStaffBeforeAfterSelectedChildId(createStaffBeforeAfterChildren()[0]?.id ?? null);
     setStaffBeforeAfterPickupChildId(null);
     setStaffSummerCampGroups(createStaffSummerCampGroups());
-    setOwnerSummerCampChildren(createOwnerSummerCampChildren());
+    setStaffSummerCampLoading(true);
+    setStaffSummerCampError('');
+    setStaffSummerCampSavingChildId('');
+    setStaffSummerCampSendingGroup('');
+    setOwnerSummerCampChildren([]);
+    setOwnerSummerCampGroups([]);
+    setOwnerSummerCampLoading(true);
+    setOwnerSummerCampError('');
+    setOwnerSummerCampSavingChildId('');
+    setOwnerSummerCampGroupPickerChildId('');
+    setOwnerSummerCampSelectedGroupByChildId({});
     setStaffSummerCampSelectedGroup('Blue Group');
     setStaffSummerCampOwnerStatus({});
     setOwnerSummerCampSummary(OWNER_SUMMER_CAMP_INITIAL_SUMMARY);
@@ -7577,232 +11868,294 @@ export default function App() {
     setLastClockOutTime(STAFF_CLOCK_CURRENT_TIME);
   };
 
-  const consumeStaffMockTime = () => {
-    const stamp = STAFF_MOCK_TIMES[staffMockTimeIndex % STAFF_MOCK_TIMES.length];
-    setStaffMockTimeIndex((value) => value + 1);
-    return stamp;
-  };
-
-  const advanceBeforeAfterChild = (childId, action) => {
-    let timelineItem = null;
-
-    setStaffBeforeAfterChildren((prev) =>
-      prev.map((entry) => {
-        if (entry.id !== childId) {
-          return entry;
-        }
-
-        if (action === 'drop-off' && entry.stage === 0) {
-          timelineItem = {
-            id: `${entry.id}-drop-off-${STAFF_BA_MOCK_TIMES.dropOff}`,
-            childName: entry.name,
-            time: STAFF_BA_MOCK_TIMES.dropOff,
-            title: 'Dropped Off',
-            message: `${entry.name} was dropped off for Before & After Care.`,
-          };
-
-          return {
-            ...entry,
-            stage: 1,
-            status: 'Dropped Off',
-            dropOffTime: STAFF_BA_MOCK_TIMES.dropOff,
-            busTime: '',
-            returnedTime: '',
-            pickupTime: '',
-            morningDuration: 'Pending',
-            afternoonDuration: 'Pending',
-            totalDailyTime: 'Pending',
-            lastUpdateTime: STAFF_BA_MOCK_TIMES.dropOff,
-            timeline: [timelineItem, ...entry.timeline].slice(0, 5),
-          };
-        }
-
-        if (action === 'put-on-bus' && entry.stage === 1) {
-          timelineItem = {
-            id: `${entry.id}-bus-${STAFF_BA_MOCK_TIMES.bus}`,
-            childName: entry.name,
-            time: STAFF_BA_MOCK_TIMES.bus,
-            title: 'On Bus',
-            message: `${entry.name} boarded the bus for afternoon care.`,
-          };
-
-          return {
-            ...entry,
-            stage: 2,
-            status: 'On Bus',
-            busTime: STAFF_BA_MOCK_TIMES.bus,
-            morningDuration: STAFF_BA_MOCK_DURATIONS.morning,
-            afternoonDuration: 'Pending',
-            totalDailyTime: 'Pending',
-            lastUpdateTime: STAFF_BA_MOCK_TIMES.bus,
-            timeline: [timelineItem, ...entry.timeline].slice(0, 5),
-          };
-        }
-
-        if (action === 'returned' && entry.stage === 2) {
-          timelineItem = {
-            id: `${entry.id}-returned-${STAFF_BA_MOCK_TIMES.returned}`,
-            childName: entry.name,
-            time: STAFF_BA_MOCK_TIMES.returned,
-            title: 'Returned From Bus',
-            message: `${entry.name} returned from the bus and checked back in.`,
-          };
-
-          return {
-            ...entry,
-            stage: 3,
-            status: 'Returned From Bus',
-            returnedTime: STAFF_BA_MOCK_TIMES.returned,
-            afternoonDuration: 'Pending',
-            totalDailyTime: 'Pending',
-            lastUpdateTime: STAFF_BA_MOCK_TIMES.returned,
-            timeline: [timelineItem, ...entry.timeline].slice(0, 5),
-          };
-        }
-
-        return entry;
-      })
-    );
-  };
-
   const openBeforeAfterPickup = (childId) => {
     const child = staffBeforeAfterChildren.find((entry) => entry.id === childId);
-    if (!child || child.stage !== 3) {
+    if (!child || !child.canParentPickup) {
       return;
     }
 
     setStaffBeforeAfterPickupChildId(childId);
   };
 
-  const confirmBeforeAfterPickup = () => {
-    if (!staffBeforeAfterPickupChildId) {
-      return;
-    }
+  const confirmCampPresent = useCallback(
+    async (groupName, childId) => {
+      const currentGroup = staffSummerCampGroups[groupName] || [];
+      const existing = currentGroup.find((child) => child.id === childId);
 
-    let timelineItem = null;
+      if (
+        !existing ||
+        existing.checkInStatus !== 'Checked In' ||
+        !existing.campCheckInId ||
+        !existing.campGroupId
+      ) {
+        return;
+      }
 
-    setStaffBeforeAfterChildren((prev) =>
-      prev.map((entry) => {
-        if (entry.id !== staffBeforeAfterPickupChildId || entry.stage !== 3) {
-          return entry;
+      if (existing.groupConfirmationStatus === 'Confirmed Present') {
+        Alert.alert('Confirmed', 'This camper is already confirmed present.');
+        return;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date().toISOString();
+      const ownerCheckedInCount = currentGroup.length;
+      const existingHeadcount = staffSummerCampOwnerStatus[groupName] || null;
+
+      setStaffSummerCampSavingChildId(childId);
+      setStaffSummerCampError('');
+
+      try {
+        let headcountId = existingHeadcount?.id || null;
+
+        if (!headcountId) {
+          const { data: insertedHeadcount, error: insertHeadcountError } = await supabase
+            .from('camp_headcounts')
+            .insert({
+              camp_group_id: existing.campGroupId,
+              date: today,
+              status: 'pending',
+              owner_checked_in_count: ownerCheckedInCount,
+              counselor_confirmed_count: 0,
+            })
+            .select('id')
+            .single();
+
+          if (insertHeadcountError) {
+            throw new Error(
+              insertHeadcountError.message || 'Could not create camp headcount.'
+            );
+          }
+
+          headcountId = insertedHeadcount?.id || null;
+        } else {
+          const { error: updateHeadcountError } = await supabase
+            .from('camp_headcounts')
+            .update({
+              owner_checked_in_count: ownerCheckedInCount,
+              status: 'pending',
+            })
+            .eq('id', headcountId);
+
+          if (updateHeadcountError) {
+            throw new Error(
+              updateHeadcountError.message || 'Could not update camp headcount.'
+            );
+          }
         }
 
-        timelineItem = {
-          id: `${entry.id}-pickup-${STAFF_BA_MOCK_TIMES.pickup}`,
-          childName: entry.name,
-          time: STAFF_BA_MOCK_TIMES.pickup,
-          title: 'Picked Up',
-          message: `${entry.name} was confirmed for pickup.`,
-        };
+        if (!headcountId) {
+          throw new Error('Could not resolve camp headcount.');
+        }
 
-        return {
-          ...entry,
-          stage: 4,
-          status: 'Picked Up',
-          pickupTime: STAFF_BA_MOCK_TIMES.pickup,
-          afternoonDuration: STAFF_BA_MOCK_DURATIONS.afternoon,
-          totalDailyTime: STAFF_BA_MOCK_DURATIONS.total,
-          lastUpdateTime: STAFF_BA_MOCK_TIMES.pickup,
-          timeline: [timelineItem, ...entry.timeline].slice(0, 5),
-        };
-      })
-    );
+        const { data: confirmedRows, error: confirmedRowsError } = await supabase
+          .from('camp_headcount_children')
+          .select('id, confirmed_present')
+          .eq('camp_headcount_id', headcountId)
+          .eq('child_id', childId)
+          .limit(1);
 
-    setStaffBeforeAfterPickupChildId(null);
-  };
+        if (confirmedRowsError) {
+          throw new Error(
+            confirmedRowsError.message || 'Could not load camp confirmation row.'
+          );
+        }
 
-  const confirmCampPresent = (groupName, childId) => {
-    const currentGroup = staffSummerCampGroups[groupName] || [];
-    const existing = currentGroup.find((child) => child.id === childId);
+        const existingConfirmedRow = Array.isArray(confirmedRows) ? confirmedRows[0] : null;
 
-    if (!existing || existing.checkInStatus !== 'Checked In') {
-      return;
-    }
+        if (existingConfirmedRow?.confirmed_present) {
+          Alert.alert('Confirmed', 'This camper is already confirmed present.');
+          return;
+        }
 
-    if (existing.groupConfirmationStatus === 'Confirmed Present') {
-      return;
-    }
+        if (existingConfirmedRow?.id) {
+          const { error: updateChildError } = await supabase
+            .from('camp_headcount_children')
+            .update({
+              confirmed_present: true,
+              confirmed_at: now,
+            })
+            .eq('id', existingConfirmedRow.id);
 
-    const time = consumeStaffMockTime();
+          if (updateChildError) {
+            throw new Error(
+              updateChildError.message || 'Could not confirm camper.'
+            );
+          }
+        } else {
+          const { error: insertChildError } = await supabase
+            .from('camp_headcount_children')
+            .insert({
+              camp_headcount_id: headcountId,
+              child_id: childId,
+              confirmed_present: true,
+              confirmed_at: now,
+            });
 
-    setStaffSummerCampGroups((prev) => {
-      const group = prev[groupName] || [];
-      return {
-        ...prev,
-        [groupName]: group.map((entry) =>
-          entry.id === childId
-            ? {
-                ...entry,
-                checkInStatus: 'Checked In',
-                groupConfirmationStatus: 'Confirmed Present',
-                lastUpdateTime: time,
-              }
-            : entry
-        ),
-      };
-    });
-  };
+          if (insertChildError) {
+            throw new Error(
+              insertChildError.message || 'Could not confirm camper.'
+            );
+          }
+        }
 
-  const checkInOwnerSummerCampChild = (groupName, childId, childName) => {
-    const time = consumeStaffMockTime();
-    const currentGroup = staffSummerCampGroups[groupName] || [];
-    const existing = currentGroup.find((child) => child.id === childId);
+        await loadStaffSummerCampData();
+        Alert.alert(`${existing.name} confirmed present.`);
+      } catch (confirmError) {
+        const message = confirmError?.message || 'Could not confirm present.';
+        setStaffSummerCampError(message);
+        Alert.alert('Could not confirm present.', message);
+      } finally {
+        setStaffSummerCampSavingChildId('');
+      }
+    },
+    [
+      loadStaffSummerCampData,
+      staffSummerCampGroups,
+      staffSummerCampOwnerStatus,
+    ]
+  );
 
-    if (!existing || existing.checkInStatus === 'Checked In') {
-      return;
-    }
+  const checkInOwnerSummerCampChild = useCallback(
+    async (childId, childName) => {
+      const child = ownerSummerCampChildren.find((entry) => entry.id === childId);
 
-    setStaffSummerCampGroups((prev) => {
-      const group = prev[groupName] || [];
-      return {
-        ...prev,
-        [groupName]: group.map((child) =>
-          child.id === childId
-            ? {
-                ...child,
-                checkInStatus: 'Checked In',
-                lastUpdateTime: time,
-              }
-            : child
-        ),
-      };
-    });
+      if (!child || ownerSummerCampSavingChildId) {
+        return;
+      }
 
-    setOwnerSummerCampChildren((prev) =>
-      prev.map((child) =>
-        child.id === childId
-          ? {
-              ...child,
-              checkInStatus: 'Checked In',
-              checkInTime: time,
-              lastUpdateTime: time,
-            }
-          : child
-      )
-    );
+      if (child.sessionRow?.checked_in_at) {
+        Alert.alert('Already checked in.');
+        return;
+      }
 
-    setOwnerSummerCampSummary((prev) => ({
-      ...prev,
-      total: prev.total + 1,
-      [groupName]: (prev[groupName] || 0) + 1,
+      const selectedGroupId =
+        ownerSummerCampSelectedGroupByChildId[childId] || child.selectedGroupId || '';
+
+      if (!selectedGroupId) {
+        Alert.alert('Select a camp group first.');
+        return;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date().toISOString();
+
+      setOwnerSummerCampSavingChildId(childId);
+
+      const { error } = await supabase.from('camp_check_ins').insert({
+        child_id: childId,
+        camp_group_id: selectedGroupId,
+        date: today,
+        checked_in_at: now,
+        status: 'checked_in',
+      });
+
+      if (error) {
+        Alert.alert('Could not check in to camp.', error.message || 'Please try again.');
+        setOwnerSummerCampSavingChildId('');
+        return;
+      }
+
+      await loadOwnerSummerCampData();
+      setOwnerSummerCampSavingChildId('');
+      Alert.alert(`${childName} checked into camp.`);
+    },
+    [
+      loadOwnerSummerCampData,
+      ownerSummerCampChildren,
+      ownerSummerCampSavingChildId,
+      ownerSummerCampSelectedGroupByChildId,
+    ]
+  );
+
+  const handleToggleOwnerSummerCampGroupPicker = useCallback((childId) => {
+    setOwnerSummerCampGroupPickerChildId((current) => (current === childId ? '' : childId));
+  }, []);
+
+  const handleSelectOwnerSummerCampGroupForChild = useCallback((childId, groupId) => {
+    setOwnerSummerCampSelectedGroupByChildId((current) => ({
+      ...current,
+      [childId]: groupId,
     }));
+    setOwnerSummerCampGroupPickerChildId('');
+  }, []);
 
-    Alert.alert(`${childName} checked into ${groupName}.`);
-  };
+  const sendCampHeadcount = useCallback(
+    async (groupName) => {
+      const currentGroup = staffSummerCampGroups[groupName] || [];
+      const currentHeadcount = staffSummerCampOwnerStatus[groupName] || null;
+      const confirmedCount = currentGroup.filter(
+        (child) => child.groupConfirmationStatus === 'Confirmed Present'
+      ).length;
+      const ownerCheckedInCount = currentGroup.length;
+      const now = new Date().toISOString();
+      const today = new Date().toISOString().split('T')[0];
+      const submittedStatus =
+        confirmedCount === ownerCheckedInCount ? 'submitted' : 'discrepancy';
 
-  const sendCampHeadcount = (groupName) => {
-    const time = consumeStaffMockTime();
-    Alert.alert(`${groupName} headcount sent to owner.`);
-    setStaffSummerCampOwnerStatus((prev) => ({
-      ...prev,
-      [groupName]: {
-        status: 'Sent',
-        sentAt: time,
-      },
-    }));
-  };
+      if (!groupName) {
+        return;
+      }
 
-  const saveStaffDailyNote = ({
+      setStaffSummerCampSendingGroup(groupName);
+      setStaffSummerCampError('');
+
+      try {
+        let headcountId = currentHeadcount?.id || null;
+
+        if (!headcountId) {
+          const { data: insertedHeadcount, error: insertHeadcountError } = await supabase
+            .from('camp_headcounts')
+            .insert({
+              camp_group_id:
+                currentHeadcount?.campGroupId || currentGroup[0]?.campGroupId || null,
+              date: today,
+              status: submittedStatus,
+              owner_checked_in_count: ownerCheckedInCount,
+              counselor_confirmed_count: confirmedCount,
+              submitted_at: now,
+            })
+            .select('id')
+            .single();
+
+          if (insertHeadcountError) {
+            throw new Error(
+              insertHeadcountError.message || 'Could not send camp headcount.'
+            );
+          }
+
+          headcountId = insertedHeadcount?.id || null;
+        } else {
+          const { error: updateHeadcountError } = await supabase
+            .from('camp_headcounts')
+            .update({
+              counselor_confirmed_count: confirmedCount,
+              owner_checked_in_count: ownerCheckedInCount,
+              status: submittedStatus,
+              submitted_at: now,
+            })
+            .eq('id', headcountId);
+
+          if (updateHeadcountError) {
+            throw new Error(
+              updateHeadcountError.message || 'Could not send camp headcount.'
+            );
+          }
+        }
+
+        await loadStaffSummerCampData();
+        Alert.alert('Headcount sent to owner.');
+      } catch (sendError) {
+        const message = sendError?.message || 'Could not send headcount.';
+        setStaffSummerCampError(message);
+        Alert.alert('Could not send headcount.', message);
+      } finally {
+        setStaffSummerCampSendingGroup('');
+      }
+    },
+    [loadStaffSummerCampData, staffSummerCampGroups, staffSummerCampOwnerStatus]
+  );
+
+  const saveStaffDailyNote = async ({
     childId,
     childName,
     quickNotes,
@@ -7810,37 +12163,53 @@ export default function App() {
     visibility,
     signature,
   }) => {
+    const trimmedCustomNote = customNote.trim();
+
+    if (!childId || (!quickNotes.length && !trimmedCustomNote)) {
+      return null;
+    }
+
     const summaryParts = [];
 
     if (quickNotes.length) {
       summaryParts.push(quickNotes.join(' • '));
     }
 
-    if (customNote) {
-      summaryParts.push(customNote);
+    if (trimmedCustomNote) {
+      summaryParts.push(trimmedCustomNote);
     }
 
     const summary = summaryParts.length ? summaryParts.join(' · ') : 'No note added';
-    const duplicateExists = staffDailyNotesSavedEntries.some(
-      (entry) => entry.childId === childId && entry.signature === signature
-    );
-    if (duplicateExists) {
+    const timestamp = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from('daily_notes')
+      .insert({
+        child_id: childId,
+        date: timestamp.split('T')[0],
+        quick_notes: quickNotes,
+        custom_note: trimmedCustomNote,
+        visibility: 'owner',
+        review_status: 'pending',
+      })
+      .select('id, created_at')
+      .single();
+
+    if (error) {
       return null;
     }
 
-    const time = consumeStaffMockTime();
-
     const entry = {
-      id: `${childId}-${time}-${staffDailyNotesSavedEntries.length + 1}`,
+      id: data?.id ?? `${childId}-${timestamp}`,
       childId,
       childName,
       quickNotes,
-      customNote,
+      customNote: trimmedCustomNote,
       summary,
-      time,
+      time: data?.created_at ?? timestamp,
       visibility,
       signature,
-      timelineMessage: `${childName} daily note saved at ${time}.`,
+      timelineMessage: `${childName} daily note saved at ${timestamp}.`,
       notificationMessage: `${childName} has a new daily note.`,
       ownerMessage: `${childName} note captured for owner review.`,
     };
@@ -7854,6 +12223,31 @@ export default function App() {
   };
 
   const childTheme = getChildGroupTheme(CHILD_PROFILE.group);
+  const formatAttendanceDate = (value) => {
+    const label = formatDate(value);
+    return label === 'Date not set' ? '—' : label;
+  };
+
+  const formatAttendanceTime = (value) => {
+    const label = formatTime(value);
+    return label === 'Not recorded' ? '—' : label;
+  };
+
+  const formatAttendanceType = (value) => {
+    if (value === 'check_in') {
+      return 'Checked In';
+    }
+
+    if (value === 'check_out') {
+      return 'Checked Out';
+    }
+
+    return 'Attendance Event';
+  };
+
+  const toggleParentDetailSection = (sectionKey) => {
+    setParentDetailSectionOpen((current) => (current === sectionKey ? null : sectionKey));
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -7862,10 +12256,10 @@ export default function App() {
       {screen === 'login' ? (
         <LoginScreen
           email={email}
-          inviteCode={inviteCode}
+          password={password}
           error={error}
           onChangeEmail={setEmail}
-          onChangeInviteCode={setInviteCode}
+          onChangePassword={setPassword}
           onLogin={handleLogin}
           onFillTestAccount={fillTestAccount}
           onOpenActivateAccount={openActivateAccountScreen}
@@ -7956,6 +12350,235 @@ export default function App() {
                 </View>
               </View>
 
+              <View
+                style={[
+                  styles.parentAccordionCard,
+                  parentDetailSectionOpen === 'timeline' && styles.parentAccordionCardOpen,
+                ]}
+              >
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => toggleParentDetailSection('timeline')}
+                  style={({ pressed }) => [
+                    styles.parentAccordionHeader,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <View style={styles.parentAccordionHeaderCopy}>
+                    <Text style={styles.parentAccordionTitle}>Timeline</Text>
+                    <Text style={styles.parentAccordionSummary}>Recent activity for today</Text>
+                  </View>
+                  <Text style={styles.parentAccordionChevron}>
+                    {parentDetailSectionOpen === 'timeline' ? '▴' : '▾'}
+                  </Text>
+                </Pressable>
+
+                {parentDetailSectionOpen === 'timeline' ? (
+                  <View style={styles.parentAccordionBody}>
+                    {parentTimelineLoading ? (
+                      <Text style={styles.parentAttendanceStateText}>Loading timeline...</Text>
+                    ) : parentTimelineError ? (
+                      <Text style={[styles.errorText, { marginTop: 0 }]}>
+                        Could not load timeline.
+                      </Text>
+                    ) : parentTimelineHistory.length ? (
+                      <View style={styles.parentTimelineList}>
+                        {parentTimelineHistory.map((item) => (
+                          <View key={item.id} style={styles.parentTimelineCard}>
+                            <View style={styles.parentAttendanceChildHeaderRow}>
+                              <Text style={styles.parentAttendanceChildName}>{item.childName}</Text>
+                              <Text style={styles.parentAttendanceChildRoom}>{item.childRoom}</Text>
+                            </View>
+
+                            {item.type === 'attendance' ? (
+                              <View style={styles.parentTimelineAttendanceBlock}>
+                                <Text style={styles.parentTimelineTitle}>✓ {item.title}</Text>
+                                <Text style={styles.parentTimelineMeta}>
+                                  {formatAttendanceDate(item.timestamp)}
+                                </Text>
+                                <Text style={styles.parentTimelineTime}>
+                                  {formatAttendanceTime(item.timestamp)}
+                                </Text>
+                              </View>
+                            ) : (
+                              <View style={styles.parentTimelineDailyNoteBlock}>
+                                <Text style={styles.parentTimelineTitle}>Daily Note</Text>
+                                <Text style={styles.parentTimelineMeta}>
+                                  {formatAttendanceDate(item.timestamp)}
+                                </Text>
+                                <Text style={styles.parentTimelineTime}>
+                                  {formatAttendanceTime(item.timestamp)}
+                                </Text>
+                                <Text style={styles.parentDailyNoteQuickNotes}>
+                                  {item.quick_notes.length
+                                    ? item.quick_notes.join(' • ')
+                                    : 'No quick notes'}
+                                </Text>
+                                {item.custom_note ? (
+                                  <Text style={styles.parentDailyNoteCustomNote}>
+                                    {item.custom_note}
+                                  </Text>
+                                ) : null}
+                              </View>
+                            )}
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.parentAttendanceStateText}>No activity yet.</Text>
+                    )}
+                  </View>
+                ) : null}
+              </View>
+
+              <View
+                style={[
+                  styles.parentAccordionCard,
+                  parentDetailSectionOpen === 'attendance' && styles.parentAccordionCardOpen,
+                ]}
+              >
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => toggleParentDetailSection('attendance')}
+                  style={({ pressed }) => [
+                    styles.parentAccordionHeader,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <View style={styles.parentAccordionHeaderCopy}>
+                    <Text style={styles.parentAccordionTitle}>Attendance History</Text>
+                    <Text style={styles.parentAccordionSummary}>
+                      Check-in and check-out records
+                    </Text>
+                  </View>
+                  <Text style={styles.parentAccordionChevron}>
+                    {parentDetailSectionOpen === 'attendance' ? '▴' : '▾'}
+                  </Text>
+                </Pressable>
+
+                {parentDetailSectionOpen === 'attendance' ? (
+                  <View style={styles.parentAccordionBody}>
+                    {parentAttendanceLoading ? (
+                      <Text style={styles.parentAttendanceStateText}>Loading attendance...</Text>
+                    ) : parentAttendanceError ? (
+                      <Text style={[styles.errorText, { marginTop: 0 }]}>
+                        Could not load attendance.
+                      </Text>
+                    ) : parentAttendanceHistory.length ? (
+                      <View style={styles.parentAttendanceList}>
+                        {parentAttendanceHistory.map((child) => (
+                          <View key={child.id} style={styles.parentAttendanceChildBlock}>
+                            <View style={styles.parentAttendanceChildHeaderRow}>
+                              <Text style={styles.parentAttendanceChildName}>{child.name}</Text>
+                              <Text style={styles.parentAttendanceChildRoom}>{child.room}</Text>
+                            </View>
+
+                            {child.events.length ? (
+                              <View style={styles.parentAttendanceEventList}>
+                                {child.events.map((event) => (
+                                  <View key={event.id} style={styles.parentAttendanceEventRow}>
+                                    <View style={styles.parentAttendanceEventCopy}>
+                                      <Text style={styles.parentAttendanceEventType}>
+                                        {formatAttendanceType(event.event_type)}
+                                      </Text>
+                                      <Text style={styles.parentAttendanceEventDate}>
+                                        {formatAttendanceDate(event.event_time)}
+                                      </Text>
+                                    </View>
+                                    <Text style={styles.parentAttendanceEventTime}>
+                                      {formatAttendanceTime(event.event_time)}
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+                            ) : (
+                              <Text style={styles.parentAttendanceStateText}>
+                                No attendance records yet.
+                              </Text>
+                            )}
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.parentAttendanceStateText}>
+                        No attendance records yet.
+                      </Text>
+                    )}
+                  </View>
+                ) : null}
+              </View>
+
+              <View
+                style={[
+                  styles.parentAccordionCard,
+                  parentDetailSectionOpen === 'daily-notes' && styles.parentAccordionCardOpen,
+                ]}
+              >
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => toggleParentDetailSection('daily-notes')}
+                  style={({ pressed }) => [
+                    styles.parentAccordionHeader,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <View style={styles.parentAccordionHeaderCopy}>
+                    <Text style={styles.parentAccordionTitle}>Daily Notes</Text>
+                    <Text style={styles.parentAccordionSummary}>Notes from staff and owner</Text>
+                  </View>
+                  <Text style={styles.parentAccordionChevron}>
+                    {parentDetailSectionOpen === 'daily-notes' ? '▴' : '▾'}
+                  </Text>
+                </Pressable>
+
+                {parentDetailSectionOpen === 'daily-notes' ? (
+                  <View style={styles.parentAccordionBody}>
+                    {parentDailyNotesLoading ? (
+                      <Text style={styles.parentAttendanceStateText}>Loading daily notes...</Text>
+                    ) : parentDailyNotesError ? (
+                      <Text style={[styles.errorText, { marginTop: 0 }]}>
+                        Could not load daily notes.
+                      </Text>
+                    ) : parentDailyNotesHistory.length ? (
+                      <View style={styles.parentAttendanceList}>
+                        {parentDailyNotesHistory.map((child) => (
+                          <View key={child.id} style={styles.parentAttendanceChildBlock}>
+                            <View style={styles.parentAttendanceChildHeaderRow}>
+                              <Text style={styles.parentAttendanceChildName}>{child.name}</Text>
+                              <Text style={styles.parentAttendanceChildRoom}>
+                                {child.notes.length} note{child.notes.length === 1 ? '' : 's'}
+                              </Text>
+                            </View>
+
+                            <View style={styles.parentDailyNotesList}>
+                              {child.notes.map((note) => (
+                                <View key={note.id} style={styles.parentDailyNoteRow}>
+                                  <Text style={styles.parentAttendanceEventType}>
+                                    {formatAttendanceDate(note.date || note.created_at)}
+                                  </Text>
+                                  <Text style={styles.parentDailyNoteQuickNotes}>
+                                    {Array.isArray(note.quick_notes) && note.quick_notes.length
+                                      ? note.quick_notes.join(' • ')
+                                      : 'No quick notes'}
+                                  </Text>
+                                  {note.custom_note ? (
+                                    <Text style={styles.parentDailyNoteCustomNote}>
+                                      {note.custom_note}
+                                    </Text>
+                                  ) : null}
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.parentAttendanceStateText}>No daily notes yet.</Text>
+                    )}
+                  </View>
+                ) : null}
+              </View>
+
               <View style={styles.parentQuickSectionHeader}>
                 <Text style={styles.parentSectionHeaderTitle}>Quick Access</Text>
                 <Text style={styles.parentSectionHeaderSubtle}>Tap a card for details</Text>
@@ -8024,7 +12647,41 @@ export default function App() {
 
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => setScreen('notifications')}
+                  onPress={() => setScreen('parent-authorized-pickups')}
+                  style={({ pressed }) => [
+                    styles.parentQuickCard,
+                    styles.parentQuickPurple,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <View style={styles.parentQuickAccentPurple} />
+                  <Text style={styles.parentQuickTitle}>Authorized Pickups</Text>
+                  <Text style={styles.parentQuickValue}>Manage</Text>
+                  <Text style={styles.parentQuickNote}>
+                    Manage people allowed to pick up your child
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setScreen('parent-emergency-contacts')}
+                  style={({ pressed }) => [
+                    styles.parentQuickCard,
+                    styles.parentQuickGreen,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <View style={styles.parentQuickAccentGreen} />
+                  <Text style={styles.parentQuickTitle}>Emergency Contacts</Text>
+                  <Text style={styles.parentQuickValue}>Manage</Text>
+                  <Text style={styles.parentQuickNote}>
+                    Manage emergency contacts for your child
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setScreen('parent-messages')}
                   style={({ pressed }) => [
                     styles.parentQuickCard,
                     styles.parentQuickOrange,
@@ -8032,9 +12689,9 @@ export default function App() {
                   ]}
                 >
                   <View style={styles.parentQuickAccentOrange} />
-                  <Text style={styles.parentQuickTitle}>Notifications</Text>
-                  <Text style={styles.parentQuickValue}>{PARENT_CHILD.notifications}</Text>
-                  <Text style={styles.parentQuickNote}>Unread updates and alerts</Text>
+                  <Text style={styles.parentQuickTitle}>Messages</Text>
+                  <Text style={styles.parentQuickValue}>{PARENT_CHILD.messages}</Text>
+                  <Text style={styles.parentQuickNote}>View center updates and announcements</Text>
                 </Pressable>
               </View>
 
@@ -8070,13 +12727,50 @@ export default function App() {
       ) : screen === 'before-after-care' ? (
         <BeforeAfterCareScreen
           onBack={() => setScreen('parent-home')}
-          onOpenBilling={() => setScreen('parent-billing')}
           onLogout={handleLogout}
+          loading={parentBeforeAfterLoading}
+          error={parentBeforeAfterError}
+          records={parentBeforeAfterRecords}
+        />
+      ) : screen === 'parent-authorized-pickups' ? (
+        <ParentAuthorizedPickupsScreen
+          onBack={() => setScreen('parent-home')}
+          onLogout={handleLogout}
+          currentUserId={session?.user?.id}
+        />
+      ) : screen === 'parent-emergency-contacts' ? (
+        <ParentEmergencyContactsScreen
+          onBack={() => setScreen('parent-home')}
+          onLogout={handleLogout}
+          currentUserId={session?.user?.id}
+        />
+      ) : screen === 'parent-messages' ? (
+        <NotificationsScreen
+          onBack={() => setScreen('parent-home')}
+          onLogout={handleLogout}
+          messages={recipientMessages}
+          loading={recipientMessagesLoading}
+          error={recipientMessagesError}
+          expandedMessageId={recipientMessagesExpandedId}
+          onToggleMessage={handleToggleRecipientMessage}
+          title="Messages"
+          subtitle="Center updates and announcements"
+          introTitle="Inbox"
+          introText="Center updates and announcements"
         />
       ) : screen === 'notifications' ? (
         <NotificationsScreen
           onBack={() => setScreen('parent-home')}
           onLogout={handleLogout}
+          messages={recipientMessages}
+          loading={recipientMessagesLoading}
+          error={recipientMessagesError}
+          expandedMessageId={recipientMessagesExpandedId}
+          onToggleMessage={handleToggleRecipientMessage}
+          title="Notifications"
+          subtitle="Simple updates from Mia's day."
+          introTitle="Inbox"
+          introText="Simple updates from Mia's day."
         />
       ) : screen === 'child-profile' ? (
         <View style={styles.parentHomePage}>
@@ -8099,7 +12793,13 @@ export default function App() {
             <View style={styles.childProfileHeroMain}>
               <View style={styles.childProfileHeroTextBlock}>
                 <Text style={styles.parentHeroKicker}>Advanced Education</Text>
-                <Text style={styles.parentHeroGreeting}>Mia Carter</Text>
+                <Text style={styles.parentHeroGreeting}>
+                  {childProfileSelectedChild
+                    ? `${childProfileSelectedChild.first_name || ''} ${
+                        childProfileSelectedChild.last_name || ''
+                      }`.trim() || 'Child Profile'
+                    : 'Child Profile'}
+                </Text>
                 <View
                   style={[
                     styles.childProfileGroupBadge,
@@ -8115,7 +12815,7 @@ export default function App() {
                       { color: childTheme.accent },
                     ]}
                   >
-                    {CHILD_PROFILE.group}
+                    {childProfileSelectedChild?.room || 'Room not set'}
                   </Text>
                 </View>
                 <View
@@ -8125,7 +12825,7 @@ export default function App() {
                   ]}
                 >
                   <Text style={styles.childProfileStatusPillText}>
-                    {CHILD_PROFILE.status}
+                    {childProfileSelectedChild?.status || 'Status not set'}
                   </Text>
                 </View>
               </View>
@@ -8162,15 +12862,25 @@ export default function App() {
                 <View style={styles.profileInfoGrid}>
                   <View style={styles.profileInfoItem}>
                     <Text style={styles.profileInfoLabel}>Name</Text>
-                    <Text style={styles.profileInfoValue}>Mia Carter</Text>
+                    <Text style={styles.profileInfoValue}>
+                      {childProfileSelectedChild
+                        ? `${childProfileSelectedChild.first_name || ''} ${
+                            childProfileSelectedChild.last_name || ''
+                          }`.trim() || 'Name not set'
+                        : 'Name not set'}
+                    </Text>
                   </View>
                   <View style={styles.profileInfoItem}>
                     <Text style={styles.profileInfoLabel}>Age</Text>
-                    <Text style={styles.profileInfoValue}>{CHILD_PROFILE.age}</Text>
+                    <Text style={styles.profileInfoValue}>
+                      {childProfileSelectedChild?.age || 'N/A'}
+                    </Text>
                   </View>
                   <View style={styles.profileInfoItem}>
                     <Text style={styles.profileInfoLabel}>Room</Text>
-                    <Text style={styles.profileInfoValue}>{CHILD_PROFILE.room}</Text>
+                    <Text style={styles.profileInfoValue}>
+                      {childProfileSelectedChild?.room || 'Room not set'}
+                    </Text>
                   </View>
                   <View style={styles.profileInfoItem}>
                     <Text style={styles.profileInfoLabel}>Status</Text>
@@ -8181,7 +12891,7 @@ export default function App() {
                       ]}
                     >
                       <Text style={styles.childProfileStatusBadgeText}>
-                        {CHILD_PROFILE.status}
+                        {childProfileSelectedChild?.status || 'Status not set'}
                       </Text>
                     </View>
                   </View>
@@ -8227,20 +12937,41 @@ export default function App() {
                     />
                     <Text style={styles.parentSectionHeaderTitle}>Authorized Pickups</Text>
                   </View>
+                  <Text style={styles.parentSectionHeaderSubtle}>
+                    {childProfileSelectedChild
+                      ? `${childProfileSelectedChild.first_name || ''} ${
+                          childProfileSelectedChild.last_name || ''
+                        }`.trim() || 'Linked child'
+                      : 'Linked child'}
+                  </Text>
                 </View>
-                <View style={styles.profileBulletList}>
-                  {CHILD_PROFILE.authorizedPickups.map((name) => (
-                    <View key={name} style={styles.profileBulletRow}>
-                      <View
-                        style={[
-                          styles.profileBulletDot,
-                          { backgroundColor: childTheme.accent },
-                        ]}
-                      />
-                      <Text style={styles.profileBulletItem}>{name}</Text>
-                    </View>
-                  ))}
-                </View>
+                {childProfilePickupLoading ? (
+                  <Text style={styles.parentAttendanceStateText}>Loading authorized pickups...</Text>
+                ) : childProfilePickupError ? (
+                  <Text style={styles.errorText}>{childProfilePickupError}</Text>
+                ) : childProfilePickupRows.length ? (
+                  <View style={styles.profileList}>
+                    {childProfilePickupRows.map((pickup) => (
+                      <View key={pickup.id} style={styles.profileListRow}>
+                        <View
+                          style={[
+                            styles.profileListDot,
+                            { backgroundColor: childTheme.accent },
+                          ]}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.profileListLabel}>{pickup.full_name}</Text>
+                          <Text style={styles.profileListValue}>{pickup.relationship}</Text>
+                          <Text style={styles.profileListValue}>{pickup.phone}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                    ) : (
+                  <Text style={styles.parentAttendanceStateText}>
+                    No authorized pickups on file.
+                  </Text>
+                )}
               </View>
 
               <View style={styles.profileCard}>
@@ -8251,23 +12982,49 @@ export default function App() {
                         styles.childProfileSectionIcon,
                         { backgroundColor: childTheme.accent },
                       ]}
-                    />
+                    />  
                     <Text style={styles.parentSectionHeaderTitle}>Emergency Contacts</Text>
                   </View>
+                  <Text style={styles.parentSectionHeaderSubtle}>
+                    {childProfileSelectedChild
+                      ? `${childProfileSelectedChild.first_name || ''} ${
+                          childProfileSelectedChild.last_name || ''
+                        }`.trim() || 'Linked child'
+                      : 'Linked child'}
+                  </Text>
                 </View>
-                <View style={styles.profileBulletList}>
-                  {CHILD_PROFILE.emergencyContacts.map((name) => (
-                    <View key={name} style={styles.profileBulletRow}>
-                      <View
-                        style={[
-                          styles.profileBulletDot,
-                          { backgroundColor: childTheme.accent },
-                        ]}
-                      />
-                      <Text style={styles.profileBulletItem}>{name}</Text>
-                    </View>
-                  ))}
-                </View>
+                {childProfileEmergencyLoading ? (
+                  <Text style={styles.parentAttendanceStateText}>
+                    Loading emergency contacts...
+                  </Text>
+                ) : childProfileEmergencyError ? (
+                  <Text style={styles.errorText}>{childProfileEmergencyError}</Text>
+                ) : childProfileEmergencyRows.length ? (
+                  <View style={styles.profileList}>
+                    {childProfileEmergencyRows.map((contact) => (
+                      <View key={contact.id} style={styles.profileListRow}>
+                        <View
+                          style={[
+                            styles.profileListDot,
+                            { backgroundColor: childTheme.accent },
+                          ]}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.profileListLabel}>{contact.full_name}</Text>
+                          <Text style={styles.profileListValue}>{contact.relationship}</Text>
+                          <Text style={styles.profileListValue}>{contact.phone}</Text>
+                          <Text style={styles.profileListValue}>
+                            {formatEmergencyContactPriority(contact.priority)}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.parentAttendanceStateText}>
+                    No emergency contacts on file.
+                  </Text>
+                )}
               </View>
 
               <View style={styles.profileCard}>
@@ -8312,9 +13069,29 @@ export default function App() {
           onOpenClock={() => setScreen('staff-clock-in-out')}
           onOpenBeforeAfter={() => setScreen('staff-before-after-attendance')}
           onOpenCamp={() => setScreen('staff-summer-camp-group-check-in')}
+          onOpenMessages={() => setScreen('staff-messages')}
           onOpenNotes={() => setScreen('staff-daily-notes')}
           onOpenHours={() => setScreen('staff-hours')}
           staffStatus={staffStatus}
+          messages={recipientMessages}
+          loading={recipientMessagesLoading}
+          error={recipientMessagesError}
+          expandedMessageId={recipientMessagesExpandedId}
+          onToggleMessage={handleToggleRecipientMessage}
+        />
+      ) : screen === 'staff-messages' ? (
+        <NotificationsScreen
+          onBack={() => setScreen('staff-home')}
+          onLogout={handleLogout}
+          messages={recipientMessages}
+          loading={recipientMessagesLoading}
+          error={recipientMessagesError}
+          expandedMessageId={recipientMessagesExpandedId}
+          onToggleMessage={handleToggleRecipientMessage}
+          title="Messages"
+          subtitle="Staff updates and center announcements"
+          introTitle="Inbox"
+          introText="Staff updates and center announcements"
         />
       ) : screen === 'staff-clock-in-out' ? (
         <StaffClockInOutScreen
@@ -8329,6 +13106,8 @@ export default function App() {
         <StaffBeforeAfterAttendanceScreen
           onBack={() => setScreen('staff-home')}
           onLogout={handleLogout}
+          loading={staffBeforeAfterLoading}
+          error={staffBeforeAfterError}
           attendanceChildren={staffBeforeAfterChildren}
           selectedChildId={staffBeforeAfterSelectedChildId}
           onSelectChild={(childId) => {
@@ -8337,28 +13116,34 @@ export default function App() {
           }}
           pickupChild={
             staffBeforeAfterPickupChildId
-              ? staffBeforeAfterChildren.find((entry) => entry.id === staffBeforeAfterPickupChildId) || null
+              ? (() => {
+                  const selected =
+                    staffBeforeAfterChildren.find((entry) => entry.id === staffBeforeAfterPickupChildId) ||
+                    null;
+
+                  if (!selected) {
+                    return null;
+                  }
+
+                  return {
+                    ...selected,
+                    authorizedPickups: (Array.isArray(authorizedPickupRows)
+                      ? authorizedPickupRows
+                      : []
+                    ).filter((row) => row.child_id === selected.id),
+                  };
+                })()
               : null
           }
-          onAction={(childId, action) => {
-            if (action === 'drop-off') {
-              advanceBeforeAfterChild(childId, 'drop-off');
-              return;
-            }
-
-            if (action === 'put-on-bus') {
-              advanceBeforeAfterChild(childId, 'put-on-bus');
-              return;
-            }
-
-            if (action === 'returned') {
-              advanceBeforeAfterChild(childId, 'returned');
-              return;
-            }
-
+          authorizedPickupsLoading={authorizedPickupRowsLoading}
+          savingChildId={staffBeforeAfterSavingChildId}
+          onAction={async (childId, action) => {
             if (action === 'parent-pickup') {
               openBeforeAfterPickup(childId);
+              return;
             }
+
+            await handleStaffBeforeAfterAction(childId, action);
           }}
           onConfirmPickup={confirmBeforeAfterPickup}
         />
@@ -8372,6 +13157,10 @@ export default function App() {
           onConfirmPresent={confirmCampPresent}
           onSendHeadcount={sendCampHeadcount}
           ownerStatus={staffSummerCampOwnerStatus}
+          loading={staffSummerCampLoading}
+          error={staffSummerCampError}
+          savingChildId={staffSummerCampSavingChildId}
+          sendingGroup={staffSummerCampSendingGroup}
         />
       ) : screen === 'staff-hours' ? (
         <StaffMyHoursScreen
@@ -8390,6 +13179,9 @@ export default function App() {
           onBack={() => setScreen('owner-home')}
           onLogout={handleLogout}
           onShowComingSoon={showComingSoon}
+          authorizedPickupRows={authorizedPickupRows}
+          authorizedPickupRowsLoading={authorizedPickupRowsLoading}
+          authorizedPickupRowsError={authorizedPickupRowsError}
         />
       ) : screen === 'owner-parents' ? (
         <OwnerParentsScreen
@@ -8401,6 +13193,9 @@ export default function App() {
         <OwnerMessagesScreen
           onBack={() => setScreen('owner-home')}
           onLogout={handleLogout}
+          currentUserId={session?.user?.id}
+          expandedRecentMessageId={ownerMessagesExpandedId}
+          onToggleRecentMessage={handleToggleOwnerRecentMessage}
         />
       ) : screen === 'owner-billing' ? (
         <OwnerBillingScreen
@@ -8426,6 +13221,16 @@ export default function App() {
           onLogout={handleLogout}
           onShowComingSoon={showComingSoon}
         />
+      ) : screen === 'owner-daily-notes-review' ? (
+        <OwnerDailyNotesReviewScreen
+          onBack={() => setScreen('owner-home')}
+          pendingNotes={ownerDailyNotesPending}
+          loading={ownerDailyNotesPendingLoading}
+          error={ownerDailyNotesPendingError}
+          onApprove={(note) => handleOwnerDailyNoteReviewDecision(note, 'approved')}
+          onReject={(note) => handleOwnerDailyNoteReviewDecision(note, 'rejected')}
+          actionNoteId={ownerDailyNotesReviewActionId}
+        />
       ) : screen === 'owner-staff' ? (
         <OwnerStaffScreen
           onBack={() => setScreen('owner-home')}
@@ -8438,13 +13243,21 @@ export default function App() {
           onLogout={handleLogout}
           ownerSummerCampChildren={ownerSummerCampChildren}
           ownerSummerCampSummary={ownerSummerCampSummary}
-          onCheckInChild={(childId) => {
+          ownerSummerCampGroups={ownerSummerCampGroups}
+          loading={ownerSummerCampLoading}
+          error={ownerSummerCampError}
+          savingChildId={ownerSummerCampSavingChildId}
+          selectedGroupByChildId={ownerSummerCampSelectedGroupByChildId}
+          groupPickerChildId={ownerSummerCampGroupPickerChildId}
+          onToggleGroupPicker={handleToggleOwnerSummerCampGroupPicker}
+          onSelectGroupForChild={handleSelectOwnerSummerCampGroupForChild}
+          onCheckInChild={(childId, childName) => {
             const child = ownerSummerCampChildren.find((entry) => entry.id === childId);
             if (!child) {
               return;
             }
 
-            checkInOwnerSummerCampChild(child.groupName, child.id, child.name);
+            checkInOwnerSummerCampChild(child.id, childName);
           }}
         />
       ) : (
@@ -8460,8 +13273,14 @@ export default function App() {
           onOpenInviteCodes={() => setScreen('owner-invite-codes')}
           onOpenReports={() => setScreen('owner-reports')}
           onOpenSummerCampCheckIn={() => setScreen('owner-summer-camp-check-in')}
+          onOpenDailyNotesReview={() => setScreen('owner-daily-notes-review')}
           ownerSummerCampSummary={ownerSummerCampSummary}
           staffSummerCampGroups={staffSummerCampGroups}
+          ownerPendingDailyNotesCount={ownerDailyNotesPending.length}
+          ownerDailyNotesPendingLoading={ownerDailyNotesPendingLoading}
+          ownerBeforeAfterCounts={ownerBeforeAfterCounts}
+          ownerBeforeAfterCountsLoading={ownerBeforeAfterCountsLoading}
+          ownerBeforeAfterCountsError={ownerBeforeAfterCountsError}
         />
       )}
     </SafeAreaView>
@@ -8696,6 +13515,9 @@ const styles = StyleSheet.create({
   },
   tileOrange: {
     backgroundColor: COLORS.warning,
+  },
+  tilePink: {
+    backgroundColor: '#EC4899',
   },
   tilePurple: {
     backgroundColor: '#7C4DFF',
@@ -9724,6 +14546,32 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 8,
   },
+  staffCampSummaryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  staffCampSummaryPill: {
+    borderRadius: 16,
+    flexGrow: 1,
+    minWidth: 140,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  staffCampSummaryLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
+  },
+  staffCampSummaryValue: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '900',
+    marginTop: 4,
+  },
   staffCampStatusPillBlue: {
     alignSelf: 'flex-start',
     backgroundColor: COLORS.lightBlue,
@@ -9765,6 +14613,54 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 15,
     fontWeight: '900',
+  },
+  ownerSummerCampGroupPickerRow: {
+    marginTop: 12,
+  },
+  ownerSummerCampGroupPickerButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  ownerSummerCampGroupPickerButtonText: {
+    color: COLORS.text,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '800',
+    marginRight: 10,
+  },
+  ownerSummerCampGroupPickerOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  ownerSummerCampGroupOption: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  ownerSummerCampGroupOptionActive: {
+    backgroundColor: COLORS.lightBlue,
+    borderColor: COLORS.blue,
+  },
+  ownerSummerCampGroupOptionText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  ownerSummerCampGroupOptionTextActive: {
+    color: COLORS.blue,
   },
   staffCampHeadcountValue: {
     color: COLORS.text,
@@ -9919,6 +14815,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
+  ownerMessagesStateText: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
+    marginTop: 8,
+  },
+  ownerMessagesErrorText: {
+    color: COLORS.danger,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
+    marginTop: 10,
+  },
   ownerChipGroup: {
     marginTop: 14,
   },
@@ -9941,6 +14851,55 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     marginTop: 14,
   },
+  ownerTitleInput: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '600',
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  ownerMessageRecipientSection: {
+    marginTop: 10,
+  },
+  ownerMessageRecipientList: {
+    gap: 10,
+    marginTop: 12,
+  },
+  ownerMessageRecipientCard: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  ownerMessageRecipientCardActive: {
+    backgroundColor: COLORS.softBlue,
+    borderColor: '#B5CCFF',
+  },
+  ownerMessageRecipientEmail: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  ownerMessageRecipientRole: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+    textTransform: 'capitalize',
+  },
+  ownerMessageRecipientRoleActive: {
+    color: COLORS.blue,
+  },
+  ownerMessageSendDisabled: {
+    opacity: 0.7,
+  },
   ownerRecentMessageList: {
     gap: 12,
     marginTop: 14,
@@ -9951,6 +14910,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     padding: 16,
+    gap: 10,
   },
   ownerRecentMessageTopRow: {
     alignItems: 'flex-start',
@@ -9988,7 +14948,81 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 12,
     fontWeight: '700',
-    marginTop: 10,
+    marginTop: 0,
+  },
+  ownerRecentMessageReceiptRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  ownerRecentMessageReceiptText: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  ownerRecentMessageExpandedBody: {
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 10,
+    marginTop: 4,
+    padding: 12,
+  },
+  ownerRecentMessageExpandedLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  ownerRecentMessageExpandedMessage: {
+    color: COLORS.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  ownerRecentMessageRecipientList: {
+    gap: 10,
+  },
+  ownerRecentMessageRecipientRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  ownerRecentMessageRecipientEmail: {
+    color: COLORS.text,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  ownerRecentMessageRecipientStatus: {
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: '900',
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    textTransform: 'uppercase',
+  },
+  ownerRecentMessageRecipientStatusRead: {
+    backgroundColor: COLORS.softGreen,
+    color: COLORS.success,
+  },
+  ownerRecentMessageRecipientStatusUnread: {
+    backgroundColor: COLORS.lightBlue,
+    color: COLORS.blue,
+  },
+  ownerPickupItem: {
+    gap: 2,
+  },
+  ownerPickupMeta: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 18,
   },
   ownerCommunicationNote: {
     color: COLORS.muted,
@@ -10395,10 +15429,135 @@ const styles = StyleSheet.create({
   ownerAccordionContent: {
     marginTop: 14,
   },
+  ownerDailyNotesReviewStickyHeader: {
+    backgroundColor: COLORS.navyDark,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: 'hidden',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 18,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 4,
+  },
+  ownerDailyNotesReviewHeaderTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  ownerDailyNotesReviewHeroMain: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 14,
+    marginTop: 18,
+  },
+  ownerDailyNotesReviewHeroCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  ownerDailyNotesReviewSubtitle: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 22,
+  },
+  ownerDailyNotesReviewCountBadge: {
+    alignItems: 'center',
+    borderRadius: 22,
+    justifyContent: 'center',
+    minWidth: 88,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  ownerDailyNotesReviewCountValue: {
+    color: COLORS.white,
+    fontSize: 28,
+    fontWeight: '900',
+    lineHeight: 30,
+  },
+  ownerDailyNotesReviewCountLabel: {
+    color: COLORS.white,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
   ownerSectionDetailsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
+  },
+  ownerDailyNotesReviewList: {
+    gap: 12,
+    marginTop: 12,
+  },
+  ownerDailyNotesReviewCardHeading: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  ownerDailyNotesReviewCustomNote: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 21,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  ownerDailyNotesReviewActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 14,
+  },
+  ownerDailyNotesReviewApproveButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.success,
+    borderRadius: 999,
+    flexBasis: 0,
+    flexGrow: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 120,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  ownerDailyNotesReviewApproveButtonText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  ownerDailyNotesReviewRejectButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.danger,
+    borderRadius: 999,
+    flexBasis: 0,
+    flexGrow: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 120,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  ownerDailyNotesReviewRejectButtonText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  ownerDailyNotesReviewButtonDisabled: {
+    opacity: 0.7,
   },
   ownerSectionList: {
     gap: 12,
@@ -10462,6 +15621,38 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  ownerPriorityDropdownTab: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  ownerPriorityDropdownTabText: {
+    color: COLORS.text,
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    paddingRight: 12,
+  },
+  ownerPriorityDropdownChevron: {
+    color: COLORS.blue,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  ownerPriorityDropdownMenu: {
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  ownerPriorityDropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  ownerPriorityDropdownItemActive: {
+    backgroundColor: COLORS.softBlue,
   },
   ownerFilterPillRow: {
     flexDirection: 'row',
@@ -10626,6 +15817,67 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 4,
   },
+  ownerStudentActionMenu: {
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: 12,
+    padding: 12,
+  },
+  studentActionDropdown: {
+    borderTopColor: COLORS.border,
+    borderTopWidth: 1,
+    marginTop: 12,
+    paddingTop: 12,
+  },
+  studentActionRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  studentActionPill: {
+    alignItems: 'center',
+    borderRadius: 999,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  studentActionPillBlue: {
+    backgroundColor: COLORS.blue,
+  },
+  studentActionPillNavy: {
+    backgroundColor: COLORS.navy,
+  },
+  studentActionPillGreen: {
+    backgroundColor: COLORS.success,
+  },
+  studentActionPillRed: {
+    backgroundColor: COLORS.danger,
+  },
+  studentActionPillPurple: {
+    backgroundColor: '#7C5CFF',
+  },
+  inviteCodePrompt: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  inviteCodeText: {
+    color: '#DC2626',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  activateAccountText: {
+    color: '#DC2626',
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 4,
+    textAlign: 'center',
+    textDecorationLine: 'underline',
+  },
   ownerStudentProfileButton: {
     alignSelf: 'flex-start',
     borderRadius: 999,
@@ -10697,6 +15949,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginTop: 16,
+  },
+  ownerDailyNoteInput: {
+    minHeight: 120,
+    paddingVertical: 14,
   },
   ownerParentList: {
     gap: 12,
@@ -11241,7 +16497,7 @@ loginPage: {
    alignItems: 'center',
    justifyContent: 'center',
    position: 'relative',
-   marginTop: -10,
+   marginTop: -5,
  },
  heroLogo: {
    width: 350,
@@ -11489,6 +16745,176 @@ parentHeroPhotoWrap: {
     shadowOpacity: 0.06,
     shadowRadius: 24,
     elevation: 3,
+  },
+  parentAttendanceList: {
+    gap: 12,
+  },
+  parentAttendanceChildBlock: {
+    backgroundColor: COLORS.softBlue,
+    borderColor: COLORS.border,
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: 10,
+    padding: 14,
+  },
+  parentAttendanceChildHeaderRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  parentAttendanceChildName: {
+    color: COLORS.text,
+    flexShrink: 1,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  parentAttendanceChildRoom: {
+    color: COLORS.blue,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  parentAttendanceEventList: {
+    gap: 10,
+  },
+  parentAttendanceEventRow: {
+    alignItems: 'flex-start',
+    borderTopColor: COLORS.border,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+  },
+  parentAttendanceEventCopy: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  parentAttendanceEventType: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  parentAttendanceEventDate: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  parentAttendanceEventTime: {
+    color: COLORS.blue,
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  parentAttendanceStateText: {
+    color: COLORS.muted,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  parentAccordionCard: {
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 24,
+    borderWidth: 1,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.05,
+    shadowRadius: 18,
+    elevation: 2,
+  },
+  parentAccordionCardOpen: {
+    shadowOpacity: 0.08,
+    elevation: 3,
+  },
+  parentAccordionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  parentAccordionHeaderCopy: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  parentAccordionTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  parentAccordionSummary: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  parentAccordionChevron: {
+    color: COLORS.blue,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  parentAccordionBody: {
+    borderTopColor: COLORS.border,
+    borderTopWidth: 1,
+    gap: 12,
+    padding: 16,
+  },
+  parentTimelineList: {
+    gap: 12,
+  },
+  parentTimelineCard: {
+    backgroundColor: COLORS.softBlue,
+    borderColor: COLORS.border,
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: 10,
+    padding: 14,
+  },
+  parentTimelineAttendanceBlock: {
+    gap: 4,
+  },
+  parentTimelineDailyNoteBlock: {
+    gap: 6,
+  },
+  parentTimelineTitle: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  parentTimelineMeta: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  parentTimelineTime: {
+    color: COLORS.blue,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  parentDailyNotesList: {
+    gap: 10,
+  },
+  parentDailyNoteRow: {
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 12,
+  },
+  parentDailyNoteQuickNotes: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+    marginTop: 6,
+  },
+  parentDailyNoteCustomNote: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+    marginTop: 8,
   },
   parentSectionHeaderRow: {
     alignItems: 'center',
@@ -12285,6 +17711,13 @@ parentHeroPhotoWrap: {
     fontWeight: '900',
     letterSpacing: 0.4,
   },
+  notificationsHeroSubtitle: {
+    color: 'rgba(255, 255, 255, 0.88)',
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+    marginTop: 10,
+  },
   notificationsIntroCard: {
     backgroundColor: COLORS.card,
     borderColor: COLORS.border,
@@ -12395,6 +17828,42 @@ parentHeroPhotoWrap: {
     color: COLORS.muted,
     fontSize: 12,
     fontWeight: '800',
+  },
+  recipientMessagesSection: {
+    backgroundColor: COLORS.card,
+    borderColor: COLORS.border,
+    borderRadius: 28,
+    borderWidth: 1,
+    gap: 12,
+    padding: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.05,
+    shadowRadius: 20,
+    elevation: 2,
+  },
+  recipientMessagesStateText: {
+    color: COLORS.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  recipientMessageExpandedFooter: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  recipientMessageExpandedLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  recipientMessageExpandedValue: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: '900',
   },
   loginBackgroundImage: {
   position: 'absolute',
