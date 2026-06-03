@@ -3,6 +3,7 @@ import {
   Alert,
   Image,
   ImageBackground,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -2163,9 +2164,21 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
   const [studentRows, setStudentRows] = useState([]);
   const [studentsLoading, setStudentsLoading] = useState(true);
   const [studentsError, setStudentsError] = useState('');
+  const [studentStatusView, setStudentStatusView] = useState('active');
+  const [availableParentProfiles, setAvailableParentProfiles] = useState([]);
+  const [childParentLinkRows, setChildParentLinkRows] = useState([]);
+  const [availableParentsLoading, setAvailableParentsLoading] = useState(true);
+  const [availableParentsError, setAvailableParentsError] = useState('');
+  const [showLinkParentModal, setShowLinkParentModal] = useState(false);
+  const [selectedStudentForLink, setSelectedStudentForLink] = useState(null);
+  const [selectedParentProfileId, setSelectedParentProfileId] = useState('');
+  const [linkParentError, setLinkParentError] = useState('');
+  const [isLinkingParent, setIsLinkingParent] = useState(false);
   const [showStudentForm, setShowStudentForm] = useState(false);
   const [isSavingStudent, setIsSavingStudent] = useState(false);
+  const [isArchivingStudentId, setIsArchivingStudentId] = useState(null);
   const [createStudentError, setCreateStudentError] = useState('');
+  const [selectedStudent, setSelectedStudent] = useState(null);
   const [createStudentForm, setCreateStudentForm] = useState({
     firstName: '',
     lastName: '',
@@ -2182,6 +2195,10 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
   };
 
   const filterPills = ['All', 'Before & After Care', 'Summer Camp', 'Both'];
+  const studentViewPills = [
+    { label: 'Active Students', value: 'active' },
+    { label: 'Archived Students', value: 'archived' },
+  ];
 
   const loadStudents = useCallback(async () => {
     setStudentsLoading(true);
@@ -2202,9 +2219,43 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
     setStudentsLoading(false);
   }, []);
 
+  const loadParentLinkData = useCallback(async () => {
+    setAvailableParentsLoading(true);
+    setAvailableParentsError('');
+
+    const [parentProfilesResult, linkRowsResult] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'parent')
+        .eq('account_status', 'active'),
+      supabase.from('child_parent_links').select('child_id, parent_profile_id'),
+    ]);
+
+    const parentProfilesError = parentProfilesResult.error;
+    const linkRowsError = linkRowsResult.error;
+
+    setAvailableParentProfiles(Array.isArray(parentProfilesResult.data) ? parentProfilesResult.data : []);
+    setChildParentLinkRows(Array.isArray(linkRowsResult.data) ? linkRowsResult.data : []);
+
+    if (parentProfilesError || linkRowsError) {
+      setAvailableParentsError(
+        parentProfilesError?.message ||
+          linkRowsError?.message ||
+          'Could not load parent link data.'
+      );
+    }
+
+    setAvailableParentsLoading(false);
+  }, []);
+
   useEffect(() => {
     loadStudents();
   }, [loadStudents]);
+
+  useEffect(() => {
+    loadParentLinkData();
+  }, [loadParentLinkData]);
 
   const students = [
     {
@@ -2273,6 +2324,9 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
 
     return {
       id: student.id ?? `${name}-${room}-${index}`,
+      first_name: student.first_name || '',
+      last_name: student.last_name || '',
+      isRealStudent: true,
       name,
       room,
       status,
@@ -2280,22 +2334,53 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
     };
   });
 
+  const linkedParentsByStudentId = childParentLinkRows.reduce((acc, linkRow) => {
+    const parent = availableParentProfiles.find((profile) => profile.id === linkRow.parent_profile_id);
+
+    if (!parent) {
+      return acc;
+    }
+
+    const current = acc[linkRow.child_id] || [];
+    const alreadyIncluded = current.some((entry) => entry.id === parent.id);
+
+    if (alreadyIncluded) {
+      return acc;
+    }
+
+    return {
+      ...acc,
+      [linkRow.child_id]: [...current, parent],
+    };
+  }, {});
+
   const visibleRealStudents = realStudents.filter((student) => {
     const query = searchQuery.trim().toLowerCase();
+    const normalizedStatus = (student.status || '').trim().toLowerCase();
+    const matchesStatusView =
+      studentStatusView === 'archived'
+        ? normalizedStatus === 'inactive'
+        : normalizedStatus !== 'inactive';
 
     if (!query) {
-      return true;
+      return matchesStatusView;
     }
 
     return (
-      student.name.toLowerCase().includes(query) ||
-      student.room.toLowerCase().includes(query) ||
-      student.status.toLowerCase().includes(query)
+      matchesStatusView &&
+      (student.name.toLowerCase().includes(query) ||
+        student.room.toLowerCase().includes(query) ||
+        student.status.toLowerCase().includes(query))
     );
   });
 
   const visibleStudents = students.filter((student) => {
     const query = searchQuery.trim().toLowerCase();
+    const normalizedStatus = (student.status || '').trim().toLowerCase();
+    const matchesStatusView =
+      studentStatusView === 'archived'
+        ? normalizedStatus === 'inactive'
+        : normalizedStatus !== 'inactive';
     const matchesQuery =
       !query ||
       student.name.toLowerCase().includes(query) ||
@@ -2303,15 +2388,16 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
     const matchesFilter =
       activeFilter === 'All' ||
       (activeFilter === 'Both' ? student.programs.length > 1 : student.filterKey === activeFilter);
-    return matchesQuery && matchesFilter;
+    return matchesQuery && matchesFilter && matchesStatusView;
   });
 
-  const hasRealStudents = studentRows.length > 0;
+  const hasRealStudents = visibleRealStudents.length > 0;
   const showEmptyState = !studentsLoading && !studentsError && !hasRealStudents;
   const displayMockFallback = !!studentsError && !hasRealStudents;
 
   const handleOpenStudentForm = () => {
     setCreateStudentError('');
+    setSelectedStudent(null);
     setCreateStudentForm({
       firstName: '',
       lastName: '',
@@ -2321,9 +2407,61 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
     setShowStudentForm(true);
   };
 
+  const handleEditStudent = (student) => {
+    setCreateStudentError('');
+    setSelectedStudent(student);
+    setCreateStudentForm({
+      firstName: student.first_name?.trim() || '',
+      lastName: student.last_name?.trim() || '',
+      room: student.room?.trim() || '',
+      status: student.status?.trim() || 'active',
+    });
+    setShowStudentForm(true);
+  };
+
   const handleCancelStudentForm = () => {
     setCreateStudentError('');
     setShowStudentForm(false);
+    setSelectedStudent(null);
+    setCreateStudentForm({
+      firstName: '',
+      lastName: '',
+      room: '',
+      status: 'active',
+    });
+  };
+
+  const handleArchiveStudent = (student) => {
+    if (!student?.id) {
+      return;
+    }
+
+    Alert.alert('Archive this student?', undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Archive',
+        style: 'destructive',
+        onPress: async () => {
+          setIsArchivingStudentId(student.id);
+
+          const { error } = await supabase
+            .from('children')
+            .update({
+              status: 'inactive',
+            })
+            .eq('id', student.id);
+
+          if (error) {
+            setStudentsError(error.message || 'Could not archive student.');
+            setIsArchivingStudentId(null);
+            return;
+          }
+
+          await loadStudents();
+          setIsArchivingStudentId(null);
+        },
+      },
+    ]);
   };
 
   const handleSaveStudent = async () => {
@@ -2340,12 +2478,26 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
     setIsSavingStudent(true);
     setCreateStudentError('');
 
-    const { error } = await supabase.from('children').insert({
-      first_name: firstName,
-      last_name: lastName,
-      room,
-      status,
-    });
+    let error;
+
+    if (selectedStudent?.id) {
+      ({ error } = await supabase
+        .from('children')
+        .update({
+          first_name: firstName,
+          last_name: lastName,
+          room,
+          status,
+        })
+        .eq('id', selectedStudent.id));
+    } else {
+      ({ error } = await supabase.from('children').insert({
+        first_name: firstName,
+        last_name: lastName,
+        room,
+        status,
+      }));
+    }
 
     if (error) {
       setCreateStudentError(error.message || 'Could not save student.');
@@ -2356,6 +2508,7 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
     await loadStudents();
     setIsSavingStudent(false);
     setShowStudentForm(false);
+    setSelectedStudent(null);
     setSearchQuery('');
     setActiveFilter('All');
     setCreateStudentForm({
@@ -2364,6 +2517,63 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
       room: '',
       status: 'active',
     });
+  };
+
+  const handleOpenLinkParent = (student) => {
+    setLinkParentError('');
+    setSelectedStudentForLink(student);
+    setSelectedParentProfileId('');
+    setShowLinkParentModal(true);
+  };
+
+  const handleCloseLinkParentModal = () => {
+    setLinkParentError('');
+    setShowLinkParentModal(false);
+    setSelectedStudentForLink(null);
+    setSelectedParentProfileId('');
+  };
+
+  const handleLinkParent = async () => {
+    if (!selectedStudentForLink?.id || !selectedParentProfileId) {
+      setLinkParentError('Select a parent to continue.');
+      return;
+    }
+
+    setIsLinkingParent(true);
+    setLinkParentError('');
+
+    const { data: existingLinks, error: existingLinkError } = await supabase
+      .from('child_parent_links')
+      .select('id')
+      .eq('child_id', selectedStudentForLink.id)
+      .eq('parent_profile_id', selectedParentProfileId);
+
+    if (existingLinkError) {
+      setLinkParentError(existingLinkError.message || 'Could not link parent.');
+      setIsLinkingParent(false);
+      return;
+    }
+
+    if (Array.isArray(existingLinks) && existingLinks.length > 0) {
+      setLinkParentError('Parent already linked.');
+      setIsLinkingParent(false);
+      return;
+    }
+
+    const { error: insertError } = await supabase.from('child_parent_links').insert({
+      child_id: selectedStudentForLink.id,
+      parent_profile_id: selectedParentProfileId,
+    });
+
+    if (insertError) {
+      setLinkParentError(insertError.message || 'Could not link parent.');
+      setIsLinkingParent(false);
+      return;
+    }
+
+    await loadParentLinkData();
+    setIsLinkingParent(false);
+    handleCloseLinkParentModal();
   };
 
   return (
@@ -2459,11 +2669,41 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
                 );
               })}
             </View>
+
+            <Text style={styles.ownerStudentFormLabel}>Student View</Text>
+            <View style={styles.ownerFilterPillRow}>
+              {studentViewPills.map((pill) => {
+                const isActive = studentStatusView === pill.value;
+                return (
+                  <Pressable
+                    key={pill.value}
+                    accessibilityRole="button"
+                    onPress={() => setStudentStatusView(pill.value)}
+                    style={({ pressed }) => [
+                      styles.ownerFilterPill,
+                      isActive && styles.ownerFilterPillActive,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.ownerFilterPillText,
+                        isActive && styles.ownerFilterPillTextActive,
+                      ]}
+                    >
+                      {pill.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
           {showStudentForm ? (
             <View style={styles.ownerAccordionCard}>
-              <Text style={styles.ownerAccordionTitle}>Add Student</Text>
+              <Text style={styles.ownerAccordionTitle}>
+                {selectedStudent ? 'Edit Student' : 'Add Student'}
+              </Text>
 
               <Text style={styles.ownerStudentFormLabel}>First Name</Text>
               <TextInput
@@ -2604,6 +2844,19 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
                       </View>
                     </View>
 
+                    <View style={styles.ownerLinkedParentsBlock}>
+                      <Text style={styles.ownerLinkedParentsLabel}>Linked Parents</Text>
+                      {linkedParentsByStudentId[student.id]?.length ? (
+                        linkedParentsByStudentId[student.id].map((parent) => (
+                          <Text key={parent.id} style={styles.ownerLinkedParentsValue}>
+                            {parent.email}
+                          </Text>
+                        ))
+                      ) : (
+                        <Text style={styles.ownerLinkedParentsValue}>None</Text>
+                      )}
+                    </View>
+
                     <Pressable
                       accessibilityRole="button"
                       onPress={() => Alert.alert('Owner student profile coming next.')}
@@ -2614,6 +2867,44 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
                       ]}
                     >
                       <Text style={styles.ownerStudentProfileButtonText}>View Profile</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => handleEditStudent(student)}
+                      style={({ pressed }) => [
+                        styles.ownerStudentProfileButton,
+                        { backgroundColor: COLORS.navy },
+                        { marginTop: 10 },
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text style={styles.ownerStudentProfileButtonText}>Edit</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => handleOpenLinkParent(student)}
+                      style={({ pressed }) => [
+                        styles.ownerStudentProfileButton,
+                        { backgroundColor: COLORS.success },
+                        { marginTop: 10 },
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text style={styles.ownerStudentProfileButtonText}>Link Parent</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={isArchivingStudentId === student.id}
+                      onPress={() => handleArchiveStudent(student)}
+                      style={({ pressed }) => [
+                        styles.ownerStudentProfileButton,
+                        { backgroundColor: COLORS.danger },
+                        { marginTop: 10 },
+                        pressed && styles.pressedButton,
+                        isArchivingStudentId === student.id && { opacity: 0.7 },
+                      ]}
+                    >
+                      <Text style={styles.ownerStudentProfileButtonText}>Archive</Text>
                     </Pressable>
                   </View>
                 ))
@@ -2654,6 +2945,11 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
                       </View>
                     </View>
 
+                    <View style={styles.ownerLinkedParentsBlock}>
+                      <Text style={styles.ownerLinkedParentsLabel}>Linked Parents</Text>
+                      <Text style={styles.ownerLinkedParentsValue}>None</Text>
+                    </View>
+
                     <Pressable
                       accessibilityRole="button"
                       onPress={() => Alert.alert('Owner student profile coming next.')}
@@ -2665,11 +2961,127 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
                     >
                       <Text style={styles.ownerStudentProfileButtonText}>View Profile</Text>
                     </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => handleEditStudent(student)}
+                      style={({ pressed }) => [
+                        styles.ownerStudentProfileButton,
+                        { backgroundColor: COLORS.navy },
+                        { marginTop: 10 },
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text style={styles.ownerStudentProfileButtonText}>Edit</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled
+                      onPress={() => {}}
+                      style={({ pressed }) => [
+                        styles.ownerStudentProfileButton,
+                        { backgroundColor: COLORS.success },
+                        { marginTop: 10, opacity: 0.45 },
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text style={styles.ownerStudentProfileButtonText}>Link Parent</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled
+                      onPress={() => {}}
+                      style={({ pressed }) => [
+                        styles.ownerStudentProfileButton,
+                        { backgroundColor: COLORS.danger },
+                        { marginTop: 10, opacity: 0.45 },
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text style={styles.ownerStudentProfileButtonText}>Archive</Text>
+                    </Pressable>
                   </View>
                 ))
               ) : null}
             </View>
           </View>
+
+          <Modal
+            animationType="fade"
+            onRequestClose={handleCloseLinkParentModal}
+            transparent
+            visible={showLinkParentModal}
+          >
+            <View style={styles.ownerLinkParentModalOverlay}>
+              <View style={styles.ownerLinkParentModalCard}>
+                <Text style={styles.ownerLinkParentModalTitle}>Link Parent</Text>
+                <Text style={styles.ownerLinkParentModalSubtitle}>
+                  {selectedStudentForLink ? selectedStudentForLink.name : ''}
+                </Text>
+
+                {availableParentsLoading ? (
+                  <Text style={styles.ownerStudentsStateText}>Loading parents...</Text>
+                ) : availableParentsError ? (
+                  <Text style={styles.errorText}>Could not load parents.</Text>
+                ) : (
+                  <ScrollView style={styles.ownerLinkParentModalList}>
+                    {availableParentProfiles.map((parent) => {
+                      const isActive = selectedParentProfileId === parent.id;
+                      return (
+                        <Pressable
+                          key={parent.id}
+                          accessibilityRole="button"
+                          onPress={() => setSelectedParentProfileId(parent.id)}
+                          style={({ pressed }) => [
+                            styles.ownerLinkParentOption,
+                            isActive && styles.ownerLinkParentOptionActive,
+                            pressed && styles.pressedButton,
+                          ]}
+                        >
+                          <Text style={styles.ownerLinkParentOptionEmail}>{parent.email}</Text>
+                          <Text style={styles.ownerLinkParentOptionMeta}>{parent.role}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+
+                {linkParentError ? (
+                  <Text style={[styles.errorText, { marginTop: 12 }]}>{linkParentError}</Text>
+                ) : null}
+
+                <View style={styles.ownerLinkParentModalButtonRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={isLinkingParent}
+                    onPress={handleCloseLinkParentModal}
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      { flex: 1, marginTop: 0 },
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text style={styles.secondaryButtonText}>Cancel</Text>
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={isLinkingParent}
+                    onPress={handleLinkParent}
+                    style={({ pressed }) => [
+                      styles.primaryButton,
+                      { flex: 1, marginTop: 0 },
+                      pressed && styles.pressedButton,
+                      isLinkingParent && { opacity: 0.75 },
+                    ]}
+                  >
+                    <Text style={styles.primaryButtonText}>
+                      {isLinkingParent ? 'Linking...' : 'Link'}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </Modal>
 
           <View style={styles.ownerAccordionCard}>
             <Text style={styles.ownerAccordionTitle}>Owner Student Actions</Text>
@@ -10197,6 +10609,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
   },
+  ownerLinkedParentsBlock: {
+    marginTop: 12,
+  },
+  ownerLinkedParentsLabel: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  ownerLinkedParentsValue: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginTop: 4,
+  },
   ownerStudentProfileButton: {
     alignSelf: 'flex-start',
     borderRadius: 999,
@@ -10208,6 +10637,66 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 12,
     fontWeight: '900',
+  },
+  ownerLinkParentModalOverlay: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.58)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  ownerLinkParentModalCard: {
+    backgroundColor: COLORS.card,
+    borderColor: COLORS.border,
+    borderRadius: 28,
+    borderWidth: 1,
+    maxHeight: '86%',
+    padding: 18,
+    width: '100%',
+  },
+  ownerLinkParentModalTitle: {
+    color: COLORS.text,
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  ownerLinkParentModalSubtitle: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  ownerLinkParentModalList: {
+    marginTop: 14,
+  },
+  ownerLinkParentOption: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginBottom: 10,
+    padding: 14,
+  },
+  ownerLinkParentOptionActive: {
+    backgroundColor: COLORS.softBlue,
+    borderColor: '#B5CCFF',
+  },
+  ownerLinkParentOptionEmail: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  ownerLinkParentOptionMeta: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+    textTransform: 'capitalize',
+  },
+  ownerLinkParentModalButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
   },
   ownerParentList: {
     gap: 12,
