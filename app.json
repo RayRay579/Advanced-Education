@@ -28,7 +28,6 @@
       "display": "standalone",
       "themeColor": "#001B3D"
     },
-    
     "plugins": [
       [
         "expo-splash-screen",
@@ -41,7 +40,8 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-sqlite"
     ]
   }
 }

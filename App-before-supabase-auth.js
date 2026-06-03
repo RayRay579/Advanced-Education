@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Alert,
   Image,
@@ -12,7 +12,6 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { supabase } from './supabase';
 
 const COLORS = {
   navy: '#022B5B',
@@ -2160,18 +2159,6 @@ function OwnerDashboardScreen({
 function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
-  const [studentRows, setStudentRows] = useState([]);
-  const [studentsLoading, setStudentsLoading] = useState(true);
-  const [studentsError, setStudentsError] = useState('');
-  const [showStudentForm, setShowStudentForm] = useState(false);
-  const [isSavingStudent, setIsSavingStudent] = useState(false);
-  const [createStudentError, setCreateStudentError] = useState('');
-  const [createStudentForm, setCreateStudentForm] = useState({
-    firstName: '',
-    lastName: '',
-    room: '',
-    status: 'active',
-  });
   const studentAccent = OWNER_MODULE_COLORS.Students;
   const badgeToneStyles = {
     blue: styles.ownerStudentBadgeBlue,
@@ -2182,29 +2169,6 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
   };
 
   const filterPills = ['All', 'Before & After Care', 'Summer Camp', 'Both'];
-
-  const loadStudents = useCallback(async () => {
-    setStudentsLoading(true);
-    setStudentsError('');
-
-    const { data, error } = await supabase
-      .from('children')
-      .select('id, first_name, last_name, room, status, profile_accent_color');
-
-    if (error) {
-      setStudentsError(error.message || 'Could not load students.');
-      setStudentRows([]);
-      setStudentsLoading(false);
-      return;
-    }
-
-    setStudentRows(Array.isArray(data) ? data : []);
-    setStudentsLoading(false);
-  }, []);
-
-  useEffect(() => {
-    loadStudents();
-  }, [loadStudents]);
 
   const students = [
     {
@@ -2264,36 +2228,6 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
     { title: 'Both Programs', value: '13', accent: 'blue' },
   ];
 
-  const realStudents = studentRows.map((student, index) => {
-    const firstName = student.first_name?.trim() || '';
-    const lastName = student.last_name?.trim() || '';
-    const name = `${firstName} ${lastName}`.trim() || 'Unnamed Student';
-    const room = student.room?.trim() || 'Room not set';
-    const status = student.status?.trim() || 'Unknown';
-
-    return {
-      id: student.id ?? `${name}-${room}-${index}`,
-      name,
-      room,
-      status,
-      accentColor: student.profile_accent_color || studentAccent,
-    };
-  });
-
-  const visibleRealStudents = realStudents.filter((student) => {
-    const query = searchQuery.trim().toLowerCase();
-
-    if (!query) {
-      return true;
-    }
-
-    return (
-      student.name.toLowerCase().includes(query) ||
-      student.room.toLowerCase().includes(query) ||
-      student.status.toLowerCase().includes(query)
-    );
-  });
-
   const visibleStudents = students.filter((student) => {
     const query = searchQuery.trim().toLowerCase();
     const matchesQuery =
@@ -2305,66 +2239,6 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
       (activeFilter === 'Both' ? student.programs.length > 1 : student.filterKey === activeFilter);
     return matchesQuery && matchesFilter;
   });
-
-  const hasRealStudents = studentRows.length > 0;
-  const showEmptyState = !studentsLoading && !studentsError && !hasRealStudents;
-  const displayMockFallback = !!studentsError && !hasRealStudents;
-
-  const handleOpenStudentForm = () => {
-    setCreateStudentError('');
-    setCreateStudentForm({
-      firstName: '',
-      lastName: '',
-      room: '',
-      status: 'active',
-    });
-    setShowStudentForm(true);
-  };
-
-  const handleCancelStudentForm = () => {
-    setCreateStudentError('');
-    setShowStudentForm(false);
-  };
-
-  const handleSaveStudent = async () => {
-    const firstName = createStudentForm.firstName.trim();
-    const lastName = createStudentForm.lastName.trim();
-    const room = createStudentForm.room.trim();
-    const status = createStudentForm.status.trim();
-
-    if (!firstName || !lastName || !room || !status) {
-      setCreateStudentError('Please fill in all fields.');
-      return;
-    }
-
-    setIsSavingStudent(true);
-    setCreateStudentError('');
-
-    const { error } = await supabase.from('children').insert({
-      first_name: firstName,
-      last_name: lastName,
-      room,
-      status,
-    });
-
-    if (error) {
-      setCreateStudentError(error.message || 'Could not save student.');
-      setIsSavingStudent(false);
-      return;
-    }
-
-    await loadStudents();
-    setIsSavingStudent(false);
-    setShowStudentForm(false);
-    setSearchQuery('');
-    setActiveFilter('All');
-    setCreateStudentForm({
-      firstName: '',
-      lastName: '',
-      room: '',
-      status: 'active',
-    });
-  };
 
   return (
     <View style={styles.page}>
@@ -2461,213 +2335,58 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
             </View>
           </View>
 
-          {showStudentForm ? (
-            <View style={styles.ownerAccordionCard}>
-              <Text style={styles.ownerAccordionTitle}>Add Student</Text>
-
-              <Text style={styles.ownerStudentFormLabel}>First Name</Text>
-              <TextInput
-                placeholder="First Name"
-                placeholderTextColor={COLORS.muted}
-                value={createStudentForm.firstName}
-                onChangeText={(value) =>
-                  setCreateStudentForm((current) => ({ ...current, firstName: value }))
-                }
-                style={styles.ownerSearchInput}
-              />
-
-              <Text style={styles.ownerStudentFormLabel}>Last Name</Text>
-              <TextInput
-                placeholder="Last Name"
-                placeholderTextColor={COLORS.muted}
-                value={createStudentForm.lastName}
-                onChangeText={(value) =>
-                  setCreateStudentForm((current) => ({ ...current, lastName: value }))
-                }
-                style={styles.ownerSearchInput}
-              />
-
-              <Text style={styles.ownerStudentFormLabel}>Room</Text>
-              <TextInput
-                placeholder="Room"
-                placeholderTextColor={COLORS.muted}
-                value={createStudentForm.room}
-                onChangeText={(value) =>
-                  setCreateStudentForm((current) => ({ ...current, room: value }))
-                }
-                style={styles.ownerSearchInput}
-              />
-
-              <Text style={styles.ownerStudentFormLabel}>Status</Text>
-              <View style={styles.ownerFilterPillRow}>
-                {['active', 'inactive'].map((statusOption) => {
-                  const isActive = createStudentForm.status === statusOption;
-                  return (
-                    <Pressable
-                      key={statusOption}
-                      accessibilityRole="button"
-                      onPress={() =>
-                        setCreateStudentForm((current) => ({ ...current, status: statusOption }))
-                      }
-                      style={({ pressed }) => [
-                        styles.ownerFilterPill,
-                        isActive && styles.ownerFilterPillActive,
-                        pressed && styles.pressedButton,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.ownerFilterPillText,
-                          isActive && styles.ownerFilterPillTextActive,
-                        ]}
-                      >
-                        {statusOption}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {createStudentError ? (
-                <Text style={[styles.errorText, { marginTop: 12 }]}>{createStudentError}</Text>
-              ) : null}
-
-              <Pressable
-                accessibilityRole="button"
-                disabled={isSavingStudent}
-                onPress={handleSaveStudent}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  pressed && styles.pressedButton,
-                  isSavingStudent && { opacity: 0.75 },
-                ]}
-              >
-                <Text style={styles.primaryButtonText}>
-                  {isSavingStudent ? 'Saving Student...' : 'Save Student'}
-                </Text>
-              </Pressable>
-
-              <Pressable
-                accessibilityRole="button"
-                disabled={isSavingStudent}
-                onPress={handleCancelStudentForm}
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  pressed && styles.pressedButton,
-                  { marginTop: 12 },
-                ]}
-              >
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
-              </Pressable>
-            </View>
-          ) : null}
-
           <View style={styles.ownerAccordionCard}>
             <Text style={styles.ownerAccordionTitle}>Student List</Text>
-            {studentsLoading ? (
-              <Text style={[styles.ownerStudentsStateText, { marginBottom: 12 }]}>
-                Loading students...
-              </Text>
-            ) : studentsError ? (
-              <Text style={[styles.errorText, { marginBottom: 12 }]}>Could not load students.</Text>
-            ) : null}
-
             <View style={styles.ownerStudentList}>
-              {showEmptyState ? (
-                <Text style={styles.ownerStudentsStateText}>No students added yet.</Text>
-              ) : hasRealStudents ? (
-                visibleRealStudents.map((student) => (
-                  <View key={student.id} style={styles.ownerStudentCard}>
-                    <View style={styles.ownerStudentTopRow}>
-                      <View style={styles.ownerStudentMainBlock}>
-                        <Text style={styles.ownerStudentName}>{student.name}</Text>
-                        <Text style={styles.ownerStudentParent}>Room: {student.room}</Text>
-                      </View>
-                      <View
-                        style={[
-                          styles.ownerStudentBadge,
-                          { backgroundColor: student.accentColor },
-                        ]}
-                      >
-                        <Text style={styles.ownerStudentBadgeText}>{student.room}</Text>
-                      </View>
+              {visibleStudents.map((student) => (
+                <View key={student.id} style={styles.ownerStudentCard}>
+                  <View style={styles.ownerStudentTopRow}>
+                    <View style={styles.ownerStudentMainBlock}>
+                      <Text style={styles.ownerStudentName}>{student.name}</Text>
+                      <Text style={styles.ownerStudentParent}>Parent: {student.parent}</Text>
                     </View>
-
-                    <View style={styles.ownerStudentMetaRow}>
-                      <View
-                        style={[
-                          styles.ownerStudentStatusPill,
-                          styles.ownerStudentStatusPillBlue,
-                        ]}
-                      >
-                        <Text style={styles.ownerStudentStatusPillText}>{student.status}</Text>
-                      </View>
-                    </View>
-
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => Alert.alert('Owner student profile coming next.')}
-                      style={({ pressed }) => [
-                        styles.ownerStudentProfileButton,
-                        { backgroundColor: studentAccent },
-                        pressed && styles.pressedButton,
+                    <View
+                      style={[
+                        styles.ownerStudentBadge,
+                        badgeToneStyles[student.badgeTone] || styles.ownerStudentBadgeBlue,
                       ]}
                     >
-                      <Text style={styles.ownerStudentProfileButtonText}>View Profile</Text>
-                    </Pressable>
+                      <Text style={styles.ownerStudentBadgeText}>{student.badgeLabel}</Text>
+                    </View>
                   </View>
-                ))
-              ) : displayMockFallback ? (
-                visibleStudents.map((student) => (
-                  <View key={student.id} style={styles.ownerStudentCard}>
-                    <View style={styles.ownerStudentTopRow}>
-                      <View style={styles.ownerStudentMainBlock}>
-                        <Text style={styles.ownerStudentName}>{student.name}</Text>
-                        <Text style={styles.ownerStudentParent}>Parent: {student.parent}</Text>
-                      </View>
-                      <View
-                        style={[
-                          styles.ownerStudentBadge,
-                          badgeToneStyles[student.badgeTone] || styles.ownerStudentBadgeBlue,
-                        ]}
-                      >
-                        <Text style={styles.ownerStudentBadgeText}>{student.badgeLabel}</Text>
-                      </View>
-                    </View>
 
-                    <View style={styles.ownerStudentChipRow}>
-                      {student.programLabels.map((program) => (
-                        <View key={program} style={styles.ownerStudentProgramChip}>
-                          <Text style={styles.ownerStudentProgramChipText}>{program}</Text>
-                        </View>
-                      ))}
-                    </View>
-
-                    <View style={styles.ownerStudentMetaRow}>
-                      <View
-                        style={[
-                          styles.ownerStudentStatusPill,
-                          styles.ownerStudentStatusPillBlue,
-                        ]}
-                      >
-                        <Text style={styles.ownerStudentStatusPillText}>{student.status}</Text>
+                  <View style={styles.ownerStudentChipRow}>
+                    {student.programLabels.map((program) => (
+                      <View key={program} style={styles.ownerStudentProgramChip}>
+                        <Text style={styles.ownerStudentProgramChipText}>{program}</Text>
                       </View>
-                    </View>
+                    ))}
+                  </View>
 
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => Alert.alert('Owner student profile coming next.')}
-                      style={({ pressed }) => [
-                        styles.ownerStudentProfileButton,
-                        { backgroundColor: studentAccent },
-                        pressed && styles.pressedButton,
+                  <View style={styles.ownerStudentMetaRow}>
+                    <View
+                      style={[
+                        styles.ownerStudentStatusPill,
+                        styles.ownerStudentStatusPillBlue,
                       ]}
                     >
-                      <Text style={styles.ownerStudentProfileButtonText}>View Profile</Text>
-                    </Pressable>
+                      <Text style={styles.ownerStudentStatusPillText}>{student.status}</Text>
+                    </View>
                   </View>
-                ))
-              ) : null}
+
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => Alert.alert('Owner student profile coming next.')}
+                    style={({ pressed }) => [
+                      styles.ownerStudentProfileButton,
+                      { backgroundColor: studentAccent },
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text style={styles.ownerStudentProfileButtonText}>View Profile</Text>
+                  </Pressable>
+                </View>
+              ))}
             </View>
           </View>
 
@@ -2679,9 +2398,7 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
                   <Pressable
                     key={label}
                     accessibilityRole="button"
-                    onPress={() =>
-                      label === 'Add Student' ? handleOpenStudentForm() : onShowComingSoon(label)
-                    }
+                    onPress={() => onShowComingSoon(label)}
                     style={({ pressed }) => [
                       styles.actionCard,
                       pressed && styles.pressedButton,
@@ -2690,9 +2407,7 @@ function OwnerStudentsScreen({ onBack, onLogout, onShowComingSoon }) {
                     <View style={styles.actionAccentBlue} />
                     <View style={styles.actionCardBody}>
                       <Text style={styles.actionTitle}>{label}</Text>
-                      <Text style={styles.actionNote}>
-                        {label === 'Add Student' ? 'Create a new student record' : 'Coming Soon'}
-                      </Text>
+                      <Text style={styles.actionNote}>Coming Soon</Text>
                     </View>
                     <Text style={styles.chevron}>›</Text>
                   </Pressable>
@@ -6622,7 +6337,6 @@ function LoginScreen({
   onChangeInviteCode,
   onLogin,
   onFillTestAccount,
-  onOpenActivateAccount,
 }) {
   return (
     <View style={styles.loginPage}>
@@ -6692,17 +6406,6 @@ function LoginScreen({
           >
             <Text style={styles.primaryButtonText}>Enter Portal</Text>
           </Pressable>
-
-          <View style={styles.loginActivationPrompt}>
-            <Text style={styles.loginActivationPromptText}>First time here?</Text>
-            <Pressable
-              accessibilityRole="button"
-              onPress={onOpenActivateAccount}
-              style={({ pressed }) => [styles.loginActivationButton, pressed && styles.buttonPressed]}
-            >
-              <Text style={styles.loginActivationButtonText}>Activate Account</Text>
-            </Pressable>
-          </View>
         </View>
 
         <View style={styles.testCardPortal}>
@@ -6742,132 +6445,11 @@ function LoginScreen({
   );
 }
 
-function ActivateAccountScreen({
-  email,
-  code,
-  password,
-  confirmPassword,
-  activationStep,
-  activationError,
-  onChangeEmail,
-  onChangeCode,
-  onChangePassword,
-  onChangeConfirmPassword,
-  onContinue,
-  onBack,
-}) {
-  return (
-    <View style={styles.loginPage}>
-      <ImageBackground
-        source={require('./assets/images/playground.png')}
-        resizeMode="cover"
-        style={styles.loginBackgroundImage}
-      />
-      <View style={styles.loginBackgroundOverlay} />
-
-      <ScrollView contentContainerStyle={styles.loginScroll} keyboardShouldPersistTaps="handled">
-        <View style={styles.loginCardPortal}>
-          <View style={styles.loginCardHeaderPortal}>
-            <View style={styles.loginCardHeaderText}>
-              <Text style={styles.loginTitle}>Activate Account</Text>
-              <Text style={styles.loginSubtitle}>Enter your email and invite code to continue.</Text>
-            </View>
-          </View>
-
-          {activationStep === 'verify' ? (
-            <>
-              <Text style={styles.inputLabel}>Email</Text>
-              <TextInput
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                onChangeText={onChangeEmail}
-                placeholder="parent@test.com"
-                placeholderTextColor={COLORS.muted}
-                style={styles.input}
-                value={email}
-              />
-
-              <Text style={styles.inputLabel}>Invite Code</Text>
-              <TextInput
-                autoCapitalize="characters"
-                autoCorrect={false}
-                onChangeText={onChangeCode}
-                placeholder="MIA-4821"
-                placeholderTextColor={COLORS.muted}
-                style={styles.input}
-                value={code}
-              />
-            </>
-          ) : (
-            <>
-              <Text style={styles.inputLabel}>Password</Text>
-              <TextInput
-                autoCapitalize="none"
-                autoCorrect={false}
-                onChangeText={onChangePassword}
-                placeholder="Create password"
-                placeholderTextColor={COLORS.muted}
-                secureTextEntry
-                style={styles.input}
-                value={password}
-              />
-
-              <Text style={styles.inputLabel}>Confirm Password</Text>
-              <TextInput
-                autoCapitalize="none"
-                autoCorrect={false}
-                onChangeText={onChangeConfirmPassword}
-                placeholder="Confirm password"
-                placeholderTextColor={COLORS.muted}
-                secureTextEntry
-                style={styles.input}
-                value={confirmPassword}
-              />
-            </>
-          )}
-
-          {activationError ? <Text style={styles.errorText}>{activationError}</Text> : null}
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={onContinue}
-            style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
-          >
-            <Text style={styles.primaryButtonText}>
-              {activationStep === 'verify' ? 'Continue' : 'Activate Account'}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={onBack}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              pressed && styles.buttonPressed,
-              { marginTop: 12 },
-            ]}
-          >
-            <Text style={styles.secondaryButtonText}>Back to Login</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
-
 export default function App() {
   const [email, setEmail] = useState('parent@test.com');
   const [inviteCode, setInviteCode] = useState('MIA-4821');
   const [error, setError] = useState('');
   const [screen, setScreen] = useState('login');
-  const [activationEmail, setActivationEmail] = useState('');
-  const [activationCode, setActivationCode] = useState('');
-  const [activationPassword, setActivationPassword] = useState('');
-  const [activationConfirmPassword, setActivationConfirmPassword] = useState('');
-  const [activationError, setActivationError] = useState('');
-  const [pendingInvite, setPendingInvite] = useState(null);
-  const [activationStep, setActivationStep] = useState('verify');
   const [staffStatus, setStaffStatus] = useState(STAFF_MEMBER.status);
   const [lastClockInTime, setLastClockInTime] = useState('');
   const [lastClockOutTime, setLastClockOutTime] = useState('');
@@ -6893,75 +6475,8 @@ export default function App() {
     OWNER_SUMMER_CAMP_INITIAL_SUMMARY
   );
   const [staffDailyNotesSavedEntries, setStaffDailyNotesSavedEntries] = useState([]);
-  const [session, setSession] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setAuthLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    if (!authLoading && session) {
-      return;
-    }
-  }, [authLoading, session]);
-
-  async function handleSupabaseLogin(loginEmail, password) {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: loginEmail,
-      password,
-    });
-
-    if (error) {
-      console.log('Supabase login failed');
-      return false;
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', data.user.id)
-      .single();
-
-    if (profileError || !profile) {
-      console.log('Supabase login failed');
-      return false;
-    }
-
-    if (profile.role === 'owner') {
-      setScreen('owner-home');
-    } else if (profile.role === 'staff') {
-      setScreen('staff-home');
-    } else if (profile.role === 'parent') {
-      setScreen('parent-home');
-    } else {
-      console.log('Supabase login failed');
-      return false;
-    }
-
-    console.log('Supabase login success');
-    return true;
-  }
-
-  const handleLogin = async () => {
-    const supabaseLoginSucceeded = await handleSupabaseLogin(email, inviteCode);
-
-    if (supabaseLoginSucceeded) {
-      return;
-    }
-
-    console.log('Using mock login');
+  const handleLogin = () => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanCode = inviteCode.trim().toUpperCase();
 
@@ -6995,9 +6510,7 @@ export default function App() {
     setError('');
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
+  const handleLogout = () => {
     setScreen('login');
     setError('');
     setStaffStatus(STAFF_MEMBER.status);
@@ -7013,145 +6526,6 @@ export default function App() {
     setStaffSummerCampOwnerStatus({});
     setOwnerSummerCampSummary(OWNER_SUMMER_CAMP_INITIAL_SUMMARY);
     setStaffDailyNotesSavedEntries([]);
-  };
-
-  const openActivateAccountScreen = () => {
-    setActivationEmail('');
-    setActivationCode('');
-    setActivationPassword('');
-    setActivationConfirmPassword('');
-    setActivationError('');
-    setPendingInvite(null);
-    setActivationStep('verify');
-    setScreen('activate-account');
-  };
-
-  const closeActivateAccountScreen = () => {
-    setActivationEmail('');
-    setActivationCode('');
-    setActivationPassword('');
-    setActivationConfirmPassword('');
-    setActivationError('');
-    setPendingInvite(null);
-    setActivationStep('verify');
-    setScreen('login');
-  };
-
-  const handleActivateAccountContinue = async () => {
-    if (activationStep === 'verify') {
-      const normalizedEmail = activationEmail.trim().toLowerCase();
-      const normalizedCode = activationCode.trim().toUpperCase();
-
-      const { data, error } = await supabase.rpc('verify_invite_code', {
-        input_email: normalizedEmail,
-        input_code: normalizedCode,
-      });
-
-      if (error || !data || data.length === 0) {
-        setActivationError('Invite code not found or already used.');
-        return;
-      }
-
-      setActivationError('');
-      setPendingInvite(data[0]);
-      setActivationStep('password');
-      return;
-    }
-
-    const trimmedPassword = activationPassword.trim();
-    if (!trimmedPassword) {
-      setActivationError('Password cannot be empty.');
-      return;
-    }
-
-    if (activationPassword !== activationConfirmPassword) {
-      setActivationError('Passwords do not match.');
-      return;
-    }
-
-    if (!pendingInvite) {
-      setActivationError('Invite code not found or already used.');
-      setActivationStep('verify');
-      return;
-    }
-
-    setActivationError('');
-
-    const { data, error } = await supabase.auth.signUp({
-      email: activationEmail,
-      password: activationPassword,
-    });
-
-    if (error || !data?.user) {
-      setActivationError(error?.message || 'Unable to create account.');
-      return;
-    }
-
-    console.log('Account created');
-
-    const profileInsertResult = await supabase.from('profiles').insert({
-      id: data.user.id,
-      email: activationEmail,
-      role: pendingInvite.invite_role,
-      account_status: 'active',
-    });
-
-    if (profileInsertResult.error) {
-      setActivationError(profileInsertResult.error.message || 'Unable to create profile.');
-      return;
-    }
-
-    console.log('Profile created');
-
-    console.log('Redeem invite payload', {
-      input_email: activationEmail,
-      input_code: activationCode,
-      input_user_id: data.user.id,
-      pendingInvite,
-    });
-
-    const { data: redeemRows, error: redeemError } = await supabase.rpc('redeem_invite_by_id', {
-      input_invite_id: pendingInvite.invite_id,
-      input_user_id: data.user.id,
-    });
-
-    console.log('Redeem invite by id result', {
-      redeemRows,
-      redeemError,
-    });
-
-    if (redeemError || !redeemRows || redeemRows.length === 0) {
-      setActivationError('Account was created, but invite code was not marked used.');
-      return;
-    }
-
-    console.log('Invite marked used');
-
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email: activationEmail,
-      password: activationPassword,
-    });
-
-    if (signInError || !signInData?.user) {
-      setActivationError(signInError?.message || 'Unable to sign in.');
-      return;
-    }
-
-    console.log('Auto login success');
-
-    const routeRole = pendingInvite.invite_role;
-    if (routeRole === 'parent') {
-      setScreen('parent-home');
-    } else if (routeRole === 'staff') {
-      setScreen('staff-home');
-    } else {
-      setActivationError('Unsupported account type.');
-      return;
-    }
-
-    setActivationError('');
-    setActivationStep('verify');
-    setPendingInvite(null);
   };
 
   const toggleStaffStatus = () => {
@@ -7456,23 +6830,6 @@ export default function App() {
           onChangeInviteCode={setInviteCode}
           onLogin={handleLogin}
           onFillTestAccount={fillTestAccount}
-          onOpenActivateAccount={openActivateAccountScreen}
-        />
-      ) : screen === 'activate-account' ? (
-        <ActivateAccountScreen
-          email={activationEmail}
-          code={activationCode}
-          password={activationPassword}
-          confirmPassword={activationConfirmPassword}
-          activationStep={activationStep}
-          activationError={activationError}
-          pendingInviteId={pendingInvite?.id ?? null}
-          onChangeEmail={setActivationEmail}
-          onChangeCode={setActivationCode}
-          onChangePassword={setActivationPassword}
-          onChangeConfirmPassword={setActivationConfirmPassword}
-          onContinue={handleActivateAccountContinue}
-          onBack={closeActivateAccountScreen}
         />
       ) : screen === 'parent-home' ? (
         <View style={styles.parentHomePage}>
@@ -10081,19 +9438,6 @@ const styles = StyleSheet.create({
   ownerStudentList: {
     gap: 12,
     marginTop: 14,
-  },
-  ownerStudentsStateText: {
-    color: COLORS.muted,
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  ownerStudentFormLabel: {
-    color: COLORS.text,
-    fontSize: 13,
-    fontWeight: '800',
-    marginTop: 12,
-    marginBottom: 8,
   },
   ownerStudentCard: {
     backgroundColor: COLORS.background,
