@@ -1002,6 +1002,7 @@ function StaffHomeScreen({
   onShowComingSoon,
   onOpenClock,
   onOpenBeforeAfter,
+  onOpenIncidentReports,
   onOpenCamp,
   onOpenMessages,
   onOpenNotes,
@@ -1053,9 +1054,13 @@ function StaffHomeScreen({
                     ? onOpenClock()
                     : card.title === 'Before & After Care Attendance'
                       ? onOpenBeforeAfter()
-                    : card.title === 'Summer Camp Group Check-In'
+                  : card.title === 'Summer Camp Group Check-In'
                         ? onOpenCamp()
-                        : card.title === 'Messages'
+                        : card.title === 'Incident Reports'
+                          ? onOpenIncidentReports()
+                    : card.title === 'Incident Reports'
+                      ? onOpenIncidentReports()
+                    : card.title === 'Messages'
                           ? onOpenMessages()
                         : card.title === 'Daily Notes'
                           ? onOpenNotes()
@@ -2005,6 +2010,7 @@ function OwnerDashboardScreen({
   onOpenReports,
   onOpenSummerCampCheckIn,
   onOpenDailyNotesReview,
+  onOpenIncidentReportsReview,
   ownerSummerCampSummary,
   staffSummerCampGroups,
   ownerPendingDailyNotesCount,
@@ -2012,6 +2018,9 @@ function OwnerDashboardScreen({
   ownerBeforeAfterCounts,
   ownerBeforeAfterCountsLoading,
   ownerBeforeAfterCountsError,
+  ownerIncidentReportsPending,
+  ownerIncidentReportsPendingLoading,
+  ownerIncidentReportsPendingError,
 }) {
   const [openSection, setOpenSection] = useState(null);
 
@@ -2341,6 +2350,28 @@ function OwnerDashboardScreen({
       ),
     },
     {
+      key: 'incident-reports-review',
+      title: 'Incident Reports Review',
+      summary: ownerIncidentReportsPendingLoading
+        ? 'Loading pending reports...'
+        : ownerIncidentReportsPendingError
+          ? 'Could not load pending reports'
+          : `${ownerIncidentReportsPending.length} pending reports`,
+      details: (
+        <View style={styles.ownerSummerCampActionBlock}>
+          <Text style={styles.ownerSummerCampActionText}>
+            Review staff incident reports before parents see them.
+          </Text>
+          <OwnerNavCard
+            accentColor={COLORS.warning}
+            title="Open Incident Reports Review"
+            subtitle="Approve or reject pending reports"
+            onPress={onOpenIncidentReportsReview}
+          />
+        </View>
+      ),
+    },
+    {
       key: 'activity-feed',
       title: 'Recent Activity Feed',
       summary: 'Latest center events by time',
@@ -2634,6 +2665,548 @@ function OwnerDailyNotesReviewScreen({
               })}
             </View>
           ) : null}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function StaffIncidentReportsScreen({
+  onBack,
+  onLogout,
+  activeChildren,
+  selectedChildId,
+  loading,
+  error,
+  location,
+  description,
+  actionTaken,
+  staffWitness,
+  saving,
+  recentReports,
+  recentReportsLoading,
+  recentReportsError,
+  onSelectChild,
+  onChangeLocation,
+  onChangeDescription,
+  onChangeActionTaken,
+  onChangeWitness,
+  onSubmit,
+}) {
+  const selectedChild = activeChildren.find((child) => child.id === selectedChildId) || null;
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.notificationsHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Incident Reports</Text>
+          </View>
+
+          <View style={styles.notificationsHeroMain}>
+            <View style={styles.notificationsHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Incident Reports</Text>
+              <View style={styles.notificationsHeroTag}>
+                <Text style={styles.notificationsHeroTagText}>Staff Access</Text>
+              </View>
+              <Text style={styles.notificationsHeroSubtitle}>
+                Create child incident reports
+              </Text>
+            </View>
+
+            <View style={styles.parentHeroPhotoWrap}>
+              <Image source={HEADER_PHOTO} resizeMode="cover" style={styles.parentHeroPhoto} />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Select Child</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Active students</Text>
+            </View>
+
+            {loading ? (
+              <Text style={styles.parentAttendanceStateText}>Loading active children...</Text>
+            ) : error ? (
+              <Text style={styles.errorText}>{error}</Text>
+            ) : activeChildren.length ? (
+              <View style={styles.ownerFilterPillRow}>
+                {activeChildren.map((child) => {
+                  const isActive = selectedChildId === child.id;
+                  return (
+                    <Pressable
+                      key={child.id}
+                      accessibilityRole="button"
+                      onPress={() => onSelectChild(child.id)}
+                      style={({ pressed }) => [
+                        styles.ownerFilterPill,
+                        isActive && styles.ownerFilterPillActive,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.ownerFilterPillText,
+                          isActive && styles.ownerFilterPillTextActive,
+                        ]}
+                      >
+                        {`${child.first_name || ''} ${child.last_name || ''}`.trim() ||
+                          'Unnamed Student'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={styles.parentAttendanceStateText}>No active children found.</Text>
+            )}
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>New Incident Report</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                {selectedChild
+                  ? `${selectedChild.first_name || ''} ${selectedChild.last_name || ''}`.trim()
+                  : 'No child selected'}
+              </Text>
+            </View>
+
+            <Text style={styles.ownerStudentFormLabel}>Location</Text>
+            <TextInput
+              placeholder="Location"
+              placeholderTextColor={COLORS.muted}
+              value={location}
+              onChangeText={onChangeLocation}
+              style={styles.ownerSearchInput}
+            />
+
+            <Text style={styles.ownerStudentFormLabel}>Description</Text>
+            <TextInput
+              placeholder="Description"
+              placeholderTextColor={COLORS.muted}
+              value={description}
+              onChangeText={onChangeDescription}
+              multiline
+              style={[styles.ownerSearchInput, styles.ownerTextArea]}
+            />
+
+            <Text style={styles.ownerStudentFormLabel}>Action Taken</Text>
+            <TextInput
+              placeholder="Action Taken"
+              placeholderTextColor={COLORS.muted}
+              value={actionTaken}
+              onChangeText={onChangeActionTaken}
+              multiline
+              style={[styles.ownerSearchInput, styles.ownerTextArea]}
+            />
+
+            <Text style={styles.ownerStudentFormLabel}>Staff Witness</Text>
+            <TextInput
+              placeholder="Staff Witness"
+              placeholderTextColor={COLORS.muted}
+              value={staffWitness}
+              onChangeText={onChangeWitness}
+              style={styles.ownerSearchInput}
+            />
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={saving}
+              onPress={onSubmit}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && styles.pressedButton,
+                saving && { opacity: 0.75 },
+              ]}
+            >
+              <Text style={styles.primaryButtonText}>
+                {saving ? 'Submitting...' : 'Submit Incident Report'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={saving}
+              onPress={() => {
+                onChangeLocation('');
+                onChangeDescription('');
+                onChangeActionTaken('');
+                onChangeWitness('');
+              }}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                pressed && styles.pressedButton,
+                { marginTop: 12 },
+              ]}
+            >
+              <Text style={styles.secondaryButtonText}>Clear</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Recent Incident Reports</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                {recentReports.length} submitted
+              </Text>
+            </View>
+
+            {recentReportsLoading ? (
+              <Text style={styles.parentAttendanceStateText}>Loading incident reports...</Text>
+            ) : recentReportsError ? (
+              <Text style={styles.errorText}>{recentReportsError}</Text>
+            ) : recentReports.length ? (
+              <View style={styles.ownerSectionList}>
+                {recentReports.map((report) => (
+                  <View key={report.id} style={styles.profileListRow}>
+                    <View style={styles.profileListDot} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.profileListLabel}>{report.childName}</Text>
+                      <Text style={styles.profileListValue}>
+                        {formatDateTime(report.created_at)}
+                      </Text>
+                      <Text style={styles.profileListValue}>{report.location}</Text>
+                      <Text style={styles.profileListValue}>{report.review_status}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.parentAttendanceStateText}>No incident reports yet.</Text>
+            )}
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function OwnerIncidentReportsReviewScreen({
+  onBack,
+  loading,
+  error,
+  pendingReports,
+  onApprove,
+  onReject,
+  actionReportId,
+}) {
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.ownerDailyNotesReviewStickyHeader}>
+          <View style={styles.ownerDailyNotesReviewHeaderTopRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <View style={[styles.ownerAccessPill, { backgroundColor: COLORS.warning }]}>
+              <Text style={styles.ownerAccessPillText}>Owner Access</Text>
+            </View>
+          </View>
+
+          <View style={styles.ownerDailyNotesReviewHeroMain}>
+            <View style={styles.ownerDailyNotesReviewHeroCopy}>
+              <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+              <Text style={styles.shellHeroTitle}>Incident Reports Review</Text>
+              <Text style={styles.ownerDailyNotesReviewSubtitle}>
+                Approve staff reports before parents see them
+              </Text>
+            </View>
+
+            <View style={[styles.ownerDailyNotesReviewCountBadge, { backgroundColor: COLORS.warning }]}>
+              <Text style={styles.ownerDailyNotesReviewCountValue}>{pendingReports.length}</Text>
+              <Text style={styles.ownerDailyNotesReviewCountLabel}>Pending</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Pending Reports</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                {loading ? 'Loading...' : `${pendingReports.length} waiting`}
+              </Text>
+            </View>
+            <Text style={styles.notificationsIntroText}>
+              Review each report and approve or reject it for parent visibility.
+            </Text>
+          </View>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          {loading ? <Text style={styles.ownerStudentsStateText}>Loading incident reports...</Text> : null}
+
+          {!loading && pendingReports.length === 0 ? (
+            <Text style={styles.ownerStudentsStateText}>No pending reports.</Text>
+          ) : null}
+
+          {!loading && pendingReports.length > 0 ? (
+            <View style={styles.ownerDailyNotesReviewList}>
+              {pendingReports.map((report) => {
+                const isSaving = actionReportId === report.id;
+
+                return (
+                  <View key={report.id} style={styles.profileCard}>
+                    <View style={styles.parentSectionHeaderRow}>
+                      <View style={styles.ownerDailyNotesReviewCardHeading}>
+                        <Text style={styles.parentSectionHeaderTitle}>{report.childName}</Text>
+                        <Text style={styles.parentSectionHeaderSubtle}>
+                          {formatDateTime(report.created_at)}
+                        </Text>
+                      </View>
+
+                      <View style={[styles.ownerAccessPill, { backgroundColor: COLORS.warning }]}>
+                        <Text style={styles.ownerAccessPillText}>Pending Review</Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.ownerDailyNotesReviewCustomNote}>
+                      Location: {report.location}
+                    </Text>
+                    <Text style={styles.ownerDailyNotesReviewCustomNote}>
+                      Description: {report.description}
+                    </Text>
+                    <Text style={styles.ownerDailyNotesReviewCustomNote}>
+                      Action Taken: {report.action_taken}
+                    </Text>
+                    <Text style={styles.ownerDailyNotesReviewCustomNote}>
+                      Staff Witness: {report.staff_witness}
+                    </Text>
+
+                    <View style={styles.ownerDailyNotesReviewActionRow}>
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={isSaving}
+                        onPress={() => onApprove(report)}
+                        style={({ pressed }) => [
+                          styles.ownerDailyNotesReviewApproveButton,
+                          pressed && !isSaving && styles.buttonPressed,
+                          isSaving && styles.ownerDailyNotesReviewButtonDisabled,
+                        ]}
+                      >
+                        <Text style={styles.ownerDailyNotesReviewApproveButtonText}>
+                          {isSaving ? 'Saving...' : 'Approve'}
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={isSaving}
+                        onPress={() => onReject(report)}
+                        style={({ pressed }) => [
+                          styles.ownerDailyNotesReviewRejectButton,
+                          pressed && !isSaving && styles.buttonPressed,
+                          isSaving && styles.ownerDailyNotesReviewButtonDisabled,
+                        ]}
+                      >
+                        <Text style={styles.ownerDailyNotesReviewRejectButtonText}>
+                          {isSaving ? 'Saving...' : 'Reject'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function ParentIncidentReportsScreen({
+  onBack,
+  onLogout,
+  reports,
+  loading,
+  error,
+  acknowledgingId,
+  onAcknowledge,
+}) {
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.notificationsHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Incident Reports</Text>
+          </View>
+
+          <View style={styles.notificationsHeroMain}>
+            <View style={styles.notificationsHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>Incident Reports</Text>
+              <View style={styles.notificationsHeroTag}>
+                <Text style={styles.notificationsHeroTagText}>Family Access</Text>
+              </View>
+              <Text style={styles.notificationsHeroSubtitle}>
+                View approved child incident reports
+              </Text>
+            </View>
+
+            <View style={styles.parentHeroPhotoWrap}>
+              <Image source={HEADER_PHOTO} resizeMode="cover" style={styles.parentHeroPhoto} />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Approved Reports</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>{reports.length} available</Text>
+            </View>
+            <Text style={styles.notificationsIntroText}>
+              Only approved reports are shown here.
+            </Text>
+          </View>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          {loading ? <Text style={styles.parentAttendanceStateText}>Loading incident reports...</Text> : null}
+
+          {!loading && !reports.length ? (
+            <Text style={styles.parentAttendanceStateText}>No incident reports yet.</Text>
+          ) : null}
+
+          {!loading && reports.length ? (
+            <View style={styles.ownerDailyNotesReviewList}>
+              {reports.map((report) => {
+                const acknowledged = !!report.parent_acknowledged_at;
+                const isSaving = acknowledgingId === report.id;
+
+                return (
+                  <View key={report.id} style={styles.profileCard}>
+                    <View style={styles.parentSectionHeaderRow}>
+                      <View style={styles.ownerDailyNotesReviewCardHeading}>
+                        <Text style={styles.parentSectionHeaderTitle}>{report.childName}</Text>
+                        <Text style={styles.parentSectionHeaderSubtle}>
+                          {formatDateTime(report.created_at)}
+                        </Text>
+                      </View>
+
+                      <View
+                        style={[
+                          styles.ownerAccessPill,
+                          { backgroundColor: acknowledged ? COLORS.success : COLORS.warning },
+                        ]}
+                      >
+                        <Text style={styles.ownerAccessPillText}>
+                          {acknowledged ? 'Acknowledged' : 'Approved'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.ownerDailyNotesReviewCustomNote}>
+                      Location: {report.location}
+                    </Text>
+                    <Text style={styles.ownerDailyNotesReviewCustomNote}>
+                      Description: {report.description}
+                    </Text>
+                    <Text style={styles.ownerDailyNotesReviewCustomNote}>
+                      Action Taken: {report.action_taken}
+                    </Text>
+
+                    {!acknowledged ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={isSaving}
+                        onPress={() => onAcknowledge(report)}
+                        style={({ pressed }) => [
+                          styles.primaryButton,
+                          pressed && !isSaving && styles.pressedButton,
+                          isSaving && { opacity: 0.75 },
+                          { marginTop: 12 },
+                        ]}
+                      >
+                        <Text style={styles.primaryButtonText}>
+                          {isSaving ? 'Saving...' : 'Acknowledge Report'}
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      <Text style={styles.parentAttendanceStateText}>Report acknowledged.</Text>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </View>
@@ -8056,6 +8629,12 @@ const STAFF_WORKSPACE_CARDS = [
     note: 'Group check-in and headcount confirmation',
   },
   {
+    accent: 'red',
+    title: 'Incident Reports',
+    value: 'Create reports',
+    note: 'Create child incident reports',
+  },
+  {
     accent: 'purple',
     title: 'Daily Notes',
     value: '3 notes today',
@@ -9961,6 +10540,12 @@ export default function App() {
   const [ownerDailyNotesPendingLoading, setOwnerDailyNotesPendingLoading] = useState(true);
   const [ownerDailyNotesPendingError, setOwnerDailyNotesPendingError] = useState('');
   const [ownerDailyNotesReviewActionId, setOwnerDailyNotesReviewActionId] = useState('');
+  const [ownerIncidentReportsPending, setOwnerIncidentReportsPending] = useState([]);
+  const [ownerIncidentReportsPendingLoading, setOwnerIncidentReportsPendingLoading] =
+    useState(true);
+  const [ownerIncidentReportsPendingError, setOwnerIncidentReportsPendingError] = useState('');
+  const [ownerIncidentReportsReviewActionId, setOwnerIncidentReportsReviewActionId] =
+    useState('');
   const [ownerBeforeAfterCounts, setOwnerBeforeAfterCounts] = useState({
     droppedOff: 0,
     onBus: 0,
@@ -9973,6 +10558,19 @@ export default function App() {
   const [authorizedPickupRows, setAuthorizedPickupRows] = useState([]);
   const [authorizedPickupRowsLoading, setAuthorizedPickupRowsLoading] = useState(true);
   const [authorizedPickupRowsError, setAuthorizedPickupRowsError] = useState('');
+  const [staffIncidentChildren, setStaffIncidentChildren] = useState([]);
+  const [staffIncidentChildrenLoading, setStaffIncidentChildrenLoading] = useState(true);
+  const [staffIncidentChildrenError, setStaffIncidentChildrenError] = useState('');
+  const [staffIncidentSelectedChildId, setStaffIncidentSelectedChildId] = useState('');
+  const [staffIncidentLocation, setStaffIncidentLocation] = useState('');
+  const [staffIncidentDescription, setStaffIncidentDescription] = useState('');
+  const [staffIncidentActionTaken, setStaffIncidentActionTaken] = useState('');
+  const [staffIncidentWitness, setStaffIncidentWitness] = useState('');
+  const [staffIncidentSaving, setStaffIncidentSaving] = useState(false);
+  const [staffIncidentRecentReports, setStaffIncidentRecentReports] = useState([]);
+  const [staffIncidentRecentReportsLoading, setStaffIncidentRecentReportsLoading] =
+    useState(true);
+  const [staffIncidentRecentReportsError, setStaffIncidentRecentReportsError] = useState('');
   const [childProfilePickupRows, setChildProfilePickupRows] = useState([]);
   const [childProfilePickupLoading, setChildProfilePickupLoading] = useState(true);
   const [childProfilePickupError, setChildProfilePickupError] = useState('');
@@ -9980,6 +10578,10 @@ export default function App() {
   const [childProfileEmergencyRows, setChildProfileEmergencyRows] = useState([]);
   const [childProfileEmergencyLoading, setChildProfileEmergencyLoading] = useState(true);
   const [childProfileEmergencyError, setChildProfileEmergencyError] = useState('');
+  const [parentIncidentReports, setParentIncidentReports] = useState([]);
+  const [parentIncidentReportsLoading, setParentIncidentReportsLoading] = useState(true);
+  const [parentIncidentReportsError, setParentIncidentReportsError] = useState('');
+  const [parentIncidentAcknowledgingId, setParentIncidentAcknowledgingId] = useState('');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -10514,6 +11116,272 @@ export default function App() {
       setOwnerDailyNotesPendingError(message);
     } finally {
       setOwnerDailyNotesPendingLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const loadOwnerIncidentReportsReview = useCallback(async () => {
+    if (!session?.user?.id) {
+      setOwnerIncidentReportsPending([]);
+      setOwnerIncidentReportsPendingError('');
+      setOwnerIncidentReportsPendingLoading(false);
+      setOwnerIncidentReportsReviewActionId('');
+      return;
+    }
+
+    setOwnerIncidentReportsPendingLoading(true);
+    setOwnerIncidentReportsPendingError('');
+
+    try {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError || !profile || profile.role !== 'owner') {
+        setOwnerIncidentReportsPending([]);
+        setOwnerIncidentReportsPendingError('');
+        setOwnerIncidentReportsReviewActionId('');
+        return;
+      }
+
+      const { data: reportRows, error: reportsError } = await supabase
+        .from('incident_reports')
+        .select(
+          'id, child_id, created_at, location, description, action_taken, staff_witness, review_status, reviewed_at, reviewed_by, parent_acknowledged_at'
+        )
+        .eq('review_status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (reportsError) {
+        setOwnerIncidentReportsPending([]);
+        setOwnerIncidentReportsPendingError(reportsError.message || 'Could not load incident reports.');
+        return;
+      }
+
+      const pendingReports = Array.isArray(reportRows) ? reportRows : [];
+      const childIds = Array.from(
+        new Set(pendingReports.map((report) => report.child_id).filter(Boolean))
+      );
+
+      let childById = {};
+
+      if (childIds.length) {
+        const { data: childrenData } = await supabase
+          .from('children')
+          .select('id, first_name, last_name')
+          .in('id', childIds);
+
+        childById = (Array.isArray(childrenData) ? childrenData : []).reduce((acc, child) => {
+          acc[child.id] = child;
+          return acc;
+        }, {});
+      }
+
+      setOwnerIncidentReportsPending(
+        pendingReports.map((report) => {
+          const child = childById[report.child_id];
+          const childName = child
+            ? `${child.first_name || ''} ${child.last_name || ''}`.trim() || 'Unnamed Student'
+            : 'Unnamed Student';
+
+          return {
+            ...report,
+            childName,
+          };
+        })
+      );
+    } catch (loadError) {
+      const message = loadError?.message || 'Could not load incident reports.';
+      setOwnerIncidentReportsPending([]);
+      setOwnerIncidentReportsPendingError(message);
+    } finally {
+      setOwnerIncidentReportsPendingLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const loadStaffIncidentReportsData = useCallback(async () => {
+    if (!session?.user?.id) {
+      setStaffIncidentChildren([]);
+      setStaffIncidentSelectedChildId('');
+      setStaffIncidentChildrenError('');
+      setStaffIncidentChildrenLoading(false);
+      setStaffIncidentRecentReports([]);
+      setStaffIncidentRecentReportsError('');
+      setStaffIncidentRecentReportsLoading(false);
+      return;
+    }
+
+    setStaffIncidentChildrenLoading(true);
+    setStaffIncidentRecentReportsLoading(true);
+    setStaffIncidentChildrenError('');
+    setStaffIncidentRecentReportsError('');
+
+    try {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError || !profile || profile.role !== 'staff') {
+        setStaffIncidentChildren([]);
+        setStaffIncidentSelectedChildId('');
+        setStaffIncidentRecentReports([]);
+        return;
+      }
+
+      const { data: childrenData, error: childrenError } = await supabase
+        .from('children')
+        .select('id, first_name, last_name, room, status')
+        .eq('status', 'active')
+        .order('first_name', { ascending: true });
+
+      if (childrenError) {
+        throw new Error(childrenError.message || 'Could not load active children.');
+      }
+
+      const activeChildren = Array.isArray(childrenData) ? childrenData : [];
+      setStaffIncidentChildren(activeChildren);
+      setStaffIncidentSelectedChildId((current) => {
+        if (activeChildren.length === 1) {
+          return activeChildren[0].id;
+        }
+        if (current && activeChildren.some((child) => child.id === current)) {
+          return current;
+        }
+        return activeChildren[0]?.id || '';
+      });
+
+      const { data: recentRows, error: recentError } = await supabase
+        .from('incident_reports')
+        .select(
+          'id, child_id, created_at, location, description, action_taken, staff_witness, review_status, reviewed_at, reviewed_by'
+        )
+        .eq('created_by_profile_id', session.user.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (recentError) {
+        throw new Error(recentError.message || 'Could not load incident reports.');
+      }
+
+      const childById = activeChildren.reduce((acc, child) => {
+        acc[child.id] = child;
+        return acc;
+      }, {});
+
+      setStaffIncidentRecentReports(
+        (Array.isArray(recentRows) ? recentRows : []).map((report) => {
+          const child = childById[report.child_id];
+          return {
+            ...report,
+            childName: child
+              ? `${child.first_name || ''} ${child.last_name || ''}`.trim() || 'Unnamed Student'
+              : 'Unnamed Student',
+          };
+        })
+      );
+    } catch (loadError) {
+      const message = loadError?.message || 'Could not load incident reports.';
+      setStaffIncidentChildren([]);
+      setStaffIncidentSelectedChildId('');
+      setStaffIncidentRecentReports([]);
+      setStaffIncidentChildrenError(message);
+      setStaffIncidentRecentReportsError(message);
+    } finally {
+      setStaffIncidentChildrenLoading(false);
+      setStaffIncidentRecentReportsLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const loadParentIncidentReports = useCallback(async () => {
+    if (!session?.user?.id) {
+      setParentIncidentReports([]);
+      setParentIncidentReportsError('');
+      setParentIncidentReportsLoading(false);
+      return;
+    }
+
+    setParentIncidentReportsLoading(true);
+    setParentIncidentReportsError('');
+
+    try {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError || !profile || profile.role !== 'parent') {
+        setParentIncidentReports([]);
+        setParentIncidentReportsError('');
+        return;
+      }
+
+      const { data: linkRows, error: linksError } = await supabase
+        .from('child_parent_links')
+        .select('child_id')
+        .eq('parent_profile_id', profile.id);
+
+      if (linksError) {
+        throw new Error(linksError.message || 'Could not load incident reports.');
+      }
+
+      const childIds = Array.from(
+        new Set((Array.isArray(linkRows) ? linkRows : []).map((linkRow) => linkRow.child_id))
+      );
+
+      if (!childIds.length) {
+        setParentIncidentReports([]);
+        return;
+      }
+
+      const { data: childrenData, error: childrenError } = await supabase
+        .from('children')
+        .select('id, first_name, last_name')
+        .in('id', childIds);
+
+      if (childrenError) {
+        throw new Error(childrenError.message || 'Could not load incident reports.');
+      }
+
+      const childById = (Array.isArray(childrenData) ? childrenData : []).reduce((acc, child) => {
+        acc[child.id] = child;
+        return acc;
+      }, {});
+
+      const { data: reportRows, error: reportsError } = await supabase
+        .from('incident_reports')
+        .select(
+          'id, child_id, created_at, location, description, action_taken, staff_witness, review_status, reviewed_at, reviewed_by, parent_acknowledged_at'
+        )
+        .in('child_id', childIds)
+        .eq('review_status', 'approved')
+        .order('created_at', { ascending: false });
+
+      if (reportsError) {
+        throw new Error(reportsError.message || 'Could not load incident reports.');
+      }
+
+      setParentIncidentReports(
+        (Array.isArray(reportRows) ? reportRows : []).map((report) => {
+          const child = childById[report.child_id];
+          const childName = child
+            ? `${child.first_name || ''} ${child.last_name || ''}`.trim() || 'Unnamed Student'
+            : 'Unnamed Student';
+
+          return {
+            ...report,
+            childName,
+          };
+        })
+      );
+    } catch (loadError) {
+      setParentIncidentReports([]);
+      setParentIncidentReportsError(loadError?.message || 'Could not load incident reports.');
+    } finally {
+      setParentIncidentReportsLoading(false);
     }
   }, [session?.user?.id]);
 
@@ -11561,6 +12429,138 @@ export default function App() {
     [loadOwnerDailyNotesReview]
   );
 
+  const handleSubmitIncidentReport = useCallback(async () => {
+    const selectedChild = staffIncidentChildren.find(
+      (child) => child.id === staffIncidentSelectedChildId
+    );
+    const cleanLocation = staffIncidentLocation.trim();
+    const cleanDescription = staffIncidentDescription.trim();
+    const cleanActionTaken = staffIncidentActionTaken.trim();
+    const cleanWitness = staffIncidentWitness.trim();
+
+    if (!session?.user?.id) {
+      return;
+    }
+
+    if (!selectedChild) {
+      Alert.alert('Select a child first.');
+      return;
+    }
+
+    if (!cleanLocation || !cleanDescription || !cleanActionTaken || !cleanWitness) {
+      Alert.alert('Please complete all incident report fields.');
+      return;
+    }
+
+    setStaffIncidentSaving(true);
+
+    try {
+      const { error: insertError } = await supabase.from('incident_reports').insert({
+        child_id: selectedChild.id,
+        created_by_profile_id: session.user.id,
+        location: cleanLocation,
+        description: cleanDescription,
+        action_taken: cleanActionTaken,
+        staff_witness: cleanWitness,
+        review_status: 'pending',
+      });
+
+      if (insertError) {
+        throw new Error(insertError.message || 'Could not submit incident report.');
+      }
+
+      setStaffIncidentLocation('');
+      setStaffIncidentDescription('');
+      setStaffIncidentActionTaken('');
+      setStaffIncidentWitness('');
+      await loadStaffIncidentReportsData();
+      await loadOwnerIncidentReportsReview();
+      Alert.alert('Incident report sent to owner for review.');
+    } catch (submitError) {
+      Alert.alert('Could not submit incident report.', submitError?.message || 'Try again.');
+    } finally {
+      setStaffIncidentSaving(false);
+    }
+  }, [
+    loadOwnerIncidentReportsReview,
+    loadStaffIncidentReportsData,
+    session?.user?.id,
+    staffIncidentActionTaken,
+    staffIncidentChildren,
+    staffIncidentDescription,
+    staffIncidentLocation,
+    staffIncidentSelectedChildId,
+    staffIncidentWitness,
+  ]);
+
+  const handleOwnerIncidentReviewDecision = useCallback(
+    async (report, reviewStatus) => {
+      if (!session?.user?.id || !report?.id) {
+        return;
+      }
+
+      setOwnerIncidentReportsReviewActionId(report.id);
+
+      try {
+        const { error: updateError } = await supabase
+          .from('incident_reports')
+          .update({
+            review_status: reviewStatus,
+            reviewed_by: session.user.id,
+            reviewed_at: new Date().toISOString(),
+          })
+          .eq('id', report.id);
+
+        if (updateError) {
+          throw new Error(updateError.message || 'Could not update incident report.');
+        }
+
+        await loadOwnerIncidentReportsReview();
+        await loadParentIncidentReports();
+        await loadStaffIncidentReportsData();
+        Alert.alert(
+          reviewStatus === 'approved' ? 'Incident report approved.' : 'Incident report rejected.'
+        );
+      } catch (reviewError) {
+        Alert.alert('Could not update incident report.', reviewError?.message || 'Try again.');
+      } finally {
+        setOwnerIncidentReportsReviewActionId('');
+      }
+    },
+    [loadOwnerIncidentReportsReview, loadParentIncidentReports, loadStaffIncidentReportsData, session?.user?.id]
+  );
+
+  const handleParentAcknowledgeIncidentReport = useCallback(
+    async (report) => {
+      if (!session?.user?.id || !report?.id) {
+        return;
+      }
+
+      setParentIncidentAcknowledgingId(report.id);
+
+      try {
+        const { error: updateError } = await supabase
+          .from('incident_reports')
+          .update({
+            parent_acknowledged_at: new Date().toISOString(),
+          })
+          .eq('id', report.id);
+
+        if (updateError) {
+          throw new Error(updateError.message || 'Could not acknowledge incident report.');
+        }
+
+        await loadParentIncidentReports();
+        Alert.alert('Report acknowledged.');
+      } catch (ackError) {
+        Alert.alert('Could not acknowledge report.', ackError?.message || 'Try again.');
+      } finally {
+        setParentIncidentAcknowledgingId('');
+      }
+    },
+    [loadParentIncidentReports, session?.user?.id]
+  );
+
   const handleToggleOwnerRecentMessage = useCallback((messageId) => {
     setOwnerMessagesExpandedId((current) => (current === messageId ? null : messageId));
   }, []);
@@ -11582,6 +12582,9 @@ export default function App() {
     loadStaffBeforeAfterData();
     loadChildProfilePickups();
     loadOwnerDailyNotesReview();
+    loadOwnerIncidentReportsReview();
+    loadStaffIncidentReportsData();
+    loadParentIncidentReports();
   }, [
     authLoading,
     loadAuthorizedPickupRows,
@@ -11591,6 +12594,9 @@ export default function App() {
     loadOwnerBeforeAfterCounts,
     loadOwnerSummerCampData,
     loadStaffSummerCampData,
+    loadOwnerIncidentReportsReview,
+    loadStaffIncidentReportsData,
+    loadParentIncidentReports,
     loadParentAttendanceHistory,
     loadParentBeforeAfterData,
     loadParentDailyNotes,
@@ -11694,6 +12700,10 @@ export default function App() {
     setOwnerDailyNotesPendingError('');
     setOwnerDailyNotesPending([]);
     setOwnerDailyNotesReviewActionId('');
+    setOwnerIncidentReportsPendingLoading(true);
+    setOwnerIncidentReportsPendingError('');
+    setOwnerIncidentReportsPending([]);
+    setOwnerIncidentReportsReviewActionId('');
     setStaffStatus(STAFF_MEMBER.status);
     setLastClockInTime('');
     setLastClockOutTime('');
@@ -11716,6 +12726,22 @@ export default function App() {
     setStaffSummerCampOwnerStatus({});
     setOwnerSummerCampSummary(OWNER_SUMMER_CAMP_INITIAL_SUMMARY);
     setStaffDailyNotesSavedEntries([]);
+    setStaffIncidentChildren([]);
+    setStaffIncidentChildrenLoading(true);
+    setStaffIncidentChildrenError('');
+    setStaffIncidentSelectedChildId('');
+    setStaffIncidentLocation('');
+    setStaffIncidentDescription('');
+    setStaffIncidentActionTaken('');
+    setStaffIncidentWitness('');
+    setStaffIncidentSaving(false);
+    setStaffIncidentRecentReports([]);
+    setStaffIncidentRecentReportsLoading(true);
+    setStaffIncidentRecentReportsError('');
+    setParentIncidentReports([]);
+    setParentIncidentReportsLoading(true);
+    setParentIncidentReportsError('');
+    setParentIncidentAcknowledgingId('');
   };
 
   const openActivateAccountScreen = () => {
@@ -12693,6 +13719,21 @@ export default function App() {
                   <Text style={styles.parentQuickValue}>{PARENT_CHILD.messages}</Text>
                   <Text style={styles.parentQuickNote}>View center updates and announcements</Text>
                 </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setScreen('parent-incident-reports')}
+                  style={({ pressed }) => [
+                    styles.parentQuickCard,
+                    styles.parentQuickOrange,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <View style={styles.parentQuickAccentOrange} />
+                  <Text style={styles.parentQuickTitle}>Incident Reports</Text>
+                  <Text style={styles.parentQuickValue}>View</Text>
+                  <Text style={styles.parentQuickNote}>View approved incident reports</Text>
+                </Pressable>
               </View>
 
               <Pressable
@@ -12757,6 +13798,16 @@ export default function App() {
           subtitle="Center updates and announcements"
           introTitle="Inbox"
           introText="Center updates and announcements"
+        />
+      ) : screen === 'parent-incident-reports' ? (
+        <ParentIncidentReportsScreen
+          onBack={() => setScreen('parent-home')}
+          onLogout={handleLogout}
+          reports={parentIncidentReports}
+          loading={parentIncidentReportsLoading}
+          error={parentIncidentReportsError}
+          acknowledgingId={parentIncidentAcknowledgingId}
+          onAcknowledge={handleParentAcknowledgeIncidentReport}
         />
       ) : screen === 'notifications' ? (
         <NotificationsScreen
@@ -13069,6 +14120,7 @@ export default function App() {
           onOpenClock={() => setScreen('staff-clock-in-out')}
           onOpenBeforeAfter={() => setScreen('staff-before-after-attendance')}
           onOpenCamp={() => setScreen('staff-summer-camp-group-check-in')}
+          onOpenIncidentReports={() => setScreen('staff-incident-reports')}
           onOpenMessages={() => setScreen('staff-messages')}
           onOpenNotes={() => setScreen('staff-daily-notes')}
           onOpenHours={() => setScreen('staff-hours')}
@@ -13162,6 +14214,29 @@ export default function App() {
           savingChildId={staffSummerCampSavingChildId}
           sendingGroup={staffSummerCampSendingGroup}
         />
+      ) : screen === 'staff-incident-reports' ? (
+        <StaffIncidentReportsScreen
+          onBack={() => setScreen('staff-home')}
+          onLogout={handleLogout}
+          activeChildren={staffIncidentChildren}
+          selectedChildId={staffIncidentSelectedChildId}
+          loading={staffIncidentChildrenLoading}
+          error={staffIncidentChildrenError}
+          location={staffIncidentLocation}
+          description={staffIncidentDescription}
+          actionTaken={staffIncidentActionTaken}
+          staffWitness={staffIncidentWitness}
+          saving={staffIncidentSaving}
+          recentReports={staffIncidentRecentReports}
+          recentReportsLoading={staffIncidentRecentReportsLoading}
+          recentReportsError={staffIncidentRecentReportsError}
+          onSelectChild={setStaffIncidentSelectedChildId}
+          onChangeLocation={setStaffIncidentLocation}
+          onChangeDescription={setStaffIncidentDescription}
+          onChangeActionTaken={setStaffIncidentActionTaken}
+          onChangeWitness={setStaffIncidentWitness}
+          onSubmit={handleSubmitIncidentReport}
+        />
       ) : screen === 'staff-hours' ? (
         <StaffMyHoursScreen
           onBack={() => setScreen('staff-home')}
@@ -13231,6 +14306,16 @@ export default function App() {
           onReject={(note) => handleOwnerDailyNoteReviewDecision(note, 'rejected')}
           actionNoteId={ownerDailyNotesReviewActionId}
         />
+      ) : screen === 'owner-incident-reports-review' ? (
+        <OwnerIncidentReportsReviewScreen
+          onBack={() => setScreen('owner-home')}
+          loading={ownerIncidentReportsPendingLoading}
+          error={ownerIncidentReportsPendingError}
+          pendingReports={ownerIncidentReportsPending}
+          onApprove={(report) => handleOwnerIncidentReviewDecision(report, 'approved')}
+          onReject={(report) => handleOwnerIncidentReviewDecision(report, 'rejected')}
+          actionReportId={ownerIncidentReportsReviewActionId}
+        />
       ) : screen === 'owner-staff' ? (
         <OwnerStaffScreen
           onBack={() => setScreen('owner-home')}
@@ -13274,6 +14359,7 @@ export default function App() {
           onOpenReports={() => setScreen('owner-reports')}
           onOpenSummerCampCheckIn={() => setScreen('owner-summer-camp-check-in')}
           onOpenDailyNotesReview={() => setScreen('owner-daily-notes-review')}
+          onOpenIncidentReportsReview={() => setScreen('owner-incident-reports-review')}
           ownerSummerCampSummary={ownerSummerCampSummary}
           staffSummerCampGroups={staffSummerCampGroups}
           ownerPendingDailyNotesCount={ownerDailyNotesPending.length}
@@ -13281,6 +14367,9 @@ export default function App() {
           ownerBeforeAfterCounts={ownerBeforeAfterCounts}
           ownerBeforeAfterCountsLoading={ownerBeforeAfterCountsLoading}
           ownerBeforeAfterCountsError={ownerBeforeAfterCountsError}
+          ownerIncidentReportsPending={ownerIncidentReportsPending}
+          ownerIncidentReportsPendingLoading={ownerIncidentReportsPendingLoading}
+          ownerIncidentReportsPendingError={ownerIncidentReportsPendingError}
         />
       )}
     </SafeAreaView>
@@ -15621,6 +16710,10 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  ownerTextArea: {
+    minHeight: 110,
+    textAlignVertical: 'top',
   },
   ownerPriorityDropdownTab: {
     alignItems: 'center',
