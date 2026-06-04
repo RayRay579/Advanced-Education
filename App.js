@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -249,6 +249,18 @@ function formatTime(value) {
 
 function formatMinutes(minutes) {
   return formatDuration(minutes);
+}
+
+function formatAttendanceType(value) {
+  if (value === 'check_in') {
+    return 'Checked In';
+  }
+
+  if (value === 'check_out') {
+    return 'Checked Out';
+  }
+
+  return 'Attendance Event';
 }
 
 function getTodayIsoRange() {
@@ -1054,19 +1066,17 @@ function StaffHomeScreen({
                     ? onOpenClock()
                     : card.title === 'Before & After Care Attendance'
                       ? onOpenBeforeAfter()
-                  : card.title === 'Summer Camp Group Check-In'
-                        ? onOpenCamp()
-                        : card.title === 'Incident Reports'
-                          ? onOpenIncidentReports()
-                    : card.title === 'Incident Reports'
-                      ? onOpenIncidentReports()
-                    : card.title === 'Messages'
+                    : card.title === 'Summer Camp Group Check-In'
+                      ? onOpenCamp()
+                      : card.title === 'Incident Reports'
+                        ? onOpenIncidentReports()
+                        : card.title === 'Messages'
                           ? onOpenMessages()
-                        : card.title === 'Daily Notes'
-                          ? onOpenNotes()
-                          : card.title === 'My Hours'
-                            ? onOpenHours()
-                        : onShowComingSoon(card.title)
+                          : card.title === 'Daily Notes'
+                            ? onOpenNotes()
+                            : card.title === 'My Hours'
+                              ? onOpenHours()
+                              : onShowComingSoon(card.title)
                 }
               />
             ))}
@@ -3194,6 +3204,581 @@ function ParentIncidentReportsScreen({
                 );
               })}
             </View>
+          ) : null}
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function UnifiedChildProfileScreen({
+  onBack,
+  onLogout,
+  accessibleChildren,
+  selectedChildId,
+  selectedChild,
+  loading,
+  error,
+  onSelectChild,
+  pickups,
+  pickupsLoading,
+  pickupsError,
+  emergencyRows,
+  emergencyLoading,
+  emergencyError,
+  attendanceRows,
+  beforeAfterRows,
+  dailyNotesRows,
+  incidentRows,
+  summerCampCheckIns,
+  summerCampHeadcounts,
+  campGroups,
+}) {
+  const [openChildProfileSection, setOpenChildProfileSection] = useState('student-information');
+
+  const selectedCampGroupId =
+    summerCampCheckIns[0]?.camp_group_id ||
+    summerCampHeadcounts[0]?.camp_group_id ||
+    selectedChild?.camp_group_id ||
+    null;
+  const selectedCampGroup = campGroups.find((group) => group.id === selectedCampGroupId) || null;
+  const groupDisplayName = getCampGroupDisplayName(
+    selectedCampGroup?.name ||
+      selectedCampGroup?.group_name ||
+      selectedCampGroup?.label ||
+      selectedCampGroup?.color ||
+      selectedChild?.profile_accent_color ||
+      selectedChild?.group ||
+      'Blue Group'
+  );
+  const childTheme = getChildGroupTheme(groupDisplayName);
+  const enrollmentInfo = Array.isArray(selectedChild?.program_enrollment)
+    ? selectedChild.program_enrollment
+    : Array.isArray(selectedChild?.programEnrollment)
+      ? selectedChild.programEnrollment
+      : [];
+  const enrollmentText = Array.isArray(enrollmentInfo) && enrollmentInfo.length
+    ? enrollmentInfo
+        .map((item) =>
+          typeof item === 'string'
+            ? item
+            : `${item.label || item.name || 'Enrollment'}: ${item.value || item.status || 'Yes'}`
+        )
+        .join(' • ')
+    : selectedChild?.enrollment_info || selectedChild?.enrollmentInfo || 'Not available';
+
+  const toggleSection = (key) => {
+    setOpenChildProfileSection((current) => (current === key ? null : key));
+  };
+
+  const renderAccordion = (key, title, summary, body) => (
+    <View
+      key={key}
+      style={[
+        styles.parentAccordionCard,
+        openChildProfileSection === key && styles.parentAccordionCardOpen,
+      ]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => toggleSection(key)}
+        style={({ pressed }) => [styles.parentAccordionHeader, pressed && styles.pressedButton]}
+      >
+        <View style={styles.parentAccordionHeaderCopy}>
+          <Text style={styles.parentAccordionTitle}>{title}</Text>
+          <Text style={styles.parentAccordionSummary}>{summary}</Text>
+        </View>
+        <Text style={styles.parentAccordionChevron}>
+          {openChildProfileSection === key ? '▴' : '▾'}
+        </Text>
+      </Pressable>
+      {openChildProfileSection === key ? <View style={styles.parentAccordionBody}>{body}</View> : null}
+    </View>
+  );
+
+  const renderEmpty = (message) => <Text style={styles.parentAttendanceStateText}>{message}</Text>;
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.childProfileHero}>
+          <View style={styles.parentHeroGlowOne} />
+          <View style={styles.parentHeroGlowTwo} />
+
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Child Profile</Text>
+          </View>
+
+          <View style={styles.childProfileHeroMain}>
+            <View style={styles.childProfileHeroTextBlock}>
+              <Text style={styles.parentHeroKicker}>Advanced Education</Text>
+              <Text style={styles.parentHeroGreeting}>
+                {selectedChild
+                  ? `${selectedChild.first_name || ''} ${selectedChild.last_name || ''}`.trim() ||
+                    'Child Profile'
+                  : 'Child Profile'}
+              </Text>
+              <View
+                style={[
+                  styles.childProfileGroupBadge,
+                  {
+                    backgroundColor: childTheme.soft,
+                    borderColor: childTheme.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[styles.childProfileGroupBadgeText, { color: childTheme.accent }]}
+                >
+                  {selectedChild?.room || 'Room not set'}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.childProfileStatusPill,
+                  { backgroundColor: childTheme.accent },
+                ]}
+              >
+                <Text style={styles.childProfileStatusPillText}>
+                  {selectedChild?.status || 'Status not set'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.parentHeroPhotoWrap}>
+              <Image source={HEADER_PHOTO} resizeMode="cover" style={styles.parentHeroPhoto} />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.profileCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>Select Child</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>Accessible accounts</Text>
+            </View>
+            {accessibleChildren.length ? (
+              <View style={styles.ownerFilterPillRow}>
+                {accessibleChildren.map((child) => {
+                  const isActive = child.id === (selectedChildId || selectedChild?.id);
+                  return (
+                    <Pressable
+                      key={child.id}
+                      accessibilityRole="button"
+                      onPress={() => onSelectChild(child)}
+                      style={({ pressed }) => [
+                        styles.ownerFilterPill,
+                        isActive && styles.ownerFilterPillActive,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.ownerFilterPillText,
+                          isActive && styles.ownerFilterPillTextActive,
+                        ]}
+                      >
+                        {`${child.first_name || ''} ${child.last_name || ''}`.trim() ||
+                          'Unnamed Student'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : loading ? (
+              <Text style={styles.parentAttendanceStateText}>Loading child profile...</Text>
+            ) : (
+              <Text style={styles.parentAttendanceStateText}>
+                No child available for this account.
+              </Text>
+            )}
+          </View>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          {loading ? (
+            <Text style={styles.parentAttendanceStateText}>Loading child profile...</Text>
+          ) : selectedChild ? (
+            <>
+              {renderAccordion(
+                'student-information',
+                'Student Information',
+                'Name, room, status, and enrollment info',
+                <View style={styles.profileList}>
+                  <View style={styles.profileListRow}>
+                    <View style={styles.profileListDot} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.profileListLabel}>Name</Text>
+                      <Text style={styles.profileListValue}>
+                        {`${selectedChild.first_name || ''} ${selectedChild.last_name || ''}`.trim() ||
+                          'Not set'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.profileListRow}>
+                    <View style={styles.profileListDot} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.profileListLabel}>Room</Text>
+                      <Text style={styles.profileListValue}>{selectedChild.room || 'Room not set'}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.profileListRow}>
+                    <View style={styles.profileListDot} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.profileListLabel}>Status</Text>
+                      <Text style={styles.profileListValue}>{selectedChild.status || 'Status not set'}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.profileListRow}>
+                    <View style={styles.profileListDot} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.profileListLabel}>Group color</Text>
+                      <Text style={styles.profileListValue}>{groupDisplayName}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.profileListRow}>
+                    <View style={styles.profileListDot} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.profileListLabel}>Enrollment</Text>
+                      <Text style={styles.profileListValue}>{enrollmentText}</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {renderAccordion(
+                'authorized-pickups',
+                'Authorized Pickups',
+                'Real pickup approvals',
+                pickupsLoading ? (
+                  renderEmpty('Loading authorized pickups...')
+                ) : pickupsError ? (
+                  <Text style={styles.errorText}>{pickupsError}</Text>
+                ) : pickups.length ? (
+                  <View style={styles.profileList}>
+                    {pickups.map((pickup) => (
+                      <View key={pickup.id} style={styles.profileListRow}>
+                        <View
+                          style={[styles.profileListDot, { backgroundColor: childTheme.accent }]}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.profileListLabel}>{pickup.full_name}</Text>
+                          <Text style={styles.profileListValue}>{pickup.relationship}</Text>
+                          <Text style={styles.profileListValue}>{pickup.phone}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  renderEmpty('No authorized pickups on file.')
+                )
+              )}
+
+              {renderAccordion(
+                'emergency-contacts',
+                'Emergency Contacts',
+                'Safety contacts for emergencies',
+                emergencyLoading ? (
+                  renderEmpty('Loading emergency contacts...')
+                ) : emergencyError ? (
+                  <Text style={styles.errorText}>{emergencyError}</Text>
+                ) : emergencyRows.length ? (
+                  <View style={styles.profileList}>
+                    {emergencyRows.map((contact) => (
+                      <View key={contact.id} style={styles.profileListRow}>
+                        <View
+                          style={[styles.profileListDot, { backgroundColor: childTheme.accent }]}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.profileListLabel}>{contact.full_name}</Text>
+                          <Text style={styles.profileListValue}>{contact.relationship}</Text>
+                          <Text style={styles.profileListValue}>{contact.phone}</Text>
+                          <Text style={styles.profileListValue}>
+                            {formatEmergencyContactPriority(contact.priority)}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  renderEmpty('No emergency contacts on file.')
+                )
+              )}
+
+              {renderAccordion(
+                'attendance-history',
+                'Attendance History',
+                'Real check-in and check-out records',
+                attendanceRows.length ? (
+                  <View style={styles.profileList}>
+                    {attendanceRows.map((event) => (
+                      <View key={event.id} style={styles.profileListRow}>
+                        <View
+                          style={[styles.profileListDot, { backgroundColor: childTheme.accent }]}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.profileListLabel}>
+                            {formatAttendanceType(event.event_type)}
+                          </Text>
+                          <Text style={styles.profileListValue}>
+                            {formatDateTime(event.event_time)}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  renderEmpty('No attendance records yet.')
+                )
+              )}
+
+              {renderAccordion(
+                'before-after-care',
+                'Before & After Care',
+                'Real school-year care sessions',
+                beforeAfterRows.length ? (
+                  <View style={styles.profileList}>
+                    {beforeAfterRows.map((sessionRow) => (
+                      <View key={sessionRow.id} style={styles.profileListRow}>
+                        <View
+                          style={[styles.profileListDot, { backgroundColor: childTheme.accent }]}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.profileListLabel}>
+                            {formatDate(sessionRow.date || sessionRow.created_at)}
+                          </Text>
+                          <Text style={styles.profileListValue}>
+                            Status: {getBeforeAfterStatusLabel(sessionRow)}
+                          </Text>
+                          <Text style={styles.profileListValue}>
+                            Drop Off: {formatTime(sessionRow.drop_off_time)}
+                          </Text>
+                          <Text style={styles.profileListValue}>
+                            Put On Bus: {formatTime(sessionRow.bus_departure_time)}
+                          </Text>
+                          <Text style={styles.profileListValue}>
+                            Morning: {formatMinutes(sessionRow.morning_minutes)}
+                          </Text>
+                          <Text style={styles.profileListValue}>
+                            Returned: {formatTime(sessionRow.returned_time)}
+                          </Text>
+                          <Text style={styles.profileListValue}>
+                            Parent Pickup: {formatTime(sessionRow.pickup_time)}
+                          </Text>
+                          <Text style={styles.profileListValue}>
+                            Afternoon: {formatMinutes(sessionRow.afternoon_minutes)}
+                          </Text>
+                          <Text style={styles.profileListValue}>
+                            Total: {formatMinutes(sessionRow.total_minutes)}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  renderEmpty('No Before & After Care record for today.')
+                )
+              )}
+
+              {renderAccordion(
+                'daily-notes',
+                'Daily Notes',
+                'Approved notes visible to families',
+                dailyNotesRows.length ? (
+                  <View style={styles.profileList}>
+                    {dailyNotesRows.map((note) => (
+                      <View key={note.id} style={styles.profileListRow}>
+                        <View
+                          style={[styles.profileListDot, { backgroundColor: childTheme.accent }]}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.profileListLabel}>
+                            {formatDate(note.date || note.created_at)}
+                          </Text>
+                          <Text style={styles.profileListValue}>
+                            {Array.isArray(note.quick_notes) && note.quick_notes.length
+                              ? note.quick_notes.join(' • ')
+                              : 'No quick notes'}
+                          </Text>
+                          {note.custom_note ? (
+                            <Text style={styles.profileListValue}>{note.custom_note}</Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  renderEmpty('No daily notes yet.')
+                )
+              )}
+
+              {renderAccordion(
+                'incident-reports',
+                'Incident Reports',
+                'Approved incident reports',
+                incidentRows.length ? (
+                  <View style={styles.profileList}>
+                    {incidentRows.map((report) => (
+                      <View key={report.id} style={styles.profileListRow}>
+                        <View
+                          style={[styles.profileListDot, { backgroundColor: childTheme.accent }]}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.profileListLabel}>
+                            {formatDateTime(report.created_at)}
+                          </Text>
+                          <Text style={styles.profileListValue}>Location: {report.location}</Text>
+                          <Text style={styles.profileListValue}>
+                            Description: {report.description}
+                          </Text>
+                          <Text style={styles.profileListValue}>
+                            Action Taken: {report.action_taken}
+                          </Text>
+                          <Text style={styles.profileListValue}>
+                            Staff Witness: {report.staff_witness}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  renderEmpty('No incident reports yet.')
+                )
+              )}
+
+              {renderAccordion(
+                'summer-camp',
+                'Summer Camp',
+                'Group, check-ins, and headcounts',
+                <>
+                  <View style={styles.profileList}>
+                    <View style={styles.profileListRow}>
+                      <View style={[styles.profileListDot, { backgroundColor: childTheme.accent }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.profileListLabel}>Group</Text>
+                        <Text style={styles.profileListValue}>{groupDisplayName}</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <Text style={[styles.parentSectionHeaderTitle, { marginTop: 18 }]}>Check-ins</Text>
+                  {summerCampCheckIns.length ? (
+                    <View style={styles.profileList}>
+                      {summerCampCheckIns.map((checkIn) => {
+                        const checkInGroup = campGroups.find((group) => group.id === checkIn.camp_group_id);
+                        const checkInGroupName = getCampGroupDisplayName(
+                          checkInGroup?.name ||
+                            checkInGroup?.group_name ||
+                            checkInGroup?.label ||
+                            checkInGroup?.color ||
+                            checkIn.camp_group_id
+                        );
+
+                        return (
+                          <View key={checkIn.id} style={styles.profileListRow}>
+                            <View
+                              style={[
+                                styles.profileListDot,
+                                { backgroundColor: childTheme.accent },
+                              ]}
+                            />
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.profileListLabel}>
+                                {formatDate(checkIn.date)}
+                              </Text>
+                              <Text style={styles.profileListValue}>{checkInGroupName}</Text>
+                              <Text style={styles.profileListValue}>
+                                Checked In: {formatTime(checkIn.checked_in_at)}
+                              </Text>
+                              <Text style={styles.profileListValue}>
+                                Status: {checkIn.status || 'checked_in'}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    renderEmpty('No camp check-ins on file.')
+                  )}
+
+                  <Text style={[styles.parentSectionHeaderTitle, { marginTop: 18 }]}>Headcounts</Text>
+                  {summerCampHeadcounts.length ? (
+                    <View style={styles.profileList}>
+                      {summerCampHeadcounts.map((headcount) => {
+                        const headcountGroup = campGroups.find(
+                          (group) => group.id === headcount.camp_group_id
+                        );
+                        const headcountGroupName = getCampGroupDisplayName(
+                          headcountGroup?.name ||
+                            headcountGroup?.group_name ||
+                            headcountGroup?.label ||
+                            headcountGroup?.color ||
+                            headcount.camp_group_id
+                        );
+
+                        return (
+                          <View key={headcount.id} style={styles.profileListRow}>
+                            <View
+                              style={[
+                                styles.profileListDot,
+                                { backgroundColor: childTheme.accent },
+                              ]}
+                            />
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.profileListLabel}>
+                                {formatDate(headcount.date)}
+                              </Text>
+                              <Text style={styles.profileListValue}>{headcountGroupName}</Text>
+                              <Text style={styles.profileListValue}>
+                                Owner: {headcount.owner_checked_in_count || 0}
+                              </Text>
+                              <Text style={styles.profileListValue}>
+                                Counselor: {headcount.counselor_confirmed_count || 0}
+                              </Text>
+                              <Text style={styles.profileListValue}>
+                                Status: {headcount.status || 'pending'}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    renderEmpty('No camp headcounts on file.')
+                  )}
+                </>
+              )}
+            </>
           ) : null}
 
           <Pressable
@@ -6108,7 +6693,7 @@ function OwnerMessagesScreen({
               return (
                 <Pressable
                   key={profile.id}
-                  accessibilityRole=\"button\"
+                  accessibilityRole="button"
                   onPress={() => setSelectedParentId(profile.id)}
                   style={({ pressed }) => [
                     styles.ownerMessageRecipientCard,
@@ -6150,7 +6735,7 @@ function OwnerMessagesScreen({
               return (
                 <Pressable
                   key={profile.id}
-                  accessibilityRole=\"button\"
+                  accessibilityRole="button"
                   onPress={() => setSelectedStaffId(profile.id)}
                   style={({ pressed }) => [
                     styles.ownerMessageRecipientCard,
@@ -6186,7 +6771,7 @@ function OwnerMessagesScreen({
 
         <View style={styles.childProfileHeaderRow}>
           <Pressable
-            accessibilityRole=\"button\"
+            accessibilityRole="button"
             onPress={onBack}
             style={({ pressed }) => [
               styles.childProfileBackButton,
@@ -6215,7 +6800,7 @@ function OwnerMessagesScreen({
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps=\"handled\">
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.contentStack}>
           <View style={styles.ownerAccordionCard}>
             <Text style={styles.ownerAccordionTitle}>Message Summary</Text>
@@ -6228,11 +6813,11 @@ function OwnerMessagesScreen({
               ].map((card) => (
                 <SummaryTile
                   key={card.title}
-                  accent=\"blue\"
+                  accent="blue"
                   badge={card.title.charAt(0)}
                   title={card.title}
                   value={card.value}
-                  note=\"Center-wide totals\"
+                  note="Center-wide totals"
                   fill=\"Owner\"\n                />\n              ))}\n            </View>\n          </View>\n\n          <View style={styles.ownerAccordionCard}>\n            <Text style={styles.ownerAccordionTitle}>Send New Message</Text>\n            <Text style={styles.ownerAccordionSummary}>Pick recipients and a message type</Text>\n\n            {profilesError ? <Text style={styles.ownerMessagesErrorText}>{profilesError}</Text> : null}\n            {sendMessageError ? <Text style={styles.ownerMessagesErrorText}>{sendMessageError}</Text> : null}\n\n            <View style={styles.ownerChipGroup}>\n              <Text style={styles.ownerChipGroupLabel}>Recipients</Text>\n              <View style={styles.ownerFilterPillRow}>\n                {recipientAudienceOptions.map((option) => {\n                  const isActive = selectedAudienceType === option.value;\n\n                  return (\n                    <Pressable\n                      key={option.value}\n                      accessibilityRole=\"button\"\n                      onPress={() => handleAudienceTypeChange(option.value)}\n                      style={({ pressed }) => [\n                        styles.ownerFilterPill,\n                        isActive && styles.ownerFilterPillActive,\n                        pressed && styles.pressedButton,\n                      ]}\n                    >\n                      <Text\n                        style={[\n                          styles.ownerFilterPillText,\n                          isActive && styles.ownerFilterPillTextActive,\n                        ]}\n                      >\n                        {option.label}\n                      </Text>\n                    </Pressable>\n                  );\n                })}\n              </View>\n            </View>\n\n            {renderRecipientSelection()}\n\n            <View style={styles.ownerChipGroup}>\n              <Text style={styles.ownerChipGroupLabel}>Title</Text>\n              <TextInput\n                placeholder=\"Message title\"\n                placeholderTextColor={COLORS.muted}\n                value={messageTitle}\n                onChangeText={setMessageTitle}\n                style={styles.ownerTitleInput}\n              />\n            </View>\n\n            <View style={styles.ownerChipGroup}>\n              <Text style={styles.ownerChipGroupLabel}>Message Type</Text>\n              <View style={styles.ownerFilterPillRow}>\n                {messageTypeOptions.map((option) => {\n                  const isActive = selectedMessageType === option.value;\n                  return (\n                    <Pressable\n                      key={option.value}\n                      accessibilityRole=\"button\"\n                      onPress={() => setSelectedMessageType(option.value)}\n                      style={({ pressed }) => [\n                        styles.ownerFilterPill,\n                        isActive && styles.ownerFilterPillActive,\n                        pressed && styles.pressedButton,\n                      ]}\n                    >\n                      <Text\n                        style={[\n                          styles.ownerFilterPillText,\n                          isActive && styles.ownerFilterPillTextActive,\n                        ]}\n                      >\n                        {option.label}\n                      </Text>\n                    </Pressable>\n                  );\n                })}\n              </View>\n            </View>\n\n            <TextInput\n              placeholder=\"Write a message...\"\n              placeholderTextColor={COLORS.muted}\n              value={messageBody}\n              onChangeText={setMessageBody}\n              multiline\n              style={styles.ownerMessageInput}\n            />\n\n            <Pressable\n              accessibilityRole=\"button\"\n              disabled={sendingMessage}\n              onPress={handleSendMessage}\n              style={({ pressed }) => [\n                styles.primaryButton,\n                { backgroundColor: messagesAccent },\n                pressed && !sendingMessage && styles.pressedButton,\n                sendingMessage && styles.ownerMessageSendDisabled,\n              ]}\n            >\n              <Text style={styles.primaryButtonText}>\n                {sendingMessage ? 'Sending...' : 'Send Message'}\n              </Text>\n            </Pressable>\n          </View>\n\n          <View style={styles.ownerAccordionCard}>\n            <Text style={styles.ownerAccordionTitle}>Recent Messages</Text>\n            {recentMessagesLoading ? (\n              <Text style={styles.ownerMessagesStateText}>Loading messages...</Text>\n            ) : null}\n            {recentMessagesError ? (\n              <Text style={styles.ownerMessagesErrorText}>{recentMessagesError}</Text>\n            ) : null}\n            {!recentMessagesLoading && recentMessages.length === 0 ? (\n              <Text style={styles.ownerMessagesStateText}>No messages yet.</Text>\n            ) : null}\n            <View style={styles.ownerRecentMessageList}>\n              {recentMessages.map((message) => (\n                <View key={message.id} style={styles.ownerRecentMessageCard}>\n                  <View style={styles.ownerRecentMessageTopRow}>\n                    <View style={styles.ownerRecentMessageTextBlock}>\n                      <Text style={styles.ownerRecentMessageTitle}>{message.title}</Text>\n                      <Text style={styles.ownerRecentMessageAudience}>\n                        Sent to {formatAudienceLabel(message.audience_type)}\n                      </Text>\n                    </View>\n                    <View style={[styles.ownerRecentMessageBadge, { backgroundColor: messagesAccent }]}>\n                      <Text style={styles.ownerRecentMessageBadgeText}>\n                        {formatMessageTypeLabel(message.message_type)}\n                      </Text>\n                    </View>\n                  </View>\n                  <Text style={styles.ownerRecentMessageTime}>\n                    {formatMessageDateTime(message.created_at)}\n                  </Text>\n                </View>\n              ))}\n            </View>\n          </View>\n\n          <View style={styles.ownerAccordionCard}>\n            <Text style={styles.ownerAccordionTitle}>Communication Notes</Text>\n            <Text style={styles.ownerCommunicationNote}>\n              Messages sent here are stored in Supabase with recipient rows for the selected audience.\n            </Text>\n          </View>\n\n          <Pressable\n            accessibilityRole=\"button\"\n            onPress={onLogout}\n            style={({ pressed }) => [\n              styles.primaryButton,\n              styles.logoutButton,\n              pressed && styles.pressedButton,\n            ]}\n          >\n            <Text style={styles.primaryButtonText}>Logout</Text>\n          </Pressable>\n        </View>\n      </ScrollView>\n    </View>\n  );\n}\n*** End Patch
 */
 
@@ -10531,7 +11116,6 @@ export default function App() {
   const [parentTimelineLoading, setParentTimelineLoading] = useState(true);
   const [parentTimelineError, setParentTimelineError] = useState('');
   const [parentTimelineHistory, setParentTimelineHistory] = useState([]);
-  const [parentDetailSectionOpen, setParentDetailSectionOpen] = useState(null);
   const [recipientMessages, setRecipientMessages] = useState([]);
   const [recipientMessagesLoading, setRecipientMessagesLoading] = useState(true);
   const [recipientMessagesError, setRecipientMessagesError] = useState('');
@@ -10558,6 +11142,17 @@ export default function App() {
   const [authorizedPickupRows, setAuthorizedPickupRows] = useState([]);
   const [authorizedPickupRowsLoading, setAuthorizedPickupRowsLoading] = useState(true);
   const [authorizedPickupRowsError, setAuthorizedPickupRowsError] = useState('');
+  const [childProfileAccessibleChildren, setChildProfileAccessibleChildren] = useState([]);
+  const [childProfileLoading, setChildProfileLoading] = useState(true);
+  const [childProfileError, setChildProfileError] = useState('');
+  const [childProfileLoadStartedAt, setChildProfileLoadStartedAt] = useState(null);
+  const [childProfileAttendanceRows, setChildProfileAttendanceRows] = useState([]);
+  const [childProfileBeforeAfterRows, setChildProfileBeforeAfterRows] = useState([]);
+  const [childProfileDailyNotesRows, setChildProfileDailyNotesRows] = useState([]);
+  const [childProfileIncidentRows, setChildProfileIncidentRows] = useState([]);
+  const [childProfileSummerCampCheckIns, setChildProfileSummerCampCheckIns] = useState([]);
+  const [childProfileSummerCampHeadcounts, setChildProfileSummerCampHeadcounts] = useState([]);
+  const [childProfileCampGroups, setChildProfileCampGroups] = useState([]);
   const [staffIncidentChildren, setStaffIncidentChildren] = useState([]);
   const [staffIncidentChildrenLoading, setStaffIncidentChildrenLoading] = useState(true);
   const [staffIncidentChildrenError, setStaffIncidentChildrenError] = useState('');
@@ -10574,7 +11169,9 @@ export default function App() {
   const [childProfilePickupRows, setChildProfilePickupRows] = useState([]);
   const [childProfilePickupLoading, setChildProfilePickupLoading] = useState(true);
   const [childProfilePickupError, setChildProfilePickupError] = useState('');
+  const [childProfileSelectedChildId, setChildProfileSelectedChildId] = useState('');
   const [childProfileSelectedChild, setChildProfileSelectedChild] = useState(null);
+  const childProfileSelectedChildRef = useRef(null);
   const [childProfileEmergencyRows, setChildProfileEmergencyRows] = useState([]);
   const [childProfileEmergencyLoading, setChildProfileEmergencyLoading] = useState(true);
   const [childProfileEmergencyError, setChildProfileEmergencyError] = useState('');
@@ -10582,6 +11179,13 @@ export default function App() {
   const [parentIncidentReportsLoading, setParentIncidentReportsLoading] = useState(true);
   const [parentIncidentReportsError, setParentIncidentReportsError] = useState('');
   const [parentIncidentAcknowledgingId, setParentIncidentAcknowledgingId] = useState('');
+  const [parentLinkedChildren, setParentLinkedChildren] = useState([]);
+  const [parentLinkedChildrenLoading, setParentLinkedChildrenLoading] = useState(true);
+  const [parentLinkedChildrenError, setParentLinkedChildrenError] = useState('');
+
+  useEffect(() => {
+    childProfileSelectedChildRef.current = childProfileSelectedChild;
+  }, [childProfileSelectedChild]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -11382,6 +11986,66 @@ export default function App() {
       setParentIncidentReportsError(loadError?.message || 'Could not load incident reports.');
     } finally {
       setParentIncidentReportsLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const loadParentLinkedChildren = useCallback(async () => {
+    if (!session?.user?.id) {
+      setParentLinkedChildren([]);
+      setParentLinkedChildrenError('');
+      setParentLinkedChildrenLoading(false);
+      return;
+    }
+
+    setParentLinkedChildrenLoading(true);
+    setParentLinkedChildrenError('');
+
+    try {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError || !profile || profile.role !== 'parent') {
+        setParentLinkedChildren([]);
+        return;
+      }
+
+      const { data: linkRows, error: linksError } = await supabase
+        .from('child_parent_links')
+        .select('child_id')
+        .eq('parent_profile_id', profile.id);
+
+      if (linksError) {
+        throw new Error(linksError.message || 'Could not load linked children.');
+      }
+
+      const childIds = Array.from(
+        new Set((Array.isArray(linkRows) ? linkRows : []).map((linkRow) => linkRow.child_id))
+      );
+
+      if (!childIds.length) {
+        setParentLinkedChildren([]);
+        return;
+      }
+
+      const { data: childrenData, error: childrenError } = await supabase
+        .from('children')
+        .select('id, first_name, last_name, room, status, profile_accent_color')
+        .in('id', childIds)
+        .order('first_name', { ascending: true });
+
+      if (childrenError) {
+        throw new Error(childrenError.message || 'Could not load linked children.');
+      }
+
+      setParentLinkedChildren(Array.isArray(childrenData) ? childrenData : []);
+    } catch (loadError) {
+      setParentLinkedChildren([]);
+      setParentLinkedChildrenError(loadError?.message || 'Could not load linked children.');
+    } finally {
+      setParentLinkedChildrenLoading(false);
     }
   }, [session?.user?.id]);
 
@@ -12192,100 +12856,305 @@ export default function App() {
     setStaffBeforeAfterPickupChildId(null);
   }, [handleStaffBeforeAfterAction, staffBeforeAfterPickupChildId]);
 
-  const loadChildProfilePickups = useCallback(async () => {
-    if (!session?.user?.id) {
-      setChildProfilePickupRows([]);
-      setChildProfilePickupError('');
-      setChildProfilePickupLoading(false);
-      setChildProfileSelectedChild(null);
-      setChildProfileEmergencyRows([]);
-      setChildProfileEmergencyError('');
-      setChildProfileEmergencyLoading(false);
+  const loadChildProfileData = useCallback(
+    async (childId) => {
+      console.log('ChildProfile selected child', childProfileSelectedChildRef.current);
+      console.log('ChildProfile childId argument', childId);
+      console.log('Loading child profile data for', childId);
+
+      if (!session?.user?.id) {
+        setChildProfileError('No child selected.');
+        setChildProfileLoading(false);
+        setChildProfileLoadStartedAt(null);
+        setChildProfilePickupLoading(false);
+        setChildProfileEmergencyLoading(false);
+        setChildProfilePickupRows([]);
+        setChildProfileEmergencyRows([]);
+        setChildProfileAttendanceRows([]);
+        setChildProfileBeforeAfterRows([]);
+        setChildProfileDailyNotesRows([]);
+        setChildProfileIncidentRows([]);
+        setChildProfileSummerCampCheckIns([]);
+        setChildProfileSummerCampHeadcounts([]);
+        setChildProfileCampGroups([]);
+        return;
+      }
+
+      if (!childId) {
+        setChildProfileError('No child selected.');
+        setChildProfileLoading(false);
+        setChildProfileLoadStartedAt(null);
+        setChildProfilePickupLoading(false);
+        setChildProfileEmergencyLoading(false);
+        setChildProfilePickupRows([]);
+        setChildProfileEmergencyRows([]);
+        setChildProfileAttendanceRows([]);
+        setChildProfileBeforeAfterRows([]);
+        setChildProfileDailyNotesRows([]);
+        setChildProfileIncidentRows([]);
+        setChildProfileSummerCampCheckIns([]);
+        setChildProfileSummerCampHeadcounts([]);
+        setChildProfileCampGroups([]);
+        return;
+      }
+
+      setChildProfileLoadStartedAt(Date.now());
+      setChildProfileLoading(true);
+      setChildProfileError('');
+      setChildProfilePickupLoading(true);
+      setChildProfileEmergencyLoading(true);
+
+      const clearProfileRows = () => {
+        setChildProfilePickupRows([]);
+        setChildProfileEmergencyRows([]);
+        setChildProfileAttendanceRows([]);
+        setChildProfileBeforeAfterRows([]);
+        setChildProfileDailyNotesRows([]);
+        setChildProfileIncidentRows([]);
+        setChildProfileSummerCampCheckIns([]);
+        setChildProfileSummerCampHeadcounts([]);
+        setChildProfileCampGroups([]);
+      };
+
+      const safeSelect = async (label, queryFactory) => {
+        try {
+          const { data, error } = await queryFactory();
+          if (error) {
+            console.log(`Child profile ${label} load error`, error);
+            return [];
+          }
+          return Array.isArray(data) ? data : [];
+        } catch (error) {
+          console.log(`Child profile ${label} load error`, error);
+          return [];
+        }
+      };
+
+      try {
+        let profileRole = null;
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, role')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileError) {
+          console.log('Child profile profile load error', profileError);
+        }
+
+        profileRole = profile?.role || null;
+
+        let accessibleChildren = [];
+
+        if (profileRole === 'parent') {
+          const { data: links, error: linksError } = await supabase
+            .from('child_parent_links')
+            .select('child_id')
+            .eq('parent_profile_id', session.user.id);
+
+          if (linksError) {
+            console.log('Child profile links load error', linksError);
+          }
+
+          const childIds = Array.from(
+            new Set((Array.isArray(links) ? links : []).map((link) => link.child_id).filter(Boolean))
+          );
+
+          if (childIds.length) {
+            const { data: childrenData, error: childrenError } = await supabase
+              .from('children')
+              .select('*')
+              .in('id', childIds)
+              .order('first_name', { ascending: true });
+
+            if (childrenError) {
+              console.log('Child profile children load error', childrenError);
+            }
+
+            accessibleChildren = Array.isArray(childrenData) ? childrenData : [];
+          }
+        } else if (profileRole) {
+          const { data: childrenData, error: childrenError } = await supabase
+            .from('children')
+            .select('*')
+            .order('first_name', { ascending: true });
+
+          if (childrenError) {
+            console.log('Child profile children load error', childrenError);
+          }
+
+          accessibleChildren = Array.isArray(childrenData) ? childrenData : [];
+        }
+
+        setChildProfileAccessibleChildren(accessibleChildren);
+
+        const resolvedChild =
+          accessibleChildren.find((child) => child.id === childId) ||
+          accessibleChildren[0] ||
+          childProfileSelectedChildRef.current ||
+          null;
+
+        if (!resolvedChild?.id) {
+          setChildProfileSelectedChild(null);
+          setChildProfileSelectedChildId('');
+          clearProfileRows();
+          setChildProfileError('No child selected.');
+          return;
+        }
+
+        setChildProfileSelectedChild(resolvedChild);
+        setChildProfileSelectedChildId(resolvedChild.id);
+
+        const selectedChildId = resolvedChild.id;
+
+        const [
+          pickups,
+          emergency,
+          attendance,
+          beforeAfter,
+          dailyNotes,
+          incident,
+          campCheckIns,
+          campHeadcounts,
+          campGroups,
+        ] = await Promise.all([
+          safeSelect('authorized pickups', () =>
+            supabase
+              .from('authorized_pickups')
+              .select('id, child_id, full_name, relationship, phone, created_at')
+              .eq('child_id', selectedChildId)
+              .order('created_at', { ascending: false })
+          ),
+          safeSelect('emergency contacts', () =>
+            supabase
+              .from('emergency_contacts')
+              .select('id, child_id, full_name, relationship, phone, priority, created_at')
+              .eq('child_id', selectedChildId)
+              .order('priority', { ascending: true })
+          ),
+          safeSelect('attendance events', () =>
+            supabase
+              .from('attendance_events')
+              .select('id, child_id, event_type, event_time')
+              .eq('child_id', selectedChildId)
+              .order('event_time', { ascending: false })
+          ),
+          safeSelect('before/after care', () =>
+            supabase
+              .from('before_after_care_sessions')
+              .select(
+                'id, child_id, date, drop_off_time, bus_departure_time, returned_time, pickup_time, morning_minutes, afternoon_minutes, total_minutes, status, created_at'
+              )
+              .eq('child_id', selectedChildId)
+              .order('date', { ascending: false })
+              .order('created_at', { ascending: false })
+          ),
+          safeSelect('daily notes', () =>
+            supabase
+              .from('daily_notes')
+              .select(
+                'id, child_id, date, quick_notes, custom_note, visibility, created_at, review_status'
+              )
+              .eq('child_id', selectedChildId)
+              .eq('review_status', 'approved')
+              .order('created_at', { ascending: false })
+          ),
+          safeSelect('incident reports', () =>
+            supabase
+              .from('incident_reports')
+              .select(
+                'id, child_id, created_at, location, description, action_taken, staff_witness, review_status, reviewed_at, reviewed_by, parent_acknowledged_at'
+              )
+              .eq('child_id', selectedChildId)
+              .eq('review_status', 'approved')
+              .order('created_at', { ascending: false })
+          ),
+          safeSelect('camp check ins', () =>
+            supabase
+              .from('camp_check_ins')
+              .select('id, child_id, camp_group_id, date, checked_in_at, status, created_at')
+              .eq('child_id', selectedChildId)
+              .order('date', { ascending: false })
+          ),
+          safeSelect('camp headcounts', () =>
+            supabase
+              .from('camp_headcounts')
+              .select(
+                'id, child_id, camp_group_id, date, status, owner_checked_in_count, counselor_confirmed_count, submitted_at, created_at'
+              )
+              .eq('child_id', selectedChildId)
+              .order('date', { ascending: false })
+          ),
+          safeSelect('camp groups', () =>
+            supabase.from('camp_groups').select('*').order('created_at', { ascending: true })
+          ),
+        ]);
+
+        setChildProfileCampGroups(campGroups);
+        setChildProfilePickupRows(pickups);
+        setChildProfileEmergencyRows(emergency);
+        setChildProfileAttendanceRows(attendance);
+        setChildProfileBeforeAfterRows(beforeAfter);
+        setChildProfileDailyNotesRows(dailyNotes);
+        setChildProfileIncidentRows(incident);
+        setChildProfileSummerCampCheckIns(campCheckIns);
+        setChildProfileSummerCampHeadcounts(campHeadcounts);
+
+        console.log('Child profile data loaded');
+      } catch (error) {
+        console.log('Child profile load error', error);
+        setChildProfileError(error.message || 'Could not load child profile.');
+        clearProfileRows();
+      } finally {
+        setChildProfileLoading(false);
+        setChildProfilePickupLoading(false);
+        setChildProfileEmergencyLoading(false);
+        setChildProfileLoadStartedAt(null);
+      }
+    },
+    [session?.user?.id]
+  );
+
+  useEffect(() => {
+    if (screen !== 'child-profile' || !childProfileLoading || !childProfileLoadStartedAt) {
       return;
     }
 
-    setChildProfilePickupLoading(true);
-    setChildProfilePickupError('');
-    setChildProfileEmergencyLoading(true);
-    setChildProfileEmergencyError('');
-
-    try {
-      const { data: links, error: linksError } = await supabase
-        .from('child_parent_links')
-        .select('child_id')
-        .eq('parent_profile_id', session.user.id);
-
-      if (linksError) {
-        throw new Error(linksError.message || 'Could not load authorized pickups.');
-      }
-
-      const childIds = Array.from(
-        new Set((Array.isArray(links) ? links : []).map((link) => link.child_id).filter(Boolean))
+    const timeoutId = setTimeout(() => {
+      setChildProfileError((current) =>
+        current || 'Could not load full profile. Showing available child info.'
       );
-
-      if (!childIds.length) {
-        setChildProfilePickupRows([]);
-        setChildProfileEmergencyRows([]);
-        setChildProfileSelectedChild(null);
-        setChildProfilePickupLoading(false);
-        setChildProfileEmergencyLoading(false);
-        return;
-      }
-
-      const { data: childrenData, error: childrenError } = await supabase
-        .from('children')
-        .select('*')
-        .in('id', childIds);
-
-      if (childrenError) {
-        throw new Error(childrenError.message || 'Could not load authorized pickups.');
-      }
-
-      const children = Array.isArray(childrenData) ? childrenData : [];
-      const selectedChild = children[0] || null;
-
-      setChildProfileSelectedChild(selectedChild);
-
-      if (!selectedChild?.id) {
-        setChildProfilePickupRows([]);
-        setChildProfilePickupLoading(false);
-        return;
-      }
-
-      const { data: pickupsData, error: pickupsError } = await supabase
-        .from('authorized_pickups')
-        .select('id, child_id, full_name, relationship, phone, created_at')
-        .eq('child_id', selectedChild.id)
-        .order('created_at', { ascending: false });
-
-      if (pickupsError) {
-        throw new Error(pickupsError.message || 'Could not load authorized pickups.');
-      }
-
-      setChildProfilePickupRows(Array.isArray(pickupsData) ? pickupsData : []);
-
-      const { data: emergencyData, error: emergencyError } = await supabase
-        .from('emergency_contacts')
-        .select('id, child_id, full_name, relationship, phone, priority, created_at')
-        .eq('child_id', selectedChild.id)
-        .order('created_at', { ascending: false });
-
-      if (emergencyError) {
-        throw new Error(emergencyError.message || 'Could not load emergency contacts.');
-      }
-
-      setChildProfileEmergencyRows(Array.isArray(emergencyData) ? emergencyData : []);
-    } catch (loadError) {
-      setChildProfilePickupRows([]);
-      setChildProfileSelectedChild(null);
-      setChildProfilePickupError(loadError?.message || 'Could not load authorized pickups.');
-      setChildProfileEmergencyRows([]);
-      setChildProfileEmergencyError(loadError?.message || 'Could not load emergency contacts.');
-    } finally {
+      setChildProfileLoading(false);
       setChildProfilePickupLoading(false);
       setChildProfileEmergencyLoading(false);
+    }, 5000);
+
+    return () => clearTimeout(timeoutId);
+  }, [screen, childProfileLoadStartedAt, childProfileLoading]);
+
+  const loadParentDashboardData = useCallback(async () => {
+    if (!session?.user?.id) {
+      return;
     }
-  }, [session?.user?.id]);
+
+    console.log('Loading parent dashboard data');
+    await Promise.all([
+      loadParentLinkedChildren(),
+      loadParentAttendanceHistory(),
+      loadParentBeforeAfterData(),
+      loadParentDailyNotes(),
+      loadParentTimeline(),
+      loadParentIncidentReports(),
+    ]);
+  }, [
+    loadParentAttendanceHistory,
+    loadParentBeforeAfterData,
+    loadParentDailyNotes,
+    loadParentLinkedChildren,
+    loadParentTimeline,
+    loadParentIncidentReports,
+    session?.user?.id,
+  ]);
 
   const markRecipientMessageRead = useCallback(
     async (recipientMessageId) => {
@@ -12387,6 +13256,60 @@ export default function App() {
 
     markVisibleRecipientMessagesRead();
   }, [authLoading, markVisibleRecipientMessagesRead, screen]);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (screen === 'parent-home' && session?.user?.id) {
+      loadParentDashboardData();
+    }
+  }, [screen, session?.user?.id, authLoading, loadParentDashboardData]);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (screen !== 'child-profile') {
+      return;
+    }
+
+    const selectedChildId =
+      childProfileSelectedChild?.id ||
+      childProfileSelectedChildId ||
+      childProfileSelectedChildRef.current?.id ||
+      null;
+
+    if (selectedChildId) {
+      console.log('Opening child profile for child id', selectedChildId);
+      loadChildProfileData(selectedChildId);
+      return;
+    }
+
+    if (parentLinkedChildren.length === 1 && parentLinkedChildren[0]?.id) {
+      const fallbackChild = parentLinkedChildren[0];
+      setChildProfileSelectedChild({
+        id: fallbackChild.id,
+        first_name: fallbackChild.first_name || '',
+        last_name: fallbackChild.last_name || '',
+        room: fallbackChild.room || '',
+        status: fallbackChild.status || '',
+        profile_accent_color: fallbackChild.profile_accent_color || '',
+      });
+      setChildProfileSelectedChildId(fallbackChild.id);
+      console.log('Opening child profile for child id', fallbackChild.id);
+      loadChildProfileData(fallbackChild.id);
+    }
+  }, [
+    authLoading,
+    loadChildProfileData,
+    parentLinkedChildren,
+    childProfileSelectedChild?.id,
+    childProfileSelectedChildId,
+    screen,
+  ]);
 
   const handleOwnerDailyNoteReviewDecision = useCallback(
     async (note, reviewStatus) => {
@@ -12570,37 +13493,25 @@ export default function App() {
       return;
     }
 
-    loadParentAttendanceHistory();
-    loadParentBeforeAfterData();
-    loadParentDailyNotes();
-    loadParentTimeline();
     loadRecipientMessages();
     loadAuthorizedPickupRows();
     loadOwnerBeforeAfterCounts();
     loadOwnerSummerCampData();
     loadStaffSummerCampData();
     loadStaffBeforeAfterData();
-    loadChildProfilePickups();
     loadOwnerDailyNotesReview();
     loadOwnerIncidentReportsReview();
     loadStaffIncidentReportsData();
-    loadParentIncidentReports();
   }, [
     authLoading,
     loadAuthorizedPickupRows,
     loadStaffBeforeAfterData,
-    loadChildProfilePickups,
     loadOwnerDailyNotesReview,
     loadOwnerBeforeAfterCounts,
     loadOwnerSummerCampData,
     loadStaffSummerCampData,
     loadOwnerIncidentReportsReview,
     loadStaffIncidentReportsData,
-    loadParentIncidentReports,
-    loadParentAttendanceHistory,
-    loadParentBeforeAfterData,
-    loadParentDailyNotes,
-    loadParentTimeline,
     loadRecipientMessages,
   ]);
 
@@ -12726,6 +13637,23 @@ export default function App() {
     setStaffSummerCampOwnerStatus({});
     setOwnerSummerCampSummary(OWNER_SUMMER_CAMP_INITIAL_SUMMARY);
     setStaffDailyNotesSavedEntries([]);
+    setChildProfileAccessibleChildren([]);
+    setChildProfileSelectedChild(null);
+    setChildProfileLoading(true);
+    setChildProfileError('');
+    setChildProfilePickupRows([]);
+    setChildProfilePickupLoading(true);
+    setChildProfilePickupError('');
+    setChildProfileEmergencyRows([]);
+    setChildProfileEmergencyLoading(true);
+    setChildProfileEmergencyError('');
+    setChildProfileAttendanceRows([]);
+    setChildProfileBeforeAfterRows([]);
+    setChildProfileDailyNotesRows([]);
+    setChildProfileIncidentRows([]);
+    setChildProfileSummerCampCheckIns([]);
+    setChildProfileSummerCampHeadcounts([]);
+    setChildProfileCampGroups([]);
     setStaffIncidentChildren([]);
     setStaffIncidentChildrenLoading(true);
     setStaffIncidentChildrenError('');
@@ -12742,6 +13670,9 @@ export default function App() {
     setParentIncidentReportsLoading(true);
     setParentIncidentReportsError('');
     setParentIncidentAcknowledgingId('');
+    setParentLinkedChildren([]);
+    setParentLinkedChildrenLoading(true);
+    setParentLinkedChildrenError('');
   };
 
   const openActivateAccountScreen = () => {
@@ -13248,17 +14179,6 @@ export default function App() {
     Alert.alert(title, message);
   };
 
-  const childTheme = getChildGroupTheme(CHILD_PROFILE.group);
-  const formatAttendanceDate = (value) => {
-    const label = formatDate(value);
-    return label === 'Date not set' ? '—' : label;
-  };
-
-  const formatAttendanceTime = (value) => {
-    const label = formatTime(value);
-    return label === 'Not recorded' ? '—' : label;
-  };
-
   const formatAttendanceType = (value) => {
     if (value === 'check_in') {
       return 'Checked In';
@@ -13271,9 +14191,73 @@ export default function App() {
     return 'Attendance Event';
   };
 
-  const toggleParentDetailSection = (sectionKey) => {
-    setParentDetailSectionOpen((current) => (current === sectionKey ? null : sectionKey));
-  };
+  const parentAttendanceSummary = parentAttendanceHistory
+    .flatMap((child) =>
+      (Array.isArray(child.events) ? child.events : []).map((event) => ({
+        ...event,
+        childId: child.id,
+        childName: child.name,
+        childRoom: child.room,
+      }))
+    )
+    .sort((left, right) => {
+      const leftTime = new Date(left.event_time || left.created_at || 0).getTime();
+      const rightTime = new Date(right.event_time || right.created_at || 0).getTime();
+      return rightTime - leftTime;
+    })[0];
+
+  const parentDailyNotesSummary = parentDailyNotesHistory
+    .flatMap((child) =>
+      (Array.isArray(child.notes) ? child.notes : []).map((note) => ({
+        ...note,
+        childId: child.id,
+        childName: child.name,
+      }))
+    )
+    .sort((left, right) => {
+      const leftTime = new Date(left.created_at || left.date || 0).getTime();
+      const rightTime = new Date(right.created_at || right.date || 0).getTime();
+      return rightTime - leftTime;
+    })[0];
+
+  const parentTimelineSummary = parentTimelineHistory[0] || null;
+  const parentIncidentSummary = parentIncidentReports[0] || null;
+  const parentPrimaryChild = parentLinkedChildren[0] || null;
+  const parentPrimaryChildHistory = parentPrimaryChild
+    ? parentAttendanceHistory.find((child) => child.id === parentPrimaryChild.id) || null
+    : null;
+  const parentPrimaryChildLatestEvent = parentPrimaryChildHistory?.events?.[0] || null;
+  const parentPrimaryChildName =
+    `${parentPrimaryChild?.first_name || ''} ${parentPrimaryChild?.last_name || ''}`.trim() ||
+    PARENT_CHILD.name;
+  const parentPrimaryChildStatus = parentPrimaryChildLatestEvent
+    ? formatAttendanceType(parentPrimaryChildLatestEvent.event_type)
+    : parentPrimaryChild?.status || PARENT_CHILD.status;
+
+  const openParentChildProfile = useCallback(
+    (child) => {
+      const targetChild = child || parentPrimaryChild;
+
+      if (!targetChild?.id) {
+        return;
+      }
+
+      setChildProfileAccessibleChildren(parentLinkedChildren);
+      setChildProfileSelectedChild({
+        id: targetChild.id,
+        first_name: targetChild.first_name || '',
+        last_name: targetChild.last_name || '',
+        room: targetChild.room || '',
+        status: targetChild.status || '',
+        profile_accent_color: targetChild.profile_accent_color || '',
+      });
+      setChildProfileSelectedChildId(targetChild.id);
+      setChildProfileError('');
+      setChildProfileLoadStartedAt(null);
+      setScreen('child-profile');
+    },
+    [parentPrimaryChild, parentLinkedChildren]
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -13315,19 +14299,19 @@ export default function App() {
               <View style={styles.parentHeroTextBlock}>
                 <Text style={styles.parentHeroKicker}>Advanced Education</Text>
                 <Text style={styles.parentHeroGreeting}>Hi, Avery 👋 </Text>
-                <Text style={styles.parentHeroChildName}>Mia Carter</Text>
+                <Text style={styles.parentHeroChildName}>{parentPrimaryChildName}</Text>
                 <View style={styles.parentHeroStatusPill}>
-                  <Text style={styles.parentHeroStatusPillText}>Checked In</Text>
+                  <Text style={styles.parentHeroStatusPillText}>{parentPrimaryChildStatus}</Text>
                 </View>
                 <Text style={styles.parentHeroSubtitle}>
-                  Your private childcare connection for Mia&apos;s day.
+                  Your private childcare connection for {parentPrimaryChildName}&apos;s day.
                 </Text>
               </View>
 
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Open child profile"
-                onPress={() => setScreen('child-profile')}
+                onPress={() => openParentChildProfile(parentPrimaryChild)}
                 style={({ pressed }) => [
                   styles.parentHeroPhotoWrap,
                   pressed && styles.pressedButton,
@@ -13349,6 +14333,54 @@ export default function App() {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.parentHomeContent}>
+              <View style={styles.parentQuickSectionHeader}>
+                <Text style={styles.parentSectionHeaderTitle}>Children</Text>
+                <Text style={styles.parentSectionHeaderSubtle}>
+                  Tap a card to open the full profile
+                </Text>
+              </View>
+
+              {parentLinkedChildrenLoading ? (
+                <Text style={styles.parentAttendanceStateText}>Loading children...</Text>
+              ) : parentLinkedChildrenError ? (
+                <Text style={[styles.errorText, { marginTop: 0 }]}>
+                  Could not load linked children.
+                </Text>
+              ) : parentLinkedChildren.length ? (
+                <View style={styles.parentQuickGrid}>
+                  {parentLinkedChildren.map((child) => {
+                    const childName =
+                      `${child.first_name || ''} ${child.last_name || ''}`.trim() ||
+                      'Unnamed Student';
+                    const childStatus = child.status || 'Status not set';
+                    const childRoom = child.room || 'Room not set';
+
+                    return (
+                      <Pressable
+                        key={child.id}
+                        accessibilityRole="button"
+                        onPress={() => openParentChildProfile(child)}
+                        style={({ pressed }) => [
+                          styles.parentQuickCard,
+                          styles.parentQuickBlue,
+                          pressed && styles.pressedButton,
+                        ]}
+                      >
+                        <View style={styles.parentQuickAccentBlue} />
+                        <Text style={styles.parentQuickTitle}>{childName}</Text>
+                        <Text style={styles.parentQuickValue}>{childStatus}</Text>
+                        <Text style={styles.parentQuickNote}>{childRoom}</Text>
+                        <Text style={styles.parentQuickNote}>View Child Profile</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text style={styles.parentAttendanceStateText}>
+                  No children linked to this account.
+                </Text>
+              )}
+
               <View style={styles.parentTodayCard}>
                 <View style={styles.parentSectionHeaderRow}>
                   <Text style={styles.parentSectionHeaderTitle}>Today</Text>
@@ -13360,8 +14392,12 @@ export default function App() {
                     <View style={styles.parentTodayIconWrap}>
                       <Text style={styles.parentTodayIcon}>✓</Text>
                     </View>
-                    <Text style={styles.parentTodayLabel}>Checked in</Text>
-                    <Text style={styles.parentTodayValue}>8:12 AM</Text>
+                    <Text style={styles.parentTodayLabel}>Latest event</Text>
+                    <Text style={styles.parentTodayValue}>
+                      {parentPrimaryChildLatestEvent
+                        ? `${formatAttendanceType(parentPrimaryChildLatestEvent.event_type)} • ${formatTime(parentPrimaryChildLatestEvent.event_time || parentPrimaryChildLatestEvent.created_at)}`
+                        : 'No updates'}
+                    </Text>
                   </View>
 
                   <View style={styles.parentTodayDivider} />
@@ -13370,239 +14406,265 @@ export default function App() {
                     <View style={styles.parentTodayIconWrap}>
                       <Text style={styles.parentTodayIcon}>★</Text>
                     </View>
-                    <Text style={styles.parentTodayLabel}>With</Text>
-                    <Text style={styles.parentTodayValue}>Ms. Sarah</Text>
+                    <Text style={styles.parentTodayLabel}>Status</Text>
+                    <Text style={styles.parentTodayValue}>{parentPrimaryChildStatus}</Text>
                   </View>
                 </View>
               </View>
 
-              <View
-                style={[
-                  styles.parentAccordionCard,
-                  parentDetailSectionOpen === 'timeline' && styles.parentAccordionCardOpen,
-                ]}
-              >
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => toggleParentDetailSection('timeline')}
-                  style={({ pressed }) => [
-                    styles.parentAccordionHeader,
-                    pressed && styles.pressedButton,
-                  ]}
-                >
+              <View style={styles.parentAccordionCard}>
+                <View style={styles.parentAccordionHeader}>
+                  <View style={styles.parentAccordionHeaderCopy}>
+                    <Text style={styles.parentAccordionTitle}>Attendance History</Text>
+                    <Text style={styles.parentAccordionSummary}>
+                      Latest check-in or check-out
+                    </Text>
+                  </View>
+                  <Text style={styles.parentAttendanceEventTime}>
+                    {parentAttendanceSummary
+                      ? formatDateTime(parentAttendanceSummary.event_time || parentAttendanceSummary.created_at)
+                      : '—'}
+                  </Text>
+                </View>
+
+                <View style={styles.parentAccordionBody}>
+                  {parentAttendanceLoading ? (
+                    <Text style={styles.parentAttendanceStateText}>Loading attendance...</Text>
+                  ) : parentAttendanceError ? (
+                    <Text style={[styles.errorText, { marginTop: 0 }]}>
+                      Could not load attendance.
+                    </Text>
+                  ) : parentAttendanceSummary ? (
+                    <>
+                      <View style={styles.parentAttendanceChildHeaderRow}>
+                        <Text style={styles.parentAttendanceChildName}>
+                          {parentAttendanceSummary.childName}
+                        </Text>
+                        <Text style={styles.parentAttendanceChildRoom}>
+                          {parentAttendanceSummary.childRoom}
+                        </Text>
+                      </View>
+                      <Text style={styles.parentTimelineTitle}>
+                        {formatAttendanceType(parentAttendanceSummary.event_type)}
+                      </Text>
+                      <Text style={styles.parentDailyNoteQuickNotes}>
+                        {formatDateTime(parentAttendanceSummary.event_time || parentAttendanceSummary.created_at)}
+                      </Text>
+                      <View style={styles.ownerFilterPillRow}>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => openParentChildProfile(parentPrimaryChild)}
+                          style={({ pressed }) => [
+                            styles.ownerFilterPill,
+                            pressed && styles.pressedButton,
+                          ]}
+                        >
+                          <Text style={styles.ownerFilterPillText}>View Child Profile</Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  ) : (
+                    <Text style={styles.parentAttendanceStateText}>No attendance records yet.</Text>
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.parentAccordionCard}>
+                <View style={styles.parentAccordionHeader}>
+                  <View style={styles.parentAccordionHeaderCopy}>
+                    <Text style={styles.parentAccordionTitle}>Daily Notes</Text>
+                    <Text style={styles.parentAccordionSummary}>Latest approved note</Text>
+                  </View>
+                  <Text style={styles.parentAttendanceEventTime}>
+                    {parentDailyNotesSummary
+                      ? formatDateTime(parentDailyNotesSummary.created_at || parentDailyNotesSummary.date)
+                      : '—'}
+                  </Text>
+                </View>
+
+                <View style={styles.parentAccordionBody}>
+                  {parentDailyNotesLoading ? (
+                    <Text style={styles.parentAttendanceStateText}>Loading daily notes...</Text>
+                  ) : parentDailyNotesError ? (
+                    <Text style={[styles.errorText, { marginTop: 0 }]}>
+                      Could not load daily notes.
+                    </Text>
+                  ) : parentDailyNotesSummary ? (
+                    <>
+                      <View style={styles.parentAttendanceChildHeaderRow}>
+                        <Text style={styles.parentAttendanceChildName}>
+                          {parentDailyNotesSummary.childName}
+                        </Text>
+                        <Text style={styles.parentAttendanceChildRoom}>Approved</Text>
+                      </View>
+                      <Text style={styles.parentDailyNoteQuickNotes}>
+                        {Array.isArray(parentDailyNotesSummary.quick_notes) &&
+                        parentDailyNotesSummary.quick_notes.length
+                          ? parentDailyNotesSummary.quick_notes.join(' • ')
+                          : 'No quick notes'}
+                      </Text>
+                      {parentDailyNotesSummary.custom_note ? (
+                        <Text style={styles.parentDailyNoteCustomNote}>
+                          {parentDailyNotesSummary.custom_note}
+                        </Text>
+                      ) : null}
+                      <View style={styles.ownerFilterPillRow}>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => openParentChildProfile(parentPrimaryChild)}
+                          style={({ pressed }) => [
+                            styles.ownerFilterPill,
+                            pressed && styles.pressedButton,
+                          ]}
+                        >
+                          <Text style={styles.ownerFilterPillText}>View Child Profile</Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  ) : (
+                    <Text style={styles.parentAttendanceStateText}>No daily notes yet.</Text>
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.parentAccordionCard}>
+                <View style={styles.parentAccordionHeader}>
                   <View style={styles.parentAccordionHeaderCopy}>
                     <Text style={styles.parentAccordionTitle}>Timeline</Text>
                     <Text style={styles.parentAccordionSummary}>Recent activity for today</Text>
                   </View>
-                  <Text style={styles.parentAccordionChevron}>
-                    {parentDetailSectionOpen === 'timeline' ? '▴' : '▾'}
+                  <Text style={styles.parentAttendanceEventTime}>
+                    {parentTimelineSummary ? formatDateTime(parentTimelineSummary.timestamp) : '—'}
                   </Text>
-                </Pressable>
+                </View>
 
-                {parentDetailSectionOpen === 'timeline' ? (
-                  <View style={styles.parentAccordionBody}>
-                    {parentTimelineLoading ? (
-                      <Text style={styles.parentAttendanceStateText}>Loading timeline...</Text>
-                    ) : parentTimelineError ? (
-                      <Text style={[styles.errorText, { marginTop: 0 }]}>
-                        Could not load timeline.
-                      </Text>
-                    ) : parentTimelineHistory.length ? (
-                      <View style={styles.parentTimelineList}>
-                        {parentTimelineHistory.map((item) => (
-                          <View key={item.id} style={styles.parentTimelineCard}>
-                            <View style={styles.parentAttendanceChildHeaderRow}>
-                              <Text style={styles.parentAttendanceChildName}>{item.childName}</Text>
-                              <Text style={styles.parentAttendanceChildRoom}>{item.childRoom}</Text>
-                            </View>
-
-                            {item.type === 'attendance' ? (
-                              <View style={styles.parentTimelineAttendanceBlock}>
-                                <Text style={styles.parentTimelineTitle}>✓ {item.title}</Text>
-                                <Text style={styles.parentTimelineMeta}>
-                                  {formatAttendanceDate(item.timestamp)}
-                                </Text>
-                                <Text style={styles.parentTimelineTime}>
-                                  {formatAttendanceTime(item.timestamp)}
-                                </Text>
-                              </View>
-                            ) : (
-                              <View style={styles.parentTimelineDailyNoteBlock}>
-                                <Text style={styles.parentTimelineTitle}>Daily Note</Text>
-                                <Text style={styles.parentTimelineMeta}>
-                                  {formatAttendanceDate(item.timestamp)}
-                                </Text>
-                                <Text style={styles.parentTimelineTime}>
-                                  {formatAttendanceTime(item.timestamp)}
-                                </Text>
-                                <Text style={styles.parentDailyNoteQuickNotes}>
-                                  {item.quick_notes.length
-                                    ? item.quick_notes.join(' • ')
-                                    : 'No quick notes'}
-                                </Text>
-                                {item.custom_note ? (
-                                  <Text style={styles.parentDailyNoteCustomNote}>
-                                    {item.custom_note}
-                                  </Text>
-                                ) : null}
-                              </View>
-                            )}
-                          </View>
-                        ))}
+                <View style={styles.parentAccordionBody}>
+                  {parentTimelineLoading ? (
+                    <Text style={styles.parentAttendanceStateText}>Loading timeline...</Text>
+                  ) : parentTimelineError ? (
+                    <Text style={[styles.errorText, { marginTop: 0 }]}>
+                      Could not load timeline.
+                    </Text>
+                  ) : parentTimelineSummary ? (
+                    <>
+                      <View style={styles.parentAttendanceChildHeaderRow}>
+                        <Text style={styles.parentAttendanceChildName}>
+                          {parentTimelineSummary.childName}
+                        </Text>
+                        <Text style={styles.parentAttendanceChildRoom}>
+                          {parentTimelineSummary.childRoom}
+                        </Text>
                       </View>
-                    ) : (
-                      <Text style={styles.parentAttendanceStateText}>No activity yet.</Text>
-                    )}
-                  </View>
-                ) : null}
+                      <Text style={styles.parentTimelineTitle}>
+                        {parentTimelineSummary.type === 'attendance'
+                          ? `✓ ${parentTimelineSummary.title}`
+                          : 'Daily Note'}
+                      </Text>
+                      <Text style={styles.parentDailyNoteQuickNotes}>
+                        {formatDateTime(parentTimelineSummary.timestamp)}
+                      </Text>
+                      {parentTimelineSummary.type === 'daily_note' ? (
+                        <>
+                          <Text style={styles.parentDailyNoteQuickNotes}>
+                            {Array.isArray(parentTimelineSummary.quick_notes) &&
+                            parentTimelineSummary.quick_notes.length
+                              ? parentTimelineSummary.quick_notes.join(' • ')
+                              : 'No quick notes'}
+                          </Text>
+                          {parentTimelineSummary.custom_note ? (
+                            <Text style={styles.parentDailyNoteCustomNote}>
+                              {parentTimelineSummary.custom_note}
+                            </Text>
+                          ) : null}
+                        </>
+                      ) : null}
+                      <View style={styles.ownerFilterPillRow}>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => openParentChildProfile(parentPrimaryChild)}
+                          style={({ pressed }) => [
+                            styles.ownerFilterPill,
+                            pressed && styles.pressedButton,
+                          ]}
+                        >
+                          <Text style={styles.ownerFilterPillText}>View Child Profile</Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  ) : (
+                    <Text style={styles.parentAttendanceStateText}>No activity yet.</Text>
+                  )}
+                </View>
               </View>
 
-              <View
-                style={[
-                  styles.parentAccordionCard,
-                  parentDetailSectionOpen === 'attendance' && styles.parentAccordionCardOpen,
-                ]}
-              >
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => toggleParentDetailSection('attendance')}
-                  style={({ pressed }) => [
-                    styles.parentAccordionHeader,
-                    pressed && styles.pressedButton,
-                  ]}
-                >
+              <View style={styles.parentAccordionCard}>
+                <View style={styles.parentAccordionHeader}>
                   <View style={styles.parentAccordionHeaderCopy}>
-                    <Text style={styles.parentAccordionTitle}>Attendance History</Text>
+                    <Text style={styles.parentAccordionTitle}>Incident Reports</Text>
                     <Text style={styles.parentAccordionSummary}>
-                      Check-in and check-out records
+                      Latest approved report
                     </Text>
                   </View>
-                  <Text style={styles.parentAccordionChevron}>
-                    {parentDetailSectionOpen === 'attendance' ? '▴' : '▾'}
+                  <Text style={styles.parentAttendanceEventTime}>
+                    {parentIncidentSummary
+                      ? formatDateTime(parentIncidentSummary.created_at)
+                      : '—'}
                   </Text>
-                </Pressable>
+                </View>
 
-                {parentDetailSectionOpen === 'attendance' ? (
-                  <View style={styles.parentAccordionBody}>
-                    {parentAttendanceLoading ? (
-                      <Text style={styles.parentAttendanceStateText}>Loading attendance...</Text>
-                    ) : parentAttendanceError ? (
-                      <Text style={[styles.errorText, { marginTop: 0 }]}>
-                        Could not load attendance.
-                      </Text>
-                    ) : parentAttendanceHistory.length ? (
-                      <View style={styles.parentAttendanceList}>
-                        {parentAttendanceHistory.map((child) => (
-                          <View key={child.id} style={styles.parentAttendanceChildBlock}>
-                            <View style={styles.parentAttendanceChildHeaderRow}>
-                              <Text style={styles.parentAttendanceChildName}>{child.name}</Text>
-                              <Text style={styles.parentAttendanceChildRoom}>{child.room}</Text>
-                            </View>
-
-                            {child.events.length ? (
-                              <View style={styles.parentAttendanceEventList}>
-                                {child.events.map((event) => (
-                                  <View key={event.id} style={styles.parentAttendanceEventRow}>
-                                    <View style={styles.parentAttendanceEventCopy}>
-                                      <Text style={styles.parentAttendanceEventType}>
-                                        {formatAttendanceType(event.event_type)}
-                                      </Text>
-                                      <Text style={styles.parentAttendanceEventDate}>
-                                        {formatAttendanceDate(event.event_time)}
-                                      </Text>
-                                    </View>
-                                    <Text style={styles.parentAttendanceEventTime}>
-                                      {formatAttendanceTime(event.event_time)}
-                                    </Text>
-                                  </View>
-                                ))}
-                              </View>
-                            ) : (
-                              <Text style={styles.parentAttendanceStateText}>
-                                No attendance records yet.
-                              </Text>
-                            )}
-                          </View>
-                        ))}
+                <View style={styles.parentAccordionBody}>
+                  {parentIncidentReportsLoading ? (
+                    <Text style={styles.parentAttendanceStateText}>
+                      Loading incident reports...
+                    </Text>
+                  ) : parentIncidentReportsError ? (
+                    <Text style={[styles.errorText, { marginTop: 0 }]}>
+                      Could not load incident reports.
+                    </Text>
+                  ) : parentIncidentSummary ? (
+                    <>
+                      <View style={styles.parentAttendanceChildHeaderRow}>
+                        <Text style={styles.parentAttendanceChildName}>
+                          {parentIncidentSummary.childName}
+                        </Text>
+                        <Text style={styles.parentAttendanceChildRoom}>Approved</Text>
                       </View>
-                    ) : (
-                      <Text style={styles.parentAttendanceStateText}>
-                        No attendance records yet.
+                      <Text style={styles.parentDailyNoteQuickNotes}>
+                        Location: {parentIncidentSummary.location || 'Not set'}
                       </Text>
-                    )}
-                  </View>
-                ) : null}
-              </View>
-
-              <View
-                style={[
-                  styles.parentAccordionCard,
-                  parentDetailSectionOpen === 'daily-notes' && styles.parentAccordionCardOpen,
-                ]}
-              >
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => toggleParentDetailSection('daily-notes')}
-                  style={({ pressed }) => [
-                    styles.parentAccordionHeader,
-                    pressed && styles.pressedButton,
-                  ]}
-                >
-                  <View style={styles.parentAccordionHeaderCopy}>
-                    <Text style={styles.parentAccordionTitle}>Daily Notes</Text>
-                    <Text style={styles.parentAccordionSummary}>Notes from staff and owner</Text>
-                  </View>
-                  <Text style={styles.parentAccordionChevron}>
-                    {parentDetailSectionOpen === 'daily-notes' ? '▴' : '▾'}
-                  </Text>
-                </Pressable>
-
-                {parentDetailSectionOpen === 'daily-notes' ? (
-                  <View style={styles.parentAccordionBody}>
-                    {parentDailyNotesLoading ? (
-                      <Text style={styles.parentAttendanceStateText}>Loading daily notes...</Text>
-                    ) : parentDailyNotesError ? (
-                      <Text style={[styles.errorText, { marginTop: 0 }]}>
-                        Could not load daily notes.
+                      <Text style={styles.parentDailyNoteQuickNotes}>
+                        {parentIncidentSummary.description || 'No description'}
                       </Text>
-                    ) : parentDailyNotesHistory.length ? (
-                      <View style={styles.parentAttendanceList}>
-                        {parentDailyNotesHistory.map((child) => (
-                          <View key={child.id} style={styles.parentAttendanceChildBlock}>
-                            <View style={styles.parentAttendanceChildHeaderRow}>
-                              <Text style={styles.parentAttendanceChildName}>{child.name}</Text>
-                              <Text style={styles.parentAttendanceChildRoom}>
-                                {child.notes.length} note{child.notes.length === 1 ? '' : 's'}
-                              </Text>
-                            </View>
-
-                            <View style={styles.parentDailyNotesList}>
-                              {child.notes.map((note) => (
-                                <View key={note.id} style={styles.parentDailyNoteRow}>
-                                  <Text style={styles.parentAttendanceEventType}>
-                                    {formatAttendanceDate(note.date || note.created_at)}
-                                  </Text>
-                                  <Text style={styles.parentDailyNoteQuickNotes}>
-                                    {Array.isArray(note.quick_notes) && note.quick_notes.length
-                                      ? note.quick_notes.join(' • ')
-                                      : 'No quick notes'}
-                                  </Text>
-                                  {note.custom_note ? (
-                                    <Text style={styles.parentDailyNoteCustomNote}>
-                                      {note.custom_note}
-                                    </Text>
-                                  ) : null}
-                                </View>
-                              ))}
-                            </View>
-                          </View>
-                        ))}
+                      <Text style={styles.parentDailyNoteCustomNote}>
+                        Action Taken: {parentIncidentSummary.action_taken || 'Not set'}
+                      </Text>
+                      <View style={styles.ownerFilterPillRow}>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => setScreen('parent-incident-reports')}
+                          style={({ pressed }) => [
+                            styles.ownerFilterPill,
+                            pressed && styles.pressedButton,
+                          ]}
+                        >
+                          <Text style={styles.ownerFilterPillText}>View Reports</Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => openParentChildProfile(parentPrimaryChild)}
+                          style={({ pressed }) => [
+                            styles.ownerFilterPill,
+                            pressed && styles.pressedButton,
+                          ]}
+                        >
+                          <Text style={styles.ownerFilterPillText}>View Child Profile</Text>
+                        </Pressable>
                       </View>
-                    ) : (
-                      <Text style={styles.parentAttendanceStateText}>No daily notes yet.</Text>
-                    )}
-                  </View>
-                ) : null}
+                    </>
+                  ) : (
+                    <Text style={styles.parentAttendanceStateText}>No incident reports yet.</Text>
+                  )}
+                </View>
               </View>
 
               <View style={styles.parentQuickSectionHeader}>
@@ -13611,6 +14673,21 @@ export default function App() {
               </View>
 
               <View style={styles.parentQuickGrid}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => openParentChildProfile(parentPrimaryChild)}
+                  style={({ pressed }) => [
+                    styles.parentQuickCard,
+                    styles.parentQuickBlue,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <View style={styles.parentQuickAccentBlue} />
+                  <Text style={styles.parentQuickTitle}>View Child Profile</Text>
+                  <Text style={styles.parentQuickValue}>Open</Text>
+                  <Text style={styles.parentQuickNote}>See the full child record</Text>
+                </Pressable>
+
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => setScreen('before-after-care')}
@@ -13824,295 +14901,33 @@ export default function App() {
           introText="Simple updates from Mia's day."
         />
       ) : screen === 'child-profile' ? (
-        <View style={styles.parentHomePage}>
-          <View style={styles.childProfileHero}>
-            <View style={styles.parentHeroGlowOne} />
-            <View style={styles.parentHeroGlowTwo} />
-
-            <View style={styles.childProfileHeaderRow}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setScreen('parent-home')}
-                style={({ pressed }) => [styles.childProfileBackButton, pressed && styles.pressedButton]}
-              >
-                <Text style={styles.childProfileBackButtonText}>Back</Text>
-              </Pressable>
-
-              <Text style={styles.childProfileHeaderLabel}>Child Profile</Text>
-            </View>
-
-            <View style={styles.childProfileHeroMain}>
-              <View style={styles.childProfileHeroTextBlock}>
-                <Text style={styles.parentHeroKicker}>Advanced Education</Text>
-                <Text style={styles.parentHeroGreeting}>
-                  {childProfileSelectedChild
-                    ? `${childProfileSelectedChild.first_name || ''} ${
-                        childProfileSelectedChild.last_name || ''
-                      }`.trim() || 'Child Profile'
-                    : 'Child Profile'}
-                </Text>
-                <View
-                  style={[
-                    styles.childProfileGroupBadge,
-                    {
-                      backgroundColor: childTheme.soft,
-                      borderColor: childTheme.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.childProfileGroupBadgeText,
-                      { color: childTheme.accent },
-                    ]}
-                  >
-                    {childProfileSelectedChild?.room || 'Room not set'}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.childProfileStatusPill,
-                    { backgroundColor: childTheme.accent },
-                  ]}
-                >
-                  <Text style={styles.childProfileStatusPillText}>
-                    {childProfileSelectedChild?.status || 'Status not set'}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.parentHeroPhotoWrap}>
-                <Image
-                  source={HEADER_PHOTO}
-                  resizeMode="cover"
-                  style={styles.parentHeroPhoto}
-                />
-              </View>
-            </View>
-          </View>
-
-          <ScrollView
-            style={styles.parentScrollArea}
-            contentContainerStyle={styles.parentHomeScroll}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.parentHomeContent}>
-              <View style={styles.profileCard}>
-                <View style={styles.parentSectionHeaderRow}>
-                  <View style={styles.childProfileSectionTitleRow}>
-                    <View
-                      style={[
-                        styles.childProfileSectionIcon,
-                        { backgroundColor: childTheme.accent },
-                      ]}
-                    />
-                    <Text style={styles.parentSectionHeaderTitle}>Basic Info</Text>
-                  </View>
-                </View>
-                <View style={styles.profileInfoGrid}>
-                  <View style={styles.profileInfoItem}>
-                    <Text style={styles.profileInfoLabel}>Name</Text>
-                    <Text style={styles.profileInfoValue}>
-                      {childProfileSelectedChild
-                        ? `${childProfileSelectedChild.first_name || ''} ${
-                            childProfileSelectedChild.last_name || ''
-                          }`.trim() || 'Name not set'
-                        : 'Name not set'}
-                    </Text>
-                  </View>
-                  <View style={styles.profileInfoItem}>
-                    <Text style={styles.profileInfoLabel}>Age</Text>
-                    <Text style={styles.profileInfoValue}>
-                      {childProfileSelectedChild?.age || 'N/A'}
-                    </Text>
-                  </View>
-                  <View style={styles.profileInfoItem}>
-                    <Text style={styles.profileInfoLabel}>Room</Text>
-                    <Text style={styles.profileInfoValue}>
-                      {childProfileSelectedChild?.room || 'Room not set'}
-                    </Text>
-                  </View>
-                  <View style={styles.profileInfoItem}>
-                    <Text style={styles.profileInfoLabel}>Status</Text>
-                    <View
-                      style={[
-                        styles.childProfileStatusBadge,
-                        { backgroundColor: childTheme.accent },
-                      ]}
-                    >
-                      <Text style={styles.childProfileStatusBadgeText}>
-                        {childProfileSelectedChild?.status || 'Status not set'}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.profileCard}>
-                <View style={styles.parentSectionHeaderRow}>
-                  <View style={styles.childProfileSectionTitleRow}>
-                    <View
-                      style={[
-                        styles.childProfileSectionIcon,
-                        { backgroundColor: childTheme.accent },
-                      ]}
-                    />
-                    <Text style={styles.parentSectionHeaderTitle}>Program Enrollment</Text>
-                  </View>
-                </View>
-                <View style={styles.profileList}>
-                  {CHILD_PROFILE.programEnrollment.map((item) => (
-                    <View key={item.label} style={styles.profileListRow}>
-                      <View
-                        style={[
-                          styles.profileListDot,
-                          { backgroundColor: childTheme.accent },
-                        ]}
-                      />
-                      <Text style={styles.profileListLabel}>{item.label}</Text>
-                      <Text style={styles.profileListValue}>{item.value}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.profileCard}>
-                <View style={styles.parentSectionHeaderRow}>
-                  <View style={styles.childProfileSectionTitleRow}>
-                    <View
-                      style={[
-                        styles.childProfileSectionIcon,
-                        { backgroundColor: childTheme.accent },
-                      ]}
-                    />
-                    <Text style={styles.parentSectionHeaderTitle}>Authorized Pickups</Text>
-                  </View>
-                  <Text style={styles.parentSectionHeaderSubtle}>
-                    {childProfileSelectedChild
-                      ? `${childProfileSelectedChild.first_name || ''} ${
-                          childProfileSelectedChild.last_name || ''
-                        }`.trim() || 'Linked child'
-                      : 'Linked child'}
-                  </Text>
-                </View>
-                {childProfilePickupLoading ? (
-                  <Text style={styles.parentAttendanceStateText}>Loading authorized pickups...</Text>
-                ) : childProfilePickupError ? (
-                  <Text style={styles.errorText}>{childProfilePickupError}</Text>
-                ) : childProfilePickupRows.length ? (
-                  <View style={styles.profileList}>
-                    {childProfilePickupRows.map((pickup) => (
-                      <View key={pickup.id} style={styles.profileListRow}>
-                        <View
-                          style={[
-                            styles.profileListDot,
-                            { backgroundColor: childTheme.accent },
-                          ]}
-                        />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.profileListLabel}>{pickup.full_name}</Text>
-                          <Text style={styles.profileListValue}>{pickup.relationship}</Text>
-                          <Text style={styles.profileListValue}>{pickup.phone}</Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                    ) : (
-                  <Text style={styles.parentAttendanceStateText}>
-                    No authorized pickups on file.
-                  </Text>
-                )}
-              </View>
-
-              <View style={styles.profileCard}>
-                <View style={styles.parentSectionHeaderRow}>
-                  <View style={styles.childProfileSectionTitleRow}>
-                    <View
-                      style={[
-                        styles.childProfileSectionIcon,
-                        { backgroundColor: childTheme.accent },
-                      ]}
-                    />  
-                    <Text style={styles.parentSectionHeaderTitle}>Emergency Contacts</Text>
-                  </View>
-                  <Text style={styles.parentSectionHeaderSubtle}>
-                    {childProfileSelectedChild
-                      ? `${childProfileSelectedChild.first_name || ''} ${
-                          childProfileSelectedChild.last_name || ''
-                        }`.trim() || 'Linked child'
-                      : 'Linked child'}
-                  </Text>
-                </View>
-                {childProfileEmergencyLoading ? (
-                  <Text style={styles.parentAttendanceStateText}>
-                    Loading emergency contacts...
-                  </Text>
-                ) : childProfileEmergencyError ? (
-                  <Text style={styles.errorText}>{childProfileEmergencyError}</Text>
-                ) : childProfileEmergencyRows.length ? (
-                  <View style={styles.profileList}>
-                    {childProfileEmergencyRows.map((contact) => (
-                      <View key={contact.id} style={styles.profileListRow}>
-                        <View
-                          style={[
-                            styles.profileListDot,
-                            { backgroundColor: childTheme.accent },
-                          ]}
-                        />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.profileListLabel}>{contact.full_name}</Text>
-                          <Text style={styles.profileListValue}>{contact.relationship}</Text>
-                          <Text style={styles.profileListValue}>{contact.phone}</Text>
-                          <Text style={styles.profileListValue}>
-                            {formatEmergencyContactPriority(contact.priority)}
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={styles.parentAttendanceStateText}>
-                    No emergency contacts on file.
-                  </Text>
-                )}
-              </View>
-
-              <View style={styles.profileCard}>
-                <View style={styles.parentSectionHeaderRow}>
-                  <View style={styles.childProfileSectionTitleRow}>
-                    <View
-                      style={[
-                        styles.childProfileSectionIcon,
-                        { backgroundColor: childTheme.accent },
-                      ]}
-                    />
-                    <Text style={styles.parentSectionHeaderTitle}>Medical Alerts</Text>
-                  </View>
-                </View>
-                <View style={styles.profileBadgeList}>
-                  {CHILD_PROFILE.medicalAlerts.map((item) => (
-                    <View key={item} style={styles.profileMedicalBadge}>
-                      <Text style={styles.profileMedicalBadgeText}>{item}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-
-              <Pressable
-                accessibilityRole="button"
-                onPress={handleLogout}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  styles.logoutButton,
-                  pressed && styles.pressedButton,
-                ]}
-              >
-                <Text style={styles.primaryButtonText}>Logout</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        </View>
+        <UnifiedChildProfileScreen
+          onBack={() => setScreen('parent-home')}
+          onLogout={handleLogout}
+          accessibleChildren={childProfileAccessibleChildren}
+          selectedChildId={childProfileSelectedChildId}
+          selectedChild={childProfileSelectedChild}
+          loading={childProfileLoading}
+          error={childProfileError}
+          onSelectChild={(child) => {
+            setChildProfileSelectedChildId(child?.id || '');
+            setChildProfileSelectedChild(child || null);
+            loadChildProfileData(child?.id || null);
+          }}
+          pickups={childProfilePickupRows}
+          pickupsLoading={childProfilePickupLoading}
+          pickupsError={childProfilePickupError}
+          emergencyRows={childProfileEmergencyRows}
+          emergencyLoading={childProfileEmergencyLoading}
+          emergencyError={childProfileEmergencyError}
+          attendanceRows={childProfileAttendanceRows}
+          beforeAfterRows={childProfileBeforeAfterRows}
+          dailyNotesRows={childProfileDailyNotesRows}
+          incidentRows={childProfileIncidentRows}
+          summerCampCheckIns={childProfileSummerCampCheckIns}
+          summerCampHeadcounts={childProfileSummerCampHeadcounts}
+          campGroups={childProfileCampGroups}
+        />
       ) : screen === 'staff-home' ? (
         <StaffHomeScreen
           onLogout={handleLogout}
