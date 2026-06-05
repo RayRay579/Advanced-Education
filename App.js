@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Image,
@@ -180,6 +180,49 @@ function formatDuration(minutes) {
   const remainder = Math.round(numericMinutes % 60);
 
   return `${hours} hr ${remainder} min`;
+}
+
+function formatCurrency(value) {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return '$0.00';
+  }
+
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(numericValue);
+}
+
+function getBillingDisplayStatus(invoice) {
+  const status = String(invoice?.status || 'pending').toLowerCase();
+  if (status === 'pending' && invoice?.due_date) {
+    const dueDate = new Date(`${invoice.due_date}T00:00:00`);
+    if (!Number.isNaN(dueDate.getTime()) && dueDate.getTime() < new Date().setHours(0, 0, 0, 0)) {
+      return 'overdue';
+    }
+  }
+
+  return status;
+}
+
+function getBillingStatusLabel(status) {
+  if (status === 'overdue') return 'Overdue';
+  if (status === 'paid') return 'Paid';
+  if (status === 'cancelled') return 'Cancelled';
+  return 'Pending';
+}
+
+function getDisplayName(record, fallback = 'Unnamed') {
+  if (!record) return fallback;
+  const name = [record.first_name, record.last_name].filter(Boolean).join(' ').trim();
+  return name || record.email || fallback;
+}
+
+function getChildDisplayName(child) {
+  if (!child) return 'Child not set';
+  return [child.first_name, child.last_name].filter(Boolean).join(' ').trim() || 'Child not set';
 }
 
 function formatAudienceLabel(audienceType) {
@@ -769,50 +812,97 @@ function SummerCampScreen({ onBack, onLogout }) {
   );
 }
 
-const PARENT_BILLING_OVERVIEW = {
-  balance: '$348.00',
-  status: 'Pending',
-  dueDate: 'Friday',
-  note: 'Billing is reviewed and sent by Advanced Education.',
-};
+function ParentBillingScreen({ onBack, onLogout, currentUserId }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [invoices, setInvoices] = useState([]);
+  const [expandedInvoiceId, setExpandedInvoiceId] = useState(null);
 
-const PARENT_BILLING_CARE_BILLING = [
-  { label: 'Weekly Hours', value: '33.0' },
-  { label: 'Hourly Rate', value: '$6.00/hr' },
-  { label: 'Weekly Estimate', value: '$198.00' },
-  { label: 'Status', value: 'Pending', tone: 'pending' },
-];
+  const loadParentBilling = useCallback(async () => {
+    if (!currentUserId) {
+      setInvoices([]);
+      setLoading(false);
+      setError('');
+      return;
+    }
 
-const PARENT_BILLING_SUMMER_BILLING = [
-  { label: 'Camp Week', value: 'Week 2' },
-  { label: 'Weekly Camp Fee', value: '$150.00' },
-  { label: 'Field Trip Fee', value: '$0.00' },
-  { label: 'Camp Balance', value: '$150.00' },
-  { label: 'Status', value: 'Pending', tone: 'pending' },
-];
+    setLoading(true);
+    setError('');
 
-const PARENT_BILLING_INVOICES = [
-  {
-    period: 'Before & After Care',
-    detail: 'Week of May 27',
-    amount: '$198.00',
-    status: 'Pending',
-  },
-  {
-    period: 'Summer Camp',
-    detail: 'Week 2',
-    amount: '$150.00',
-    status: 'Pending',
-  },
-  {
-    period: 'Before & After Care',
-    detail: 'Week of May 20',
-    amount: '$171.50',
-    status: 'Paid',
-  },
-];
+    try {
+      const { data: invoiceData, error: invoiceError } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('parent_profile_id', currentUserId)
+        .order('created_at', { ascending: false });
 
-function ParentBillingScreen({ onBack, onLogout }) {
+      if (invoiceError) {
+        throw invoiceError;
+      }
+
+      const baseInvoices = Array.isArray(invoiceData) ? invoiceData : [];
+      const invoiceIds = baseInvoices.map((invoice) => invoice.id).filter(Boolean);
+      const childIds = [...new Set(baseInvoices.map((invoice) => invoice.child_id).filter(Boolean))];
+      const [lineItemsResult, paymentsResult, childrenResult] = await Promise.all([
+        invoiceIds.length
+          ? supabase.from('invoice_line_items').select('*').in('invoice_id', invoiceIds)
+          : Promise.resolve({ data: [], error: null }),
+        invoiceIds.length
+          ? supabase.from('payments').select('*').in('invoice_id', invoiceIds)
+          : Promise.resolve({ data: [], error: null }),
+        childIds.length
+          ? supabase.from('children').select('id, first_name, last_name').in('id', childIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (lineItemsResult.error) throw lineItemsResult.error;
+      if (paymentsResult.error) throw paymentsResult.error;
+      if (childrenResult.error) throw childrenResult.error;
+
+      const lineItems = Array.isArray(lineItemsResult.data) ? lineItemsResult.data : [];
+      const payments = Array.isArray(paymentsResult.data) ? paymentsResult.data : [];
+      const childMap = new Map((childrenResult.data || []).map((child) => [child.id, child]));
+
+      const normalized = baseInvoices.map((invoice) => ({
+        ...invoice,
+        childName: getChildDisplayName(childMap.get(invoice.child_id)),
+        lineItems: lineItems.filter((item) => item.invoice_id === invoice.id),
+        payments: payments.filter((payment) => payment.invoice_id === invoice.id),
+        displayStatus: getBillingDisplayStatus(invoice),
+      }));
+
+      setInvoices(normalized);
+    } catch (loadError) {
+      console.log('Parent billing load error', loadError);
+      setError('Could not load this section.');
+      setInvoices([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUserId]);
+
+  useEffect(() => {
+    loadParentBilling();
+  }, [loadParentBilling]);
+
+  const summary = useMemo(() => {
+    const pending = invoices.filter((invoice) => invoice.displayStatus === 'pending');
+    const overdue = invoices.filter((invoice) => invoice.displayStatus === 'overdue');
+    const paid = invoices.filter((invoice) => invoice.displayStatus === 'paid');
+    const currentBalance = [...pending, ...overdue].reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+    const paidTotal = paid.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+    const overdueTotal = overdue.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+
+    return {
+      currentBalance,
+      pendingCount: pending.length,
+      overdueCount: overdue.length,
+      paidTotal,
+      paidCount: paid.length,
+      overdueTotal,
+    };
+  }, [invoices]);
+
   return (
     <View style={styles.parentHomePage}>
       <ScrollView
@@ -821,7 +911,7 @@ function ParentBillingScreen({ onBack, onLogout }) {
         contentContainerStyle={styles.parentHomeScroll}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        >
+      >
         <View style={styles.billingHero}>
           <View style={styles.childProfileHeaderRow}>
             <Pressable
@@ -841,15 +931,12 @@ function ParentBillingScreen({ onBack, onLogout }) {
           <View style={styles.billingHeroMain}>
             <View style={styles.billingHeroTextBlock}>
               <Text style={styles.parentHeroKicker}>Advanced Education</Text>
-              <Text style={styles.parentHeroGreeting}>Mia Carter</Text>
+              <Text style={styles.parentHeroGreeting}>Billing</Text>
+              <Text style={styles.billingNote}>Current account summary and invoice history</Text>
             </View>
 
             <View style={styles.parentHeroPhotoWrap}>
-              <Image
-                source={HEADER_PHOTO}
-                resizeMode="cover"
-                style={styles.parentHeroPhoto}
-              />
+              <Image source={HEADER_PHOTO} resizeMode="cover" style={styles.parentHeroPhoto} />
             </View>
           </View>
         </View>
@@ -860,123 +947,1355 @@ function ParentBillingScreen({ onBack, onLogout }) {
               <Text style={styles.parentSectionHeaderTitle}>Billing Overview</Text>
               <View style={styles.billingStatusPillOrange}>
                 <Text style={styles.billingStatusPillOrangeText}>
-                  {PARENT_BILLING_OVERVIEW.status}
+                  {loading ? 'Loading...' : 'Current'}
                 </Text>
               </View>
             </View>
-            <Text style={styles.billingAmount}>{PARENT_BILLING_OVERVIEW.balance}</Text>
-            <View style={styles.billingDetailList}>
-              <View style={styles.billingDetailRow}>
-                <Text style={styles.billingDetailLabel}>Due Date</Text>
-                <View style={styles.billingStatusPill}>
-                  <Text style={styles.billingStatusPillText}>
-                    {PARENT_BILLING_OVERVIEW.dueDate}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.billingNote}>
-                {PARENT_BILLING_OVERVIEW.note}
-              </Text>
+
+            <View style={styles.ownerSectionDetailsGrid}>
+              <SummaryTile
+                accent="orange"
+                badge="$"
+                title="Current Balance"
+                value={formatCurrency(summary.currentBalance)}
+                note="Pending + overdue"
+                fill="Current"
+              />
+              <SummaryTile
+                accent="orange"
+                badge="P"
+                title="Pending"
+                value={String(summary.pendingCount)}
+                note="Open invoices"
+                fill="Current"
+              />
+              <SummaryTile
+                accent="red"
+                badge="O"
+                title="Overdue"
+                value={String(summary.overdueCount)}
+                note="Needs follow-up"
+                fill="Current"
+              />
+              <SummaryTile
+                accent="green"
+                badge="✓"
+                title="Paid Total"
+                value={formatCurrency(summary.paidTotal)}
+                note="Completed invoices"
+                fill="Current"
+              />
             </View>
           </View>
 
-          <View style={styles.profileCard}>
-            <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>
-                Before & After Care Billing
-              </Text>
-              <Text style={styles.parentSectionHeaderSubtle}>Pending</Text>
-            </View>
-
-            <View style={styles.billingDetailList}>
-              {PARENT_BILLING_CARE_BILLING.map((entry) => (
-                <View key={entry.label} style={styles.billingDetailRow}>
-                  <Text style={styles.billingDetailLabel}>{entry.label}</Text>
-                  {entry.tone === 'pending' ? (
-                    <View style={styles.billingStatusPillOrange}>
-                      <Text style={styles.billingStatusPillOrangeText}>{entry.value}</Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.billingDetailValue}>{entry.value}</Text>
-                  )}
-                </View>
-              ))}
-            </View>
-          </View>
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {loading ? <Text style={styles.parentAttendanceStateText}>Loading billing...</Text> : null}
+          {!loading && !error && invoices.length === 0 ? (
+            <Text style={styles.parentAttendanceStateText}>No invoices yet.</Text>
+          ) : null}
 
           <View style={styles.profileCard}>
             <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Summer Camp Billing</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>Pending</Text>
-            </View>
-
-            <View style={styles.billingDetailList}>
-              {PARENT_BILLING_SUMMER_BILLING.map((entry) => (
-                <View key={entry.label} style={styles.billingDetailRow}>
-                  <Text style={styles.billingDetailLabel}>{entry.label}</Text>
-                  {entry.tone === 'pending' ? (
-                    <View style={styles.billingStatusPillOrange}>
-                      <Text style={styles.billingStatusPillOrangeText}>{entry.value}</Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.billingDetailValue}>{entry.value}</Text>
-                  )}
-                </View>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.profileCard}>
-            <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Recent Invoices</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>History</Text>
+              <Text style={styles.parentSectionHeaderTitle}>Invoice History</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>View only</Text>
             </View>
 
             <View style={styles.billingInvoiceList}>
-              {PARENT_BILLING_INVOICES.map((invoice) => (
-                <View key={`${invoice.period}-${invoice.detail}`} style={styles.billingInvoiceRow}>
-                  <View style={styles.billingInvoiceCopy}>
-                    <Text style={styles.billingInvoicePeriod}>{invoice.period}</Text>
-                    <Text style={styles.billingInvoiceDetail}>{invoice.detail}</Text>
-                    <Text style={styles.billingInvoiceAmount}>{invoice.amount}</Text>
+              {invoices.map((invoice) => {
+                const isOpen = expandedInvoiceId === invoice.id;
+                const paymentRows = invoice.payments || [];
+
+                return (
+                  <View key={invoice.id} style={styles.billingInvoiceRow}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        setExpandedInvoiceId((current) => (current === invoice.id ? null : invoice.id))
+                      }
+                      style={({ pressed }) => [styles.billingInvoiceCopy, pressed && styles.pressedTile]}
+                    >
+                      <Text style={styles.billingInvoicePeriod}>{invoice.invoice_number}</Text>
+                      <Text style={styles.billingInvoiceDetail}>{invoice.childName}</Text>
+                      <Text style={styles.billingInvoiceAmount}>{formatCurrency(invoice.total)}</Text>
+                      <Text style={styles.billingInvoiceDetail}>
+                        Due {formatDate(invoice.due_date)}
+                      </Text>
+                    </Pressable>
+
+                    <View
+                      style={[
+                        styles.billingInvoiceStatusPill,
+                        invoice.displayStatus === 'paid'
+                          ? styles.billingInvoiceStatusPaid
+                          : invoice.displayStatus === 'overdue'
+                            ? styles.billingInvoiceStatusPending
+                            : styles.billingInvoiceStatusPending,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.billingInvoiceStatusText,
+                          invoice.displayStatus === 'paid'
+                            ? styles.billingInvoiceStatusTextPaid
+                            : styles.billingInvoiceStatusTextPending,
+                        ]}
+                      >
+                        {getBillingStatusLabel(invoice.displayStatus)}
+                      </Text>
+                    </View>
+
+                    <Text style={styles.ownerAccordionChevron}>{isOpen ? '⌃' : '⌄'}</Text>
+
+                    {isOpen ? (
+                      <View style={styles.billingNoteList}>
+                        <Text style={styles.billingNoteItem}>
+                          Billing period: {formatDate(invoice.billing_period_start)} to{' '}
+                          {formatDate(invoice.billing_period_end)}
+                        </Text>
+                        <View style={styles.billingDetailList}>
+                          {(invoice.lineItems || []).map((item) => (
+                            <View key={item.id} style={styles.billingDetailRow}>
+                              <Text style={styles.billingDetailLabel}>{item.description}</Text>
+                              <Text style={styles.billingDetailValue}>
+                                {item.quantity} × {formatCurrency(item.rate)} ={' '}
+                                {formatCurrency(item.amount)}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                        <View style={styles.billingDetailList}>
+                          {paymentRows.length ? (
+                            paymentRows.map((payment) => (
+                              <View key={payment.id} style={styles.billingDetailRow}>
+                                <Text style={styles.billingDetailLabel}>Payment</Text>
+                                <Text style={styles.billingDetailValue}>
+                                  {formatCurrency(payment.amount)} · {payment.payment_method} ·{' '}
+                                  {formatDateTime(payment.payment_date)}
+                                </Text>
+                              </View>
+                            ))
+                          ) : (
+                            <Text style={styles.billingNoteItem}>No payment history yet.</Text>
+                          )}
+                        </View>
+                      </View>
+                    ) : null}
                   </View>
-                  <View
-                    style={[
-                      styles.billingInvoiceStatusPill,
-                      invoice.status === 'Paid'
-                        ? styles.billingInvoiceStatusPaid
-                        : styles.billingInvoiceStatusPending,
+                );
+              })}
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
+  const billingAccent = OWNER_MODULE_COLORS.Billing;
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [invoices, setInvoices] = useState([]);
+  const [parents, setParents] = useState([]);
+  const [children, setChildren] = useState([]);
+  const [childParentLinks, setChildParentLinks] = useState([]);
+  const [expandedInvoiceId, setExpandedInvoiceId] = useState(null);
+  const [billingFilter, setBillingFilter] = useState('all');
+  const [formMode, setFormMode] = useState(null);
+  const [editingInvoiceId, setEditingInvoiceId] = useState(null);
+  const [formError, setFormError] = useState('');
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [selectedParentId, setSelectedParentId] = useState('');
+  const [selectedChildId, setSelectedChildId] = useState('');
+  const [billingPeriodStart, setBillingPeriodStart] = useState('');
+  const [billingPeriodEnd, setBillingPeriodEnd] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [description, setDescription] = useState('');
+  const [quantity, setQuantity] = useState('1');
+  const [rate, setRate] = useState('');
+  const [invoiceStatus, setInvoiceStatus] = useState('pending');
+  const [paymentInvoiceId, setPaymentInvoiceId] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
+  const [invoiceCreationType, setInvoiceCreationType] = useState('manual');
+  const [baPreview, setBaPreview] = useState(null);
+  const [baPreviewLoading, setBaPreviewLoading] = useState(false);
+
+  const paymentMethods = [
+    { label: 'Cash', value: 'cash' },
+    { label: 'Check', value: 'check' },
+    { label: 'Card', value: 'card' },
+    { label: 'ACH', value: 'ach' },
+  ];
+
+  const parentOptions = useMemo(
+    () =>
+      parents.filter(
+        (parent) => parent.role === 'parent' && (parent.account_status === 'active' || !parent.account_status)
+      ),
+    [parents]
+  );
+
+  const childOptions = useMemo(() => {
+    const linkedChildIds = childParentLinks
+      .filter((link) => link.parent_profile_id === selectedParentId)
+      .map((link) => link.child_id);
+
+    const linkedChildren = children.filter((child) => linkedChildIds.includes(child.id));
+    return linkedChildren.length ? linkedChildren : children;
+  }, [childParentLinks, children, selectedParentId]);
+
+  const loadBaPreview = useCallback(async () => {
+    if (!selectedParentId) {
+      setFormError('Please select a parent.');
+      return null;
+    }
+
+    if (!selectedChildId) {
+      setFormError('Please select a child.');
+      return null;
+    }
+
+    if (!billingPeriodStart || !billingPeriodEnd) {
+      setFormError('Please complete the billing dates.');
+      return null;
+    }
+
+    if (!Number.isFinite(Number(rate)) || Number(rate) <= 0) {
+      setFormError('Please enter a valid hourly rate.');
+      return null;
+    }
+
+    setBaPreviewLoading(true);
+    setFormError('');
+
+    try {
+      const { data: sessionsData, error: sessionsError } = await supabase
+        .from('before_after_care_sessions')
+        .select('*')
+        .eq('child_id', selectedChildId)
+        .gte('date', billingPeriodStart)
+        .lte('date', billingPeriodEnd)
+        .gt('total_minutes', 0)
+        .order('date', { ascending: true });
+
+      if (sessionsError) {
+        throw sessionsError;
+      }
+
+      const sessions = Array.isArray(sessionsData) ? sessionsData : [];
+      const totalMinutes = sessions.reduce((sum, session) => sum + Number(session.total_minutes || 0), 0);
+
+      if (!sessions.length || totalMinutes <= 0) {
+        setBaPreview(null);
+        setFormError('No Before & After Care time found for this child and billing period.');
+        return null;
+      }
+
+      const totalHours = Number((totalMinutes / 60).toFixed(2));
+      const hourlyRate = Number(rate);
+      const amount = Number((totalHours * hourlyRate).toFixed(2));
+      const preview = {
+        sessionCount: sessions.length,
+        totalMinutes,
+        totalHours,
+        hourlyRate,
+        amount,
+      };
+
+      setBaPreview(preview);
+      return preview;
+    } catch (previewError) {
+      console.log('B&A preview load error', previewError);
+      setBaPreview(null);
+      setFormError(previewError?.message || 'Could not load this section. Please try again.');
+      return null;
+    } finally {
+      setBaPreviewLoading(false);
+    }
+  }, [billingPeriodStart, billingPeriodEnd, rate, selectedChildId, selectedParentId]);
+
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter((invoice) => {
+      if (billingFilter === 'all') return true;
+      return invoice.displayStatus === billingFilter;
+    });
+  }, [billingFilter, invoices]);
+
+  const summary = useMemo(() => {
+    const pending = invoices.filter((invoice) => invoice.displayStatus === 'pending');
+    const overdue = invoices.filter((invoice) => invoice.displayStatus === 'overdue');
+    const paid = invoices.filter((invoice) => invoice.displayStatus === 'paid');
+    const outstanding = [...pending, ...overdue].reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+    const paidThisMonth = paid
+      .filter((invoice) => {
+        const payment = (invoice.payments || []).slice().sort(
+          (a, b) => new Date(b.payment_date || b.created_at || 0) - new Date(a.payment_date || a.created_at || 0)
+        )[0];
+        if (!payment?.payment_date) return false;
+        const paymentDate = new Date(payment.payment_date);
+        const now = new Date();
+        return (
+          paymentDate.getFullYear() === now.getFullYear() &&
+          paymentDate.getMonth() === now.getMonth()
+        );
+      })
+      .reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+
+    return {
+      outstanding,
+      pendingCount: pending.length,
+      overdueCount: overdue.length,
+      paidThisMonth,
+    };
+  }, [invoices]);
+
+  const loadOwnerBilling = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const [invoiceResult, parentResult, childResult, linkResult] = await Promise.all([
+        supabase.from('invoices').select('*').order('created_at', { ascending: false }),
+        supabase
+          .from('profiles')
+          .select('id, email, first_name, last_name, role, account_status')
+          .eq('role', 'parent'),
+        supabase.from('children').select('id, first_name, last_name, room'),
+        supabase.from('child_parent_links').select('child_id, parent_profile_id'),
+      ]);
+
+      if (invoiceResult.error) throw invoiceResult.error;
+      if (parentResult.error) throw parentResult.error;
+      if (childResult.error) throw childResult.error;
+      if (linkResult.error) throw linkResult.error;
+
+      const rawInvoices = Array.isArray(invoiceResult.data) ? invoiceResult.data : [];
+      const overdueIds = rawInvoices
+        .filter((invoice) => getBillingDisplayStatus(invoice) === 'pending' && invoice.due_date)
+        .filter((invoice) => new Date(`${invoice.due_date}T00:00:00`).getTime() < new Date().setHours(0, 0, 0, 0))
+        .map((invoice) => invoice.id);
+
+      if (overdueIds.length) {
+        await Promise.all(
+          overdueIds.map((invoiceId) =>
+            supabase.from('invoices').update({ status: 'overdue' }).eq('id', invoiceId)
+          )
+        );
+        const refreshedInvoices = await supabase.from('invoices').select('*').order('created_at', { ascending: false });
+        if (refreshedInvoices.error) throw refreshedInvoices.error;
+        rawInvoices.splice(0, rawInvoices.length, ...(Array.isArray(refreshedInvoices.data) ? refreshedInvoices.data : []));
+      }
+
+      const invoiceIds = rawInvoices.map((invoice) => invoice.id).filter(Boolean);
+
+      const [lineItemsResult, paymentsResult] = await Promise.all([
+        invoiceIds.length
+          ? supabase.from('invoice_line_items').select('*').in('invoice_id', invoiceIds)
+          : Promise.resolve({ data: [], error: null }),
+        invoiceIds.length
+          ? supabase.from('payments').select('*').in('invoice_id', invoiceIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (lineItemsResult.error) throw lineItemsResult.error;
+      if (paymentsResult.error) throw paymentsResult.error;
+
+      const parentMap = new Map((parentResult.data || []).map((parent) => [parent.id, parent]));
+      const childMap = new Map((childResult.data || []).map((child) => [child.id, child]));
+      const lineItems = Array.isArray(lineItemsResult.data) ? lineItemsResult.data : [];
+      const payments = Array.isArray(paymentsResult.data) ? paymentsResult.data : [];
+
+      const normalizedInvoices = rawInvoices.map((invoice) => ({
+        ...invoice,
+        parentEmail: getDisplayName(parentMap.get(invoice.parent_profile_id), 'Parent not found'),
+        childName: getChildDisplayName(childMap.get(invoice.child_id)),
+        lineItems: lineItems.filter((item) => item.invoice_id === invoice.id),
+        payments: payments.filter((payment) => payment.invoice_id === invoice.id),
+        displayStatus: getBillingDisplayStatus(invoice),
+      }));
+
+      setInvoices(normalizedInvoices);
+      setParents(parentResult.data || []);
+      setChildren(childResult.data || []);
+      setChildParentLinks(linkResult.data || []);
+    } catch (loadError) {
+      console.log('Owner billing load error', loadError);
+      setError('Could not load this section.');
+      setInvoices([]);
+      setParents([]);
+      setChildren([]);
+      setChildParentLinks([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadOwnerBilling();
+  }, [loadOwnerBilling]);
+
+  const resetForm = () => {
+    setFormMode(null);
+    setEditingInvoiceId(null);
+    setInvoiceCreationType('manual');
+    setBaPreview(null);
+    setBaPreviewLoading(false);
+    setSelectedParentId('');
+    setSelectedChildId('');
+    setBillingPeriodStart('');
+    setBillingPeriodEnd('');
+    setDueDate('');
+    setDescription('');
+    setQuantity('1');
+    setRate('');
+    setInvoiceStatus('pending');
+    setFormError('');
+  };
+
+  const openCreateForm = () => {
+    resetForm();
+    setFormMode('create');
+    setInvoiceCreationType('manual');
+    setBillingPeriodStart(new Date().toISOString().split('T')[0]);
+    setBillingPeriodEnd(new Date().toISOString().split('T')[0]);
+    setDueDate(new Date().toISOString().split('T')[0]);
+  };
+
+  const openEditForm = (invoice) => {
+    resetForm();
+    setFormMode('edit');
+    setInvoiceCreationType('manual');
+    setEditingInvoiceId(invoice.id);
+    setSelectedParentId(invoice.parent_profile_id || '');
+    setSelectedChildId(invoice.child_id || '');
+    setBillingPeriodStart(invoice.billing_period_start || '');
+    setBillingPeriodEnd(invoice.billing_period_end || '');
+    setDueDate(invoice.due_date || '');
+    setInvoiceStatus(invoice.status || 'pending');
+    const firstLineItem = (invoice.lineItems || [])[0] || null;
+    setDescription(firstLineItem?.description || '');
+    setQuantity(String(firstLineItem?.quantity ?? 1));
+    setRate(String(firstLineItem?.rate ?? ''));
+  };
+
+  const handleSaveInvoice = async () => {
+    if (!selectedParentId) {
+      setFormError('Please select a parent.');
+      return;
+    }
+
+    if (!selectedChildId) {
+      setFormError('Please select a child.');
+      return;
+    }
+
+    if (!billingPeriodStart || !billingPeriodEnd || !dueDate) {
+      setFormError('Please complete the billing dates.');
+      return;
+    }
+
+    const isBaGeneration = formMode === 'create' && invoiceCreationType === 'ba';
+    const quantityValue = Number(quantity);
+    const rateValue = Number(rate);
+    const amountValue = Number((quantityValue * rateValue).toFixed(2));
+
+    setSaveLoading(true);
+    setFormError('');
+
+    try {
+      let resolvedBaPreview = baPreview;
+
+      if (isBaGeneration) {
+        if (!Number.isFinite(rateValue) || rateValue <= 0) {
+          setFormError('Please enter a valid hourly rate.');
+          return;
+        }
+
+        if (!resolvedBaPreview) {
+          resolvedBaPreview = await loadBaPreview();
+        }
+
+        if (!resolvedBaPreview) {
+          const message = 'No Before & After Care time found for this child and billing period.';
+          setFormError(message);
+          Alert.alert(message);
+          return;
+        }
+      } else {
+        if (!description.trim()) {
+          setFormError('Please add a description.');
+          return;
+        }
+
+        if (!Number.isFinite(quantityValue) || !Number.isFinite(rateValue)) {
+          setFormError('Please enter valid quantity and rate.');
+          return;
+        }
+      }
+
+      if (formMode === 'edit' && editingInvoiceId) {
+        const invoicePayload = {
+          parent_profile_id: selectedParentId,
+          child_id: selectedChildId,
+          billing_period_start: billingPeriodStart,
+          billing_period_end: billingPeriodEnd,
+          subtotal: amountValue,
+          total: amountValue,
+          status: invoiceStatus,
+          due_date: dueDate,
+        };
+        const lineItemPayload = {
+          description: description.trim(),
+          quantity: quantityValue,
+          rate: rateValue,
+          amount: amountValue,
+        };
+
+        console.log('Update invoice selected parent id', selectedParentId);
+        console.log('Update invoice selected child id', selectedChildId);
+        console.log('Update invoice payload', invoicePayload);
+        console.log('Update line item payload', lineItemPayload);
+
+        const { error: invoiceUpdateError } = await supabase
+          .from('invoices')
+          .update(invoicePayload)
+          .eq('id', editingInvoiceId);
+
+        console.log('Update invoice result', null, invoiceUpdateError);
+
+        if (invoiceUpdateError) {
+          console.log('Update invoice error message', invoiceUpdateError.message);
+          throw invoiceUpdateError;
+        }
+
+        const existingLineItem = (invoices.find((invoice) => invoice.id === editingInvoiceId)?.lineItems || [])[0] || null;
+        if (existingLineItem) {
+          const { data: lineUpdateData, error: lineUpdateError } = await supabase
+            .from('invoice_line_items')
+            .update(lineItemPayload)
+            .eq('id', existingLineItem.id);
+
+          console.log('Update line item result', lineUpdateData, lineUpdateError);
+
+          if (lineUpdateError) {
+            console.log('Update line item error message', lineUpdateError.message);
+            throw lineUpdateError;
+          }
+        } else {
+          const { data: lineInsertData, error: lineInsertError } = await supabase.from('invoice_line_items').insert({
+            invoice_id: editingInvoiceId,
+            ...lineItemPayload,
+          }).select().single();
+
+          console.log('Insert line item result', lineInsertData, lineInsertError);
+
+          if (lineInsertError) {
+            console.log('Insert line item error message', lineInsertError.message);
+            throw lineInsertError;
+          }
+        }
+
+        Alert.alert('Invoice updated.');
+      } else {
+        const invoiceNumber = `INV-${Date.now()}`;
+        const invoiceDescription = isBaGeneration
+          ? `Before & After Care - ${billingPeriodStart} to ${billingPeriodEnd}`
+          : description.trim();
+        const invoiceQuantity = isBaGeneration ? resolvedBaPreview.totalHours : quantityValue;
+        const invoiceRate = isBaGeneration ? resolvedBaPreview.hourlyRate : rateValue;
+        const invoiceAmount = isBaGeneration ? resolvedBaPreview.amount : amountValue;
+        const invoicePayload = {
+          parent_profile_id: selectedParentId,
+          child_id: selectedChildId,
+          invoice_number: invoiceNumber,
+          billing_period_start: billingPeriodStart,
+          billing_period_end: billingPeriodEnd,
+          subtotal: invoiceAmount,
+          total: invoiceAmount,
+          status: invoiceStatus || 'pending',
+          due_date: dueDate,
+          created_by_owner_id: currentUserId || null,
+        };
+        const lineItemPayload = {
+          invoice_id: null,
+          description: invoiceDescription,
+          quantity: invoiceQuantity,
+          rate: invoiceRate,
+          amount: invoiceAmount,
+        };
+
+        console.log('Create invoice selected parent id', selectedParentId);
+        console.log('Create invoice selected child id', selectedChildId);
+        console.log('Create invoice payload', invoicePayload);
+        console.log('Create line item payload', lineItemPayload);
+
+        if (isBaGeneration) {
+          console.log('B&A preview used', resolvedBaPreview);
+        }
+
+        const { data: invoiceData, error: invoiceInsertError } = await supabase
+          .from('invoices')
+          .insert(invoicePayload)
+          .select()
+          .single();
+
+        console.log('Create invoice result', invoiceData, invoiceInsertError);
+
+        if (invoiceInsertError || !invoiceData) {
+          if (invoiceInsertError) {
+            console.log('Create invoice error message', invoiceInsertError.message);
+          }
+          throw invoiceInsertError || new Error('Could not create invoice.');
+        }
+
+        const createLineItemPayload = {
+          invoice_id: invoiceData.id,
+          description: invoiceDescription,
+          quantity: invoiceQuantity,
+          rate: invoiceRate,
+          amount: invoiceAmount,
+        };
+
+        console.log('Create line item payload with invoice id', createLineItemPayload);
+
+        const { data: lineInsertData, error: lineInsertError } = await supabase
+          .from('invoice_line_items')
+          .insert(createLineItemPayload)
+          .select()
+          .single();
+
+        console.log('Create line item result', lineInsertData, lineInsertError);
+
+        if (lineInsertError) {
+          console.log('Create line item error message', lineInsertError.message);
+          throw lineInsertError;
+        }
+
+        Alert.alert('Invoice created.');
+      }
+
+      resetForm();
+      await loadOwnerBilling();
+    } catch (saveError) {
+      console.log('Billing save error', saveError);
+      setFormError(saveError?.message || 'Could not save. Please try again.');
+      Alert.alert('Could not save.', saveError?.message || 'Please try again.');
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  const handleMarkPaid = (invoice) => {
+    setPaymentInvoiceId(invoice.id);
+    setPaymentMethod('');
+    setPaymentError('');
+  };
+
+  const confirmMarkPaid = async () => {
+    if (!paymentInvoiceId) return;
+    if (!paymentMethod) {
+      setPaymentError('Please select a payment method.');
+      return;
+    }
+
+    const invoice = invoices.find((entry) => entry.id === paymentInvoiceId);
+    if (!invoice) return;
+
+    setPaymentLoading(true);
+    setPaymentError('');
+
+    try {
+      const now = new Date().toISOString();
+      const invoicePayload = { status: 'paid' };
+      const paymentPayload = {
+        invoice_id: paymentInvoiceId,
+        amount: Number(invoice.total || 0),
+        payment_method: paymentMethod,
+        payment_date: now,
+        status: 'completed',
+      };
+
+      console.log('Mark paid invoice id', paymentInvoiceId);
+      console.log('Mark paid invoice payload', invoicePayload);
+      console.log('Mark paid payment payload', paymentPayload);
+
+      const { data: updateData, error: updateError } = await supabase
+        .from('invoices')
+        .update(invoicePayload)
+        .eq('id', paymentInvoiceId);
+
+      console.log('Mark paid invoice result', updateData, updateError);
+
+      if (updateError) {
+        console.log('Mark paid invoice error message', updateError.message);
+        throw updateError;
+      }
+
+      const { data: paymentInsertData, error: paymentInsertError } = await supabase
+        .from('payments')
+        .insert(paymentPayload)
+        .select()
+        .single();
+
+      console.log('Mark paid payment result', paymentInsertData, paymentInsertError);
+
+      if (paymentInsertError) {
+        console.log('Mark paid payment error message', paymentInsertError.message);
+        throw paymentInsertError;
+      }
+
+      setPaymentInvoiceId('');
+      setPaymentMethod('');
+      await loadOwnerBilling();
+      Alert.alert('Invoice marked paid.');
+    } catch (payError) {
+      console.log('Billing payment error', payError);
+      setPaymentError(payError?.message || 'Could not save. Please try again.');
+      Alert.alert('Could not save.', payError?.message || 'Please try again.');
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  const canShowChildOptions = Boolean(selectedParentId);
+
+  return (
+    <View style={styles.page}>
+      <View style={styles.ownerBillingHero}>
+        <View style={styles.heroOrbLarge} />
+        <View style={styles.heroOrbSmall} />
+
+        <View style={styles.childProfileHeaderRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.childProfileBackButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.childProfileBackButtonText}>Back</Text>
+          </Pressable>
+
+          <Text style={styles.childProfileHeaderLabel}>Billing</Text>
+        </View>
+
+        <View style={styles.ownerDashboardHeroCopy}>
+          <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+          <Text style={styles.shellHeroTitle}>Billing</Text>
+          <Text style={styles.shellHeroSubtitle}>Review balances and invoices</Text>
+          <View style={[styles.shellHeroPill, styles.ownerBillingHeroPill, { marginTop: 0 }]}>
+            <Text style={styles.ownerBillingHeroPillText}>Owner Access</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <View style={styles.contentStack}>
+          <View style={styles.ownerAccordionCard}>
+            <Text style={styles.ownerAccordionTitle}>Billing Summary</Text>
+            <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
+              <SummaryTile
+                accent="orange"
+                badge="$"
+                title="Outstanding Balance"
+                value={formatCurrency(summary.outstanding)}
+                note="Pending + overdue"
+                fill="Owner"
+              />
+              <SummaryTile
+                accent="orange"
+                badge="P"
+                title="Pending"
+                value={String(summary.pendingCount)}
+                note="Open invoices"
+                fill="Owner"
+              />
+              <SummaryTile
+                accent="red"
+                badge="O"
+                title="Overdue"
+                value={String(summary.overdueCount)}
+                note="Needs follow-up"
+                fill="Owner"
+              />
+              <SummaryTile
+                accent="green"
+                badge="✓"
+                title="Paid This Month"
+                value={formatCurrency(summary.paidThisMonth)}
+                note="Completed invoices"
+                fill="Owner"
+              />
+            </View>
+          </View>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {loading ? <Text style={styles.parentAttendanceStateText}>Loading billing...</Text> : null}
+
+          <View style={styles.ownerAccordionCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.ownerAccordionTitle}>
+                {formMode === 'edit' ? 'Edit Invoice' : 'Create Invoice'}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={formMode ? resetForm : openCreateForm}
+                style={({ pressed }) => [
+                  styles.ownerStaffProfileButton,
+                  { backgroundColor: billingAccent },
+                  pressed && styles.pressedButton,
+                ]}
+              >
+                <Text style={styles.ownerStaffProfileButtonText}>
+                  {formMode ? 'Cancel' : 'Create Invoice'}
+                </Text>
+              </Pressable>
+            </View>
+
+            {formMode ? (
+              <View style={styles.profileCardInner}>
+                {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
+
+                {formMode === 'create' ? (
+                  <View style={styles.ownerChipGroup}>
+                    <Text style={styles.ownerChipGroupLabel}>Create From</Text>
+                    <View style={styles.ownerFilterPillRow}>
+                      {[
+                        { label: 'Manual Invoice', value: 'manual' },
+                        { label: 'Generate from B&A Care Logs', value: 'ba' },
+                      ].map((option) => {
+                        const isActive = invoiceCreationType === option.value;
+                        return (
+                          <Pressable
+                            key={option.value}
+                            accessibilityRole="button"
+                            onPress={() => {
+                              setInvoiceCreationType(option.value);
+                              setBaPreview(null);
+                              setFormError('');
+                            }}
+                            style={({ pressed }) => [
+                              styles.ownerFilterPill,
+                              isActive && styles.ownerFilterPillActive,
+                              pressed && styles.pressedButton,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.ownerFilterPillText,
+                                isActive && styles.ownerFilterPillTextActive,
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ) : null}
+
+                <View style={styles.ownerChipGroup}>
+                  <Text style={styles.ownerChipGroupLabel}>Select Parent</Text>
+                  <View style={styles.ownerStaffList}>
+                    {parentOptions.map((parent) => {
+                      const isSelected = selectedParentId === parent.id;
+                      return (
+                        <Pressable
+                          key={parent.id}
+                          accessibilityRole="button"
+                          onPress={() => {
+                            setSelectedParentId(parent.id);
+                            setSelectedChildId('');
+                            setBaPreview(null);
+                          }}
+                          style={({ pressed }) => [
+                            styles.ownerStaffCard,
+                            isSelected && styles.ownerStaffStatusPillGreen,
+                            pressed && styles.pressedTile,
+                          ]}
+                        >
+                          <Text style={styles.ownerStudentName}>
+                            {getDisplayName(parent, 'Parent')}
+                          </Text>
+                          <Text style={styles.ownerStudentParent}>{parent.email}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={styles.ownerChipGroup}>
+                  <Text style={styles.ownerChipGroupLabel}>
+                    {canShowChildOptions ? 'Select Child' : 'Select a parent first'}
+                  </Text>
+                  <View style={styles.ownerStaffList}>
+                    {canShowChildOptions ? (
+                      childOptions.map((child) => {
+                        const isSelected = selectedChildId === child.id;
+                        return (
+                          <Pressable
+                            key={child.id}
+                            accessibilityRole="button"
+                            onPress={() => {
+                              setSelectedChildId(child.id);
+                              setBaPreview(null);
+                            }}
+                            style={({ pressed }) => [
+                              styles.ownerStaffCard,
+                              isSelected && styles.ownerStaffStatusPillOrange,
+                              pressed && styles.pressedTile,
+                            ]}
+                          >
+                            <Text style={styles.ownerStudentName}>
+                              {getChildDisplayName(child)}
+                            </Text>
+                            <Text style={styles.ownerStudentParent}>
+                              {child.room || 'Room not set'}
+                            </Text>
+                          </Pressable>
+                        );
+                      })
+                    ) : (
+                      <Text style={styles.parentAttendanceStateText}>Select a parent first.</Text>
+                    )}
+                  </View>
+                </View>
+
+                <View style={styles.ownerChipGroup}>
+                  <Text style={styles.ownerChipGroupLabel}>Billing Period Start</Text>
+                    <TextInput
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={COLORS.muted}
+                      value={billingPeriodStart}
+                      onChangeText={(value) => {
+                        setBillingPeriodStart(value);
+                        if (invoiceCreationType === 'ba') setBaPreview(null);
+                      }}
+                      style={styles.ownerTitleInput}
+                    />
+                </View>
+
+                <View style={styles.ownerChipGroup}>
+                  <Text style={styles.ownerChipGroupLabel}>Billing Period End</Text>
+                    <TextInput
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={COLORS.muted}
+                      value={billingPeriodEnd}
+                      onChangeText={(value) => {
+                        setBillingPeriodEnd(value);
+                        if (invoiceCreationType === 'ba') setBaPreview(null);
+                      }}
+                      style={styles.ownerTitleInput}
+                    />
+                </View>
+
+                <View style={styles.ownerChipGroup}>
+                  <Text style={styles.ownerChipGroupLabel}>Due Date</Text>
+                    <TextInput
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={COLORS.muted}
+                      value={dueDate}
+                      onChangeText={setDueDate}
+                      style={styles.ownerTitleInput}
+                    />
+                  </View>
+
+                {invoiceCreationType === 'manual' ? (
+                  <>
+                    <View style={styles.ownerChipGroup}>
+                      <Text style={styles.ownerChipGroupLabel}>Description</Text>
+                      <TextInput
+                        placeholder="Invoice description"
+                        placeholderTextColor={COLORS.muted}
+                        value={description}
+                        onChangeText={setDescription}
+                        multiline
+                        style={styles.ownerMessageInput}
+                      />
+                    </View>
+
+                    <View style={styles.ownerChipGroup}>
+                      <Text style={styles.ownerChipGroupLabel}>Quantity</Text>
+                      <TextInput
+                        placeholder="1"
+                        placeholderTextColor={COLORS.muted}
+                        value={quantity}
+                        onChangeText={setQuantity}
+                        keyboardType="numeric"
+                        style={styles.ownerTitleInput}
+                      />
+                    </View>
+
+                    <View style={styles.ownerChipGroup}>
+                      <Text style={styles.ownerChipGroupLabel}>Rate</Text>
+                    <TextInput
+                      placeholder="0.00"
+                      placeholderTextColor={COLORS.muted}
+                      value={rate}
+                      onChangeText={(value) => {
+                        setRate(value);
+                        if (invoiceCreationType === 'ba') setBaPreview(null);
+                      }}
+                      keyboardType="numeric"
+                      style={styles.ownerTitleInput}
+                    />
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.ownerChipGroup}>
+                      <Text style={styles.ownerChipGroupLabel}>Hourly Rate</Text>
+                      <TextInput
+                        placeholder="0.00"
+                        placeholderTextColor={COLORS.muted}
+                        value={rate}
+                        onChangeText={setRate}
+                        keyboardType="numeric"
+                        style={styles.ownerTitleInput}
+                      />
+                    </View>
+
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={baPreviewLoading}
+                      onPress={loadBaPreview}
+                      style={({ pressed }) => [
+                        styles.primaryButton,
+                        { backgroundColor: billingAccent },
+                        pressed && !baPreviewLoading && styles.pressedButton,
+                        baPreviewLoading && styles.disabledButton,
+                      ]}
+                    >
+                      <Text style={styles.primaryButtonText}>
+                        {baPreviewLoading ? 'Loading...' : 'Load B&A Preview'}
+                      </Text>
+                    </Pressable>
+
+                    {baPreview ? (
+                      <View style={styles.billingNoteList}>
+                        <View style={styles.billingDetailRow}>
+                          <Text style={styles.billingDetailLabel}>Sessions Included</Text>
+                          <Text style={styles.billingDetailValue}>{baPreview.sessionCount}</Text>
+                        </View>
+                        <View style={styles.billingDetailRow}>
+                          <Text style={styles.billingDetailLabel}>Total Minutes</Text>
+                          <Text style={styles.billingDetailValue}>{baPreview.totalMinutes}</Text>
+                        </View>
+                        <View style={styles.billingDetailRow}>
+                          <Text style={styles.billingDetailLabel}>Total Hours</Text>
+                          <Text style={styles.billingDetailValue}>{baPreview.totalHours.toFixed(2)}</Text>
+                        </View>
+                        <View style={styles.billingDetailRow}>
+                          <Text style={styles.billingDetailLabel}>Rate</Text>
+                          <Text style={styles.billingDetailValue}>{formatCurrency(baPreview.hourlyRate)}</Text>
+                        </View>
+                        <View style={styles.billingDetailRow}>
+                          <Text style={styles.billingDetailLabel}>Amount</Text>
+                          <Text style={styles.billingDetailValue}>{formatCurrency(baPreview.amount)}</Text>
+                        </View>
+                      </View>
+                    ) : null}
+                  </>
+                )}
+
+                <View style={styles.ownerChipGroup}>
+                  <Text style={styles.ownerChipGroupLabel}>Status</Text>
+                  <View style={styles.ownerFilterPillRow}>
+                    {['pending', 'paid', 'overdue', 'cancelled'].map((status) => {
+                      const isActive = invoiceStatus === status;
+                      return (
+                        <Pressable
+                          key={status}
+                          accessibilityRole="button"
+                          onPress={() => setInvoiceStatus(status)}
+                          style={({ pressed }) => [
+                            styles.ownerFilterPill,
+                            isActive && styles.ownerFilterPillActive,
+                            pressed && styles.pressedButton,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.ownerFilterPillText,
+                              isActive && styles.ownerFilterPillTextActive,
+                            ]}
+                          >
+                            {getBillingStatusLabel(status)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={saveLoading}
+                  onPress={handleSaveInvoice}
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    { backgroundColor: billingAccent },
+                    pressed && !saveLoading && styles.pressedButton,
+                    saveLoading && styles.disabledButton,
+                  ]}
+                >
+                  <Text style={styles.primaryButtonText}>
+                    {saveLoading
+                      ? 'Saving...'
+                      : formMode === 'edit'
+                        ? 'Update Invoice'
+                        : invoiceCreationType === 'ba'
+                          ? 'Generate Invoice'
+                          : 'Save Invoice'}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.ownerAccordionTitle}>Invoices</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>View only</Text>
+            </View>
+            <View style={styles.ownerFilterPillRow}>
+              {['all', 'pending', 'paid', 'overdue'].map((filter) => {
+                const isActive = billingFilter === filter;
+                return (
+                  <Pressable
+                    key={filter}
+                    accessibilityRole="button"
+                    onPress={() => setBillingFilter(filter)}
+                    style={({ pressed }) => [
+                      styles.ownerFilterPill,
+                      isActive && styles.ownerFilterPillActive,
+                      pressed && styles.pressedButton,
                     ]}
                   >
                     <Text
                       style={[
-                        styles.billingInvoiceStatusText,
-                        invoice.status === 'Paid'
-                          ? styles.billingInvoiceStatusTextPaid
-                          : styles.billingInvoiceStatusTextPending,
+                        styles.ownerFilterPillText,
+                        isActive && styles.ownerFilterPillTextActive,
                       ]}
                     >
-                      {invoice.status}
+                      {filter === 'all' ? 'All' : getBillingStatusLabel(filter)}
                     </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {loading ? <Text style={styles.parentAttendanceStateText}>Loading invoices...</Text> : null}
+            {!loading && filteredInvoices.length === 0 ? (
+              <Text style={styles.parentAttendanceStateText}>No invoices yet.</Text>
+            ) : null}
+
+            <View style={styles.billingInvoiceList}>
+              {filteredInvoices.map((invoice) => {
+                const isOpen = expandedInvoiceId === invoice.id;
+                const latestPayment = (invoice.payments || []).slice().sort(
+                  (a, b) =>
+                    new Date(b.payment_date || b.created_at || 0) -
+                    new Date(a.payment_date || a.created_at || 0)
+                )[0];
+
+                return (
+                  <View key={invoice.id} style={styles.billingInvoiceRow}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        setExpandedInvoiceId((current) => (current === invoice.id ? null : invoice.id))
+                      }
+                      style={({ pressed }) => [styles.billingInvoiceCopy, pressed && styles.pressedTile]}
+                    >
+                      <Text style={styles.billingInvoicePeriod}>{invoice.invoice_number}</Text>
+                      <Text style={styles.billingInvoiceDetail}>{invoice.parentEmail}</Text>
+                      <Text style={styles.billingInvoiceDetail}>{invoice.childName}</Text>
+                      <Text style={styles.billingInvoiceAmount}>{formatCurrency(invoice.total)}</Text>
+                      <Text style={styles.billingInvoiceDetail}>
+                        Due {formatDate(invoice.due_date)}
+                      </Text>
+                    </Pressable>
+
+                    <View
+                      style={[
+                        styles.billingInvoiceStatusPill,
+                        invoice.displayStatus === 'paid'
+                          ? styles.billingInvoiceStatusPaid
+                          : invoice.displayStatus === 'overdue'
+                            ? styles.billingInvoiceStatusPending
+                            : styles.billingInvoiceStatusPending,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.billingInvoiceStatusText,
+                          invoice.displayStatus === 'paid'
+                            ? styles.billingInvoiceStatusTextPaid
+                            : styles.billingInvoiceStatusTextPending,
+                        ]}
+                      >
+                        {getBillingStatusLabel(invoice.displayStatus)}
+                      </Text>
+                    </View>
+
+                    <Text style={styles.ownerAccordionChevron}>{isOpen ? '⌃' : '⌄'}</Text>
+
+                    {isOpen ? (
+                      <View style={styles.billingNoteList}>
+                        <Text style={styles.billingNoteItem}>
+                          Billing period: {formatDate(invoice.billing_period_start)} to{' '}
+                          {formatDate(invoice.billing_period_end)}
+                        </Text>
+                        <View style={styles.billingDetailList}>
+                          {(invoice.lineItems || []).map((item) => (
+                            <View key={item.id} style={styles.billingDetailRow}>
+                              <Text style={styles.billingDetailLabel}>{item.description}</Text>
+                              <Text style={styles.billingDetailValue}>
+                                {item.quantity} × {formatCurrency(item.rate)} ={' '}
+                                {formatCurrency(item.amount)}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                        <View style={styles.billingDetailList}>
+                          {invoice.payments.length ? (
+                            invoice.payments.map((payment) => (
+                              <View key={payment.id} style={styles.billingDetailRow}>
+                                <Text style={styles.billingDetailLabel}>Payment</Text>
+                                <Text style={styles.billingDetailValue}>
+                                  {formatCurrency(payment.amount)} · {payment.payment_method} ·{' '}
+                                  {formatDateTime(payment.payment_date)}
+                                </Text>
+                              </View>
+                            ))
+                          ) : (
+                            <Text style={styles.billingNoteItem}>No payment history yet.</Text>
+                          )}
+                        </View>
+
+                        <View style={styles.ownerActionButtonStack}>
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={() => openEditForm(invoice)}
+                            style={({ pressed }) => [
+                              styles.ownerStaffProfileButton,
+                              { backgroundColor: billingAccent },
+                              pressed && styles.pressedButton,
+                            ]}
+                          >
+                            <Text style={styles.ownerStaffProfileButtonText}>Edit</Text>
+                          </Pressable>
+
+                          {(invoice.displayStatus === 'pending' || invoice.displayStatus === 'overdue') ? (
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={() => handleMarkPaid(invoice)}
+                              style={({ pressed }) => [
+                                styles.ownerStaffProfileButton,
+                                { backgroundColor: COLORS.success },
+                                pressed && styles.pressedButton,
+                              ]}
+                            >
+                              <Text style={styles.ownerStaffProfileButtonText}>Mark Paid</Text>
+                            </Pressable>
+                          ) : null}
+                        </View>
+
+                        {paymentInvoiceId === invoice.id ? (
+                          <View style={styles.profileCardInner}>
+                            <Text style={styles.ownerAccordionTitle}>Select Payment Method</Text>
+                            <View style={styles.ownerFilterPillRow}>
+                              {paymentMethods.map((method) => {
+                                const isActive = paymentMethod === method.value;
+                                return (
+                                  <Pressable
+                                    key={method.value}
+                                    accessibilityRole="button"
+                                    onPress={() => setPaymentMethod(method.value)}
+                                    style={({ pressed }) => [
+                                      styles.ownerFilterPill,
+                                      isActive && styles.ownerFilterPillActive,
+                                      pressed && styles.pressedButton,
+                                    ]}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.ownerFilterPillText,
+                                        isActive && styles.ownerFilterPillTextActive,
+                                      ]}
+                                    >
+                                      {method.label}
+                                    </Text>
+                                  </Pressable>
+                                );
+                              })}
+                            </View>
+
+                            {paymentError ? <Text style={styles.errorText}>{paymentError}</Text> : null}
+
+                            <View style={styles.ownerActionButtonStack}>
+                              <Pressable
+                                accessibilityRole="button"
+                                disabled={paymentLoading}
+                                onPress={confirmMarkPaid}
+                                style={({ pressed }) => [
+                                  styles.primaryButton,
+                                  { backgroundColor: billingAccent },
+                                  pressed && !paymentLoading && styles.pressedButton,
+                                  paymentLoading && styles.disabledButton,
+                                ]}
+                              >
+                                <Text style={styles.primaryButtonText}>
+                                  {paymentLoading ? 'Saving...' : 'Confirm Paid'}
+                                </Text>
+                              </Pressable>
+                              <Pressable
+                                accessibilityRole="button"
+                                onPress={() => {
+                                  setPaymentInvoiceId('');
+                                  setPaymentMethod('');
+                                  setPaymentError('');
+                                }}
+                                style={({ pressed }) => [
+                                  styles.ownerStaffProfileButton,
+                                  { backgroundColor: COLORS.muted },
+                                  pressed && styles.pressedButton,
+                                ]}
+                              >
+                                <Text style={styles.ownerStaffProfileButtonText}>Cancel</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ) : null}
+
+                        {latestPayment ? (
+                          <Text style={styles.billingNoteItem}>
+                            Latest payment: {formatCurrency(latestPayment.amount)} via{' '}
+                            {latestPayment.payment_method} on {formatDateTime(latestPayment.payment_date)}
+                          </Text>
+                        ) : null}
+                      </View>
+                    ) : null}
                   </View>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.profileCard}>
-            <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Payment Note</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>View only</Text>
-            </View>
-
-            <View style={styles.billingNoteList}>
-              <Text style={styles.billingNoteItem}>
-                Payments are handled through Advanced Education.
-              </Text>
-              <Text style={styles.billingNoteItem}>
-                This prototype does not process payments yet.
-              </Text>
+                );
+              })}
             </View>
           </View>
 
@@ -6533,293 +7852,6 @@ function OwnerMessagesScreen({
             <Text style={styles.ownerAccordionTitle}>Communication Notes</Text>
             <Text style={styles.ownerCommunicationNote}>
               Messages sent here are stored in Supabase with recipient rows for the selected audience.
-            </Text>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={onLogout}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              styles.logoutButton,
-              pressed && styles.pressedButton,
-            ]}
-          >
-            <Text style={styles.primaryButtonText}>Logout</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
-
-function OwnerBillingScreen({ onBack, onLogout, onShowComingSoon }) {
-  const billingAccent = OWNER_MODULE_COLORS.Billing;
-  const [openParentId, setOpenParentId] = useState(null);
-
-  const billingSummaryCards = [
-    { title: 'Total Outstanding', value: '$2,845.00', accent: 'orange', note: 'Review queue' },
-    { title: 'Paid This Week', value: '$1,920.00', accent: 'green', note: 'Posted payments' },
-    { title: 'Pending Invoices', value: '14', accent: 'orange', note: 'Unsent or unpaid' },
-    { title: 'Overdue Accounts', value: '3', accent: 'red', note: 'Needs follow-up' },
-  ];
-
-  const programBillingRows = [
-    { label: 'Before & After Care', value: '$1,695.00 pending', tone: 'orange' },
-    { label: 'Summer Camp', value: '$1,150.00 pending', tone: 'orange' },
-  ];
-
-  const parentBillingAccounts = [
-    {
-      id: 'avery',
-      name: 'Avery Parent',
-      child: 'Mia Carter',
-      balance: '$348.00',
-      status: 'Pending',
-      statusTone: 'orange',
-      beforeAfter: '$198.00',
-      summerCamp: '$150.00',
-      lastInvoiceDate: 'May 27',
-      dueDate: 'Friday',
-      paymentStatus: 'Pending',
-    },
-    {
-      id: 'dana',
-      name: 'Dana Wilson',
-      child: 'Liam Wilson',
-      balance: '$198.00',
-      status: 'Pending',
-      statusTone: 'orange',
-      beforeAfter: '$198.00',
-      summerCamp: '$0.00',
-      lastInvoiceDate: 'May 27',
-      dueDate: 'Friday',
-      paymentStatus: 'Pending',
-    },
-    {
-      id: 'jordan',
-      name: 'Jordan Davis',
-      child: 'Emma Davis',
-      balance: '$0.00',
-      status: 'Paid',
-      statusTone: 'green',
-      beforeAfter: '$0.00',
-      summerCamp: '$0.00',
-      lastInvoiceDate: 'May 20',
-      dueDate: 'Paid',
-      paymentStatus: 'Paid',
-    },
-    {
-      id: 'taylor',
-      name: 'Taylor Brown',
-      child: 'Noah Brown',
-      balance: '$171.50',
-      status: 'Overdue',
-      statusTone: 'red',
-      beforeAfter: '$171.50',
-      summerCamp: '$0.00',
-      lastInvoiceDate: 'May 20',
-      dueDate: 'Overdue',
-      paymentStatus: 'Overdue',
-    },
-  ];
-
-  const toneToBadge = {
-    orange: styles.ownerBillingBadgeOrange,
-    green: styles.ownerBillingBadgeGreen,
-    red: styles.ownerBillingBadgeRed,
-    blue: styles.ownerBillingBadgeBlue,
-  };
-
-  const toneToSummaryAccent = {
-    orange: 'orange',
-    green: 'green',
-    red: 'red',
-    blue: 'blue',
-  };
-
-  return (
-    <View style={styles.page}>
-      <View style={styles.ownerBillingHero}>
-        <View style={styles.heroOrbLarge} />
-        <View style={styles.heroOrbSmall} />
-
-        <View style={styles.childProfileHeaderRow}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={onBack}
-            style={({ pressed }) => [
-              styles.childProfileBackButton,
-              pressed && styles.pressedButton,
-            ]}
-          >
-            <Text style={styles.childProfileBackButtonText}>Back</Text>
-          </Pressable>
-
-          <Text style={styles.childProfileHeaderLabel}>Billing</Text>
-        </View>
-
-        <View style={styles.ownerDashboardHeroCopy}>
-          <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
-          <Text style={styles.shellHeroTitle}>Billing</Text>
-          <Text style={styles.shellHeroSubtitle}>Review balances and invoices</Text>
-          <View
-            style={[
-              styles.shellHeroPill,
-              styles.ownerBillingHeroPill,
-              { marginTop: 0 },
-            ]}
-          >
-            <Text style={styles.ownerBillingHeroPillText}>Owner Access</Text>
-          </View>
-        </View>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.contentStack}>
-          <View style={styles.ownerAccordionCard}>
-            <Text style={styles.ownerAccordionTitle}>Billing Summary</Text>
-            <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
-              {billingSummaryCards.map((card) => (
-                <SummaryTile
-                  key={card.title}
-                  accent={toneToSummaryAccent[card.accent] || 'orange'}
-                  badge={card.title.charAt(0)}
-                  title={card.title}
-                  value={card.value}
-                  note={card.note}
-                  fill="Owner"
-                />
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.ownerAccordionCard}>
-            <Text style={styles.ownerAccordionTitle}>Program Billing</Text>
-            <View style={styles.ownerBillingProgramList}>
-              {programBillingRows.map((row) => (
-                <View key={row.label} style={styles.ownerBillingProgramRow}>
-                  <Text style={styles.ownerBillingProgramLabel}>{row.label}</Text>
-                  <View style={[styles.ownerBillingAmountBadge, toneToBadge[row.tone]]}>
-                    <Text style={styles.ownerBillingAmountBadgeText}>{row.value}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.ownerAccordionCard}>
-            <Text style={styles.ownerAccordionTitle}>Parent Balances</Text>
-            <View style={styles.ownerParentList}>
-              {parentBillingAccounts.map((account) => {
-                const isOpen = openParentId === account.id;
-
-                return (
-                  <View key={account.id} style={styles.ownerParentCard}>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() =>
-                        setOpenParentId((current) => (current === account.id ? null : account.id))
-                      }
-                      style={({ pressed }) => [
-                        styles.ownerParentCardHeader,
-                        pressed && styles.pressedButton,
-                      ]}
-                    >
-                      <View style={styles.ownerParentHeaderTextBlock}>
-                        <Text style={styles.ownerParentName}>{account.name}</Text>
-                        <Text style={styles.ownerParentChildCount}>Child: {account.child}</Text>
-                      </View>
-
-                      <View style={styles.ownerParentHeaderRight}>
-                        <View
-                          style={[
-                            styles.ownerBillingStatusPill,
-                            toneToBadge[account.statusTone] || styles.ownerBillingBadgeOrange,
-                          ]}
-                        >
-                          <Text style={styles.ownerBillingStatusPillText}>{account.status}</Text>
-                        </View>
-                        <Text style={styles.ownerNavChevron}>{isOpen ? '⌃' : '›'}</Text>
-                      </View>
-                    </Pressable>
-
-                    {isOpen ? (
-                      <View style={styles.ownerParentExpandedContent}>
-                        <View style={styles.ownerParentDetailRow}>
-                          <Text style={styles.ownerParentDetailLabel}>Before & After Care amount</Text>
-                          <Text style={styles.ownerParentDetailValue}>{account.beforeAfter}</Text>
-                        </View>
-                        <View style={styles.ownerParentDetailRow}>
-                          <Text style={styles.ownerParentDetailLabel}>Summer Camp amount</Text>
-                          <Text style={styles.ownerParentDetailValue}>{account.summerCamp}</Text>
-                        </View>
-                        <View style={styles.ownerParentDetailRow}>
-                          <Text style={styles.ownerParentDetailLabel}>Last invoice date</Text>
-                          <Text style={styles.ownerParentDetailValue}>{account.lastInvoiceDate}</Text>
-                        </View>
-                        <View style={styles.ownerParentDetailRow}>
-                          <Text style={styles.ownerParentDetailLabel}>Due date</Text>
-                          <Text style={styles.ownerParentDetailValue}>{account.dueDate}</Text>
-                        </View>
-                        <View style={styles.ownerParentDetailRow}>
-                          <Text style={styles.ownerParentDetailLabel}>Payment status</Text>
-                          <Text style={styles.ownerParentDetailValue}>{account.paymentStatus}</Text>
-                        </View>
-
-                        <View style={styles.ownerParentActionList}>
-                          {['View Invoice', 'Send Billing Notice', 'Mark Reviewed'].map((label) => (
-                            <OwnerNavCard
-                              key={label}
-                              accentColor={billingAccent}
-                              title={label}
-                              subtitle="Coming Soon"
-                              onPress={() => onShowComingSoon(label)}
-                            />
-                          ))}
-                        </View>
-                      </View>
-                    ) : null}
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-
-          <View style={styles.ownerAccordionCard}>
-            <Text style={styles.ownerAccordionTitle}>Billing Actions</Text>
-            <View style={styles.ownerActionButtonStack}>
-              {['Generate Weekly Invoices', 'Send Billing Notices', 'Export Billing Report'].map(
-                (label) => (
-                  <Pressable
-                    key={label}
-                    accessibilityRole="button"
-                    onPress={() => onShowComingSoon(label)}
-                    style={({ pressed }) => [
-                      styles.actionCard,
-                      pressed && styles.pressedTile,
-                    ]}
-                  >
-                    <View style={[styles.actionAccent, { backgroundColor: billingAccent }]} />
-                    <View style={styles.actionCardBody}>
-                      <Text style={styles.actionTitle}>{label}</Text>
-                      <Text style={styles.actionNote}>Coming Soon</Text>
-                    </View>
-                    <Text style={styles.chevron}>›</Text>
-                  </Pressable>
-                )
-              )}
-            </View>
-          </View>
-
-          <View style={styles.ownerAccordionCard}>
-            <Text style={styles.ownerAccordionTitle}>Payment Processing Note</Text>
-            <Text style={styles.ownerCommunicationNote}>
-              Payments are not processed in this prototype. Billing is review-only until payment
-              processing is connected.
             </Text>
           </View>
 
@@ -13259,6 +14291,7 @@ export default function App() {
         <ParentBillingScreen
           onBack={() => setScreen('parent-home')}
           onLogout={handleLogout}
+          currentUserId={session?.user?.id}
         />
       ) : screen === 'summer-camp' ? (
         <SummerCampScreen
@@ -13753,7 +14786,7 @@ export default function App() {
         <OwnerBillingScreen
           onBack={() => setScreen('owner-home')}
           onLogout={handleLogout}
-          onShowComingSoon={showComingSoon}
+          currentUserId={session?.user?.id}
         />
       ) : screen === 'owner-camp-events' ? (
         <OwnerCampEventsScreen
@@ -18019,6 +19052,7 @@ parentHeroPhotoWrap: {
     borderRadius: 18,
     borderWidth: 1,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -18027,11 +19061,14 @@ parentHeroPhotoWrap: {
     color: COLORS.muted,
     fontSize: 13,
     fontWeight: '800',
+    flexShrink: 1,
   },
   billingDetailValue: {
     color: COLORS.text,
     fontSize: 15,
     fontWeight: '900',
+    flexShrink: 1,
+    textAlign: 'right',
   },
   billingNote: {
     color: COLORS.muted,
@@ -18061,6 +19098,7 @@ parentHeroPhotoWrap: {
     borderRadius: 18,
     borderWidth: 1,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     justifyContent: 'space-between',
     paddingHorizontal: 14,
