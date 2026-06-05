@@ -5,11 +5,13 @@ import {
   ImageBackground,
   Modal,
   Pressable,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  Share,
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -1022,9 +1024,9 @@ function ParentBillingScreen({ onBack, onLogout, currentUserId }) {
                 </Text>
               </View>
             </View>
-          </View>
+            </View>
 
-          {billingLoading ? (
+            {billingLoading ? (
             <View style={styles.profileCard}>
               <Text style={styles.parentAttendanceStateText}>Loading invoices...</Text>
             </View>
@@ -1147,8 +1149,10 @@ function StaffHomeScreen({
   onOpenCamp,
   onOpenMessages,
   onOpenNotifications,
+  onOpenDocuments,
   onOpenNotes,
   onOpenHours,
+  timeEntries = [],
   staffStatus,
   messages,
   loading,
@@ -1156,6 +1160,11 @@ function StaffHomeScreen({
   expandedMessageId,
   onToggleMessage,
 }) {
+  const staffHoursTotalMinutes = Array.isArray(timeEntries)
+    ? timeEntries.reduce((total, entry) => total + (entry.total_minutes || 0), 0)
+    : 0;
+  const staffHoursStatus = timeEntries[0]?.status === 'clocked_in' ? 'Clocked In' : 'Clocked Out';
+
   return (
     <View style={styles.parentHomePage}>
       <ScrollView
@@ -1185,15 +1194,25 @@ function StaffHomeScreen({
         <View style={styles.parentHomeContent}>
           <View style={styles.staffButtonStack}>
             {STAFF_WORKSPACE_CARDS.map((card) => (
-              <ActionButtonCard
-                key={card.title}
-                accent={card.accent}
-                title={card.title}
-                value={card.title === 'Clock In / Out' ? staffStatus : card.value}
-                note={card.note}
-                onPress={() =>
-                  card.title === 'Clock In / Out'
-                    ? onOpenClock()
+                <ActionButtonCard
+                  key={card.title}
+                  accent={card.accent}
+                  title={card.title}
+                  value={
+                    card.title === 'Clock In / Out'
+                      ? staffStatus
+                      : card.title === 'My Hours'
+                        ? formatMinutes(staffHoursTotalMinutes)
+                        : card.value
+                  }
+                  note={
+                    card.title === 'My Hours'
+                      ? `Current status: ${staffHoursStatus}`
+                      : card.note
+                  }
+                  onPress={() =>
+                    card.title === 'Clock In / Out'
+                      ? onOpenClock()
                     : card.title === 'Before & After Care Attendance'
                       ? onOpenBeforeAfter()
                     : card.title === 'Summer Camp Group Check-In'
@@ -1204,9 +1223,11 @@ function StaffHomeScreen({
                       ? onOpenMessages()
                       : card.title === 'Notifications'
                         ? onOpenNotifications()
+                      : card.title === 'Documents'
+                        ? onOpenDocuments()
                       : card.title === 'Daily Notes'
                         ? onOpenNotes()
-                        : card.title === 'My Hours'
+                      : card.title === 'My Hours'
                           ? onOpenHours()
                               : onShowComingSoon(card.title)
                 }
@@ -2014,7 +2035,25 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
   );
 }
 
-function StaffMyHoursScreen({ onBack, onLogout }) {
+function StaffMyHoursScreen({ onBack, onLogout, currentUserId, loading, error, timeEntries }) {
+  const [expandedEntryId, setExpandedEntryId] = useState(null);
+  const [isTimeEntriesOpen, setIsTimeEntriesOpen] = useState(true);
+  const entries = (Array.isArray(timeEntries) ? timeEntries : []).filter(
+    (entry) => entry.staff_profile_id === currentUserId
+  );
+  const weekStart = new Date();
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const thisWeekEntries = entries.filter((entry) => {
+    const entryDate = new Date(entry.created_at || entry.clock_in || 0);
+    return entryDate >= weekStart;
+  });
+  const currentStatus = entries[0]?.status === 'clocked_in' ? 'Checked In' : 'Checked Out';
+  const thisWeekTotalMinutes = thisWeekEntries.reduce(
+    (total, entry) => total + (entry.total_minutes || 0),
+    0
+  );
+
   return (
     <View style={styles.parentHomePage}>
       <ScrollView
@@ -2058,67 +2097,153 @@ function StaffMyHoursScreen({ onBack, onLogout }) {
             <View style={styles.parentSectionHeaderRow}>
               <Text style={styles.parentSectionHeaderTitle}>This Week</Text>
               <View style={styles.staffHoursPendingPill}>
-                <Text style={styles.staffHoursPendingPillText}>Pending Owner Review</Text>
+                <Text style={styles.staffHoursPendingPillText}>{currentStatus}</Text>
               </View>
-            </View>
-
-            <View style={styles.staffHoursWeekList}>
-              {STAFF_HOURS_THIS_WEEK.map((item) => (
-                <View key={item.day} style={styles.staffHoursWeekRow}>
-                  <Text style={styles.staffHoursWeekDay}>{item.day}</Text>
-                  <Text style={styles.staffHoursWeekValue}>{item.hours}</Text>
-                </View>
-              ))}
             </View>
 
             <View style={styles.staffHoursTotalBlock}>
               <Text style={styles.staffHoursTotalLabel}>Weekly Total</Text>
-              <Text style={styles.staffHoursTotalValue}>32.0 Hours</Text>
+              <Text style={styles.staffHoursTotalValue}>{formatMinutes(thisWeekTotalMinutes)}</Text>
             </View>
           </View>
 
-          {STAFF_HOURS_APPROVED_WEEKS.map((week) => (
-            <View key={week.title} style={styles.profileCard}>
-              <View style={styles.parentSectionHeaderRow}>
-                <Text style={styles.parentSectionHeaderTitle}>{week.title}</Text>
-                <View style={styles.staffHoursApprovedPill}>
-                  <Text style={styles.staffHoursApprovedPillText}>{week.status}</Text>
-                </View>
-              </View>
-
-              <View style={styles.staffHoursApprovedList}>
-                <View style={styles.staffHoursApprovedRow}>
-                  <Text style={styles.staffHoursApprovedLabel}>Total Hours</Text>
-                  <Text style={styles.staffHoursApprovedValue}>{week.total}</Text>
-                </View>
-                <View style={styles.staffHoursApprovedRow}>
-                  <Text style={styles.staffHoursApprovedLabel}>Approval Date</Text>
-                  <Text style={styles.staffHoursApprovedValue}>{week.date}</Text>
-                </View>
-              </View>
-            </View>
-          ))}
-
-          <View style={styles.profileCard}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setIsTimeEntriesOpen((current) => !current)}
+            style={({ pressed }) => [styles.profileCard, pressed && styles.pressedTile]}
+          >
             <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Clock Activity</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>Recent entries</Text>
+              <Text style={styles.parentSectionHeaderTitle}>Time Entries</Text>
+              <View style={styles.parentSectionHeaderRow}>
+                <Text style={styles.parentSectionHeaderSubtle}>
+                  {loading ? 'Loading...' : `${entries.length} entries`}
+                </Text>
+                <Text style={styles.ownerAccordionChevron}>{isTimeEntriesOpen ? '⌃' : '⌄'}</Text>
+              </View>
             </View>
 
-            <View style={styles.staffHoursActivityList}>
-              {STAFF_HOURS_CLOCK_ACTIVITY.map((entry) => (
-                <View key={`${entry.label}-${entry.time}`} style={styles.staffHoursActivityRow}>
-                  <View style={styles.staffHoursActivityDot} />
-                  <Text style={styles.staffHoursActivityLabel}>{entry.label}</Text>
-                  <Text style={styles.staffHoursActivityTime}>{entry.time}</Text>
+            <Text style={styles.staffHoursInfoText}>
+              Tap to {isTimeEntriesOpen ? 'hide' : 'show'} your time entries.
+            </Text>
+          </Pressable>
+
+          {isTimeEntriesOpen ? (
+            <View style={styles.profileCard}>
+              {loading ? (
+                <Text style={styles.parentAttendanceStateText}>Loading staff time entries...</Text>
+              ) : error ? (
+                <Text style={styles.errorText}>{error}</Text>
+              ) : entries.length ? (
+                <View style={styles.staffHoursActivityList}>
+                  {entries.map((entry) => {
+                    const reviewStatusLabel =
+                      entry.review_status === 'approved'
+                        ? 'Approved'
+                        : entry.review_status === 'rejected'
+                          ? 'Not Approved'
+                          : 'Pending Review';
+                    const reviewStatusDetail =
+                      entry.review_status === 'approved'
+                        ? entry.reviewed_at
+                          ? `Approved on ${formatDateTime(entry.reviewed_at)}`
+                          : 'Approved'
+                        : entry.review_status === 'rejected'
+                          ? `Reason: ${entry.review_note || 'No reason provided.'}`
+                          : 'Waiting for owner review';
+
+                    const isOpen = expandedEntryId === entry.id;
+                    const totalWorkedText =
+                      entry.total_minutes > 0
+                        ? formatMinutes(entry.total_minutes)
+                        : entry.status === 'clocked_in'
+                          ? 'In progress'
+                          : '0 min';
+
+                    return (
+                      <Pressable
+                        key={entry.id}
+                        accessibilityRole="button"
+                        onPress={() =>
+                          setExpandedEntryId((current) => (current === entry.id ? null : entry.id))
+                        }
+                        style={({ pressed }) => [
+                          styles.profileCard,
+                          {
+                            marginBottom: 12,
+                            borderWidth: 1,
+                            borderColor: COLORS.border,
+                          },
+                          pressed && styles.pressedTile,
+                        ]}
+                      >
+                        <View style={styles.parentSectionHeaderRow}>
+                          <Text style={styles.staffHoursActivityLabel}>
+                            {formatDate(entry.created_at)}
+                          </Text>
+                          <Text style={styles.ownerAccordionChevron}>{isOpen ? '⌃' : '⌄'}</Text>
+                        </View>
+
+                        <View style={styles.parentSectionHeaderRow}>
+                          <Text style={styles.staffHoursActivityTime}>
+                            Total Worked: {totalWorkedText}
+                          </Text>
+                          <View
+                            style={[
+                              styles.staffHoursPendingPill,
+                              entry.review_status === 'approved'
+                                ? styles.ownerStaffStatusPillGreen
+                                : entry.review_status === 'rejected'
+                                  ? styles.ownerStaffStatusPillOrange
+                                  : { backgroundColor: COLORS.warning },
+                            ]}
+                          >
+                            <Text style={styles.staffHoursPendingPillText}>
+                              {reviewStatusLabel}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {isOpen ? (
+                          <View style={styles.ownerStaffMetaList}>
+                            <View style={styles.ownerStaffMetaRow}>
+                              <Text style={styles.ownerStaffMetaLabel}>Clock In</Text>
+                              <Text style={styles.ownerStaffMetaValue}>
+                                {formatTime(entry.clock_in)}
+                              </Text>
+                            </View>
+                            <View style={styles.ownerStaffMetaRow}>
+                              <Text style={styles.ownerStaffMetaLabel}>Clock Out</Text>
+                              <Text style={styles.ownerStaffMetaValue}>
+                                {entry.clock_out ? formatTime(entry.clock_out) : 'Still clocked in'}
+                              </Text>
+                            </View>
+                            <View style={styles.ownerStaffMetaRow}>
+                              <Text style={styles.ownerStaffMetaLabel}>Total Worked</Text>
+                              <Text style={styles.ownerStaffMetaValue}>{totalWorkedText}</Text>
+                            </View>
+                            <View style={styles.ownerStaffMetaRow}>
+                              <Text style={styles.ownerStaffMetaLabel}>Review Status</Text>
+                              <Text style={styles.ownerStaffMetaValue}>{reviewStatusLabel}</Text>
+                            </View>
+                            <View style={styles.ownerStaffMetaRow}>
+                              <Text style={styles.ownerStaffMetaLabel}>Details</Text>
+                              <Text style={styles.ownerStaffMetaValue}>{reviewStatusDetail}</Text>
+                            </View>
+                          </View>
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
                 </View>
-              ))}
+              ) : (
+                <Text style={styles.parentAttendanceStateText}>No hours recorded yet.</Text>
+              )}
             </View>
-          </View>
+          ) : null}
 
           <View style={styles.profileCard}>
             <Text style={styles.staffHoursInfoText}>
-              Hours are reviewed and approved by Advanced Education management before payroll processing.
+              Hours are tracked in Supabase for owner review and payroll processing.
             </Text>
           </View>
 
@@ -2149,6 +2274,7 @@ function OwnerDashboardScreen({
   onOpenNotifications,
   onOpenBilling,
   onOpenCampEvents,
+  onOpenDocuments,
   onOpenInviteCodes,
   onOpenReports,
   onOpenSummerCampCheckIn,
@@ -2545,6 +2671,7 @@ function OwnerDashboardScreen({
               Messages: 'Center-wide communication',
               Notifications: 'Center attention hub',
               'Camp Events': 'Manage camp schedules',
+              'Document Center': 'Manage forms, waivers, and center documents',
               'Invite Codes': 'Create parent and staff access',
               Reports: 'Attendance and program reports',
             };
@@ -2560,14 +2687,16 @@ function OwnerDashboardScreen({
                         ? onOpenMessages
                       : moduleName === 'Notifications'
                         ? onOpenNotifications
-                      : moduleName === 'Billing'
-                        ? onOpenBilling
-                      : moduleName === 'Camp Events'
-                        ? onOpenCampEvents
-                      : moduleName === 'Invite Codes'
-                        ? onOpenInviteCodes
-                      : moduleName === 'Reports'
-                        ? onOpenReports
+                  : moduleName === 'Billing'
+                    ? onOpenBilling
+                  : moduleName === 'Camp Events'
+                    ? onOpenCampEvents
+                  : moduleName === 'Document Center'
+                    ? onOpenDocuments
+                  : moduleName === 'Invite Codes'
+                    ? onOpenInviteCodes
+                  : moduleName === 'Reports'
+                    ? onOpenReports
                     : onShowComingSoon;
 
               return (
@@ -2591,6 +2720,8 @@ function OwnerDashboardScreen({
                         ? onOpenBilling()
                       : moduleName === 'Camp Events'
                         ? onOpenCampEvents()
+                      : moduleName === 'Document Center'
+                        ? onOpenDocuments()
                       : moduleName === 'Invite Codes'
                         ? onOpenInviteCodes()
                       : moduleName === 'Reports'
@@ -5284,64 +5415,157 @@ function OwnerStudentsScreen({
   );
 }
 
-function OwnerStaffScreen({ onBack, onLogout, onShowComingSoon }) {
+function OwnerStaffScreen({
+  onBack,
+  onLogout,
+  onShowComingSoon,
+  staffTimeEntries = [],
+  staffProfiles = [],
+  onApproveTimeEntry,
+  onRejectTimeEntry,
+  reviewActionId = '',
+}) {
   const staffAccent = OWNER_MODULE_COLORS.Staff;
+  const [expandedStaffId, setExpandedStaffId] = useState(null);
+  const [rejectingEntry, setRejectingEntry] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const entries = Array.isArray(staffTimeEntries) ? staffTimeEntries : [];
+  const profiles = Array.isArray(staffProfiles) ? staffProfiles : [];
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const weekStart = new Date();
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
 
-  const staffSummaryCards = [
-    { title: 'Total Staff', value: '12', accent: 'green' },
-    { title: 'Clocked In', value: '7', accent: 'green' },
-    { title: 'Clocked Out', value: '5', accent: 'green' },
-    { title: 'Hours Pending Review', value: '3', accent: 'green' },
-  ];
+  const profileById = profiles.reduce((acc, profile) => {
+    acc[profile.id] = profile;
+    return acc;
+  }, {});
 
-  const staffMembers = [
-    {
-      id: 'ms-sarah',
-      name: 'Ms. Sarah',
-      role: 'Counselor',
-      status: 'Clocked In',
-      today: '7:30 AM - 4:00 PM',
-      hours: '32.0',
-      review: 'Pending',
-      badge: 'Shift On',
-      badgeTone: 'green',
-    },
-    {
-      id: 'mr-james',
-      name: 'Mr. James',
-      role: 'Bus / After Care',
-      status: 'Clocked In',
-      today: '8:00 AM - 5:00 PM',
-      hours: '30.5',
-      review: 'Approved',
-      badge: 'Shift On',
-      badgeTone: 'blue',
-    },
-    {
-      id: 'ms-kelly',
-      name: 'Ms. Kelly',
-      role: 'Camp Counselor',
-      status: 'Clocked Out',
-      today: '7:00 AM - 3:00 PM',
-      hours: '28.0',
-      review: 'Pending',
-      badge: 'Shift Off',
-      badgeTone: 'orange',
-    },
-  ];
+  const staffGroups = profiles.reduce((acc, profile) => {
+    const displayName =
+      [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
+      profile?.email ||
+      'Staff Member';
 
-  const badgeToneStyles = {
-    blue: styles.ownerStaffBadgeBlue,
-    green: styles.ownerStaffBadgeGreen,
-    orange: styles.ownerStaffBadgeOrange,
-    red: styles.ownerStaffBadgeRed,
-    purple: styles.ownerStaffBadgePurple,
+    acc[profile.id] = {
+      id: profile.id,
+      name: displayName,
+      email: profile.email || '',
+      latest: null,
+      todayEntries: [],
+      weekEntries: [],
+    };
+
+    return acc;
+  }, {});
+
+  entries.forEach((entry) => {
+    const staffId = entry.staff_profile_id || 'unknown';
+    const entryDate = new Date(entry.created_at || entry.clock_in || 0);
+    const dayKey = (entry.created_at || entry.clock_in || '').slice(0, 10);
+    const profile = profileById[staffId] || {};
+    const displayName =
+      [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
+      profile?.email ||
+      entry.staff_name ||
+      entry.staff_email ||
+      'Staff Member';
+
+    if (!staffGroups[staffId]) {
+      staffGroups[staffId] = {
+        id: staffId,
+        name: displayName,
+        email: entry.staff_email || profile.email || '',
+        latest: null,
+        todayEntries: [],
+        weekEntries: [],
+      };
+    }
+
+    if (
+      !staffGroups[staffId].latest ||
+      new Date(staffGroups[staffId].latest.created_at || staffGroups[staffId].latest.clock_in || 0).getTime() <
+        entryDate.getTime()
+    ) {
+      staffGroups[staffId].latest = entry;
+    }
+
+    if (dayKey === todayKey) {
+      staffGroups[staffId].todayEntries.push(entry);
+    }
+
+    if (entryDate >= weekStart) {
+      staffGroups[staffId].weekEntries.push(entry);
+    }
+  });
+
+  const staffRows = Object.values(staffGroups)
+    .map((person) => {
+      const latest = person.latest || {};
+      const currentStatus = latest.status === 'clocked_in'
+        ? 'Clocked In'
+        : latest.status === 'clocked_out'
+          ? 'Clocked Out'
+          : 'No Entries';
+      const todayMinutes = person.todayEntries.reduce(
+        (total, item) => total + (item.total_minutes || 0),
+        0
+      );
+      const weekMinutes = person.weekEntries.reduce(
+        (total, item) => total + (item.total_minutes || 0),
+        0
+      );
+
+      return {
+        ...person,
+        currentStatus,
+        todayMinutes,
+        weekMinutes,
+        sortedWeekEntries: [...person.weekEntries].sort(
+          (a, b) =>
+            new Date(b.created_at || b.clock_in || 0).getTime() -
+            new Date(a.created_at || a.clock_in || 0).getTime()
+        ),
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const currentlyClockedInCount = staffRows.filter((row) => row.currentStatus === 'Clocked In').length;
+  const totalStaffTodayCount = staffRows.filter((row) => row.todayEntries.length > 0).length;
+  const totalWeekMinutes = staffRows.reduce((total, row) => total + row.weekMinutes, 0);
+  const pendingPayrollReviewCount = staffRows.filter((row) => row.weekEntries.length > 0).length;
+
+  const formatWorked = (minutes, status) => {
+    if (!minutes && status === 'Clocked In') {
+      return 'In progress';
+    }
+    if (!minutes && status === 'No Entries') {
+      return '0 min';
+    }
+    return formatDuration(minutes);
   };
 
-  const reviewToneStyles = {
-    blue: styles.ownerStaffReviewBlue,
-    green: styles.ownerStaffReviewGreen,
-    orange: styles.ownerStaffReviewOrange,
+  const reviewLabelMap = {
+    pending: 'Pending Review',
+    approved: 'Approved',
+    rejected: 'Not Approved',
+  };
+
+  const getReviewStatusText = (entry) =>
+    reviewLabelMap[entry.review_status] || 'Pending Review';
+
+  const getReviewDetailText = (entry) => {
+    if (entry.review_status === 'approved') {
+      return entry.reviewed_at
+        ? `Approved on ${formatDateTime(entry.reviewed_at)}`
+        : 'Approved';
+    }
+
+    if (entry.review_status === 'rejected') {
+      return `Reason: ${entry.review_note || 'No reason provided.'}`;
+    }
+
+    return 'Waiting for owner review';
   };
 
   return (
@@ -5386,94 +5610,306 @@ function OwnerStaffScreen({ onBack, onLogout, onShowComingSoon }) {
       >
         <View style={styles.contentStack}>
           <View style={styles.ownerAccordionCard}>
-            <Text style={styles.ownerAccordionTitle}>Staff Summary</Text>
+            <Text style={styles.ownerAccordionTitle}>Payroll Summary</Text>
             <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
-              {staffSummaryCards.map((card) => (
-                <SummaryTile
-                  key={card.title}
-                  accent={card.accent}
-                  badge={card.title.charAt(0)}
-                  title={card.title}
-                  value={card.value}
-                  note="Center-wide totals"
-                  fill="Owner"
-                />
-              ))}
+              <SummaryTile
+                accent="green"
+                badge="C"
+                title="Currently Clocked In"
+                value={String(currentlyClockedInCount)}
+                note="Live staff on shift"
+                fill="Today"
+              />
+              <SummaryTile
+                accent="blue"
+                badge="S"
+                title="Total Staff Today"
+                value={String(totalStaffTodayCount)}
+                note="Distinct staff with entries today"
+                fill="Today"
+              />
+              <SummaryTile
+                accent="orange"
+                badge="H"
+                title="Total Hours This Week"
+                value={formatDuration(totalWeekMinutes)}
+                note="Current week total"
+                fill="Payroll"
+              />
+              <SummaryTile
+                accent="purple"
+                badge="P"
+                title="Pending Payroll Review"
+                value={String(pendingPayrollReviewCount)}
+                note="Staff with hours this week"
+                fill="Review"
+              />
             </View>
           </View>
 
           <View style={styles.ownerAccordionCard}>
-            <Text style={styles.ownerAccordionTitle}>Staff List</Text>
+            <Text style={styles.ownerAccordionTitle}>Staff Members</Text>
             <View style={styles.ownerStaffList}>
-              {staffMembers.map((member) => (
-                <View key={member.id} style={styles.ownerStaffCard}>
-                  <View style={styles.ownerStudentTopRow}>
-                    <View style={styles.ownerStudentMainBlock}>
-                      <Text style={styles.ownerStudentName}>{member.name}</Text>
-                      <Text style={styles.ownerStudentParent}>Role: {member.role}</Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.ownerStaffBadge,
-                        badgeToneStyles[member.badgeTone] || styles.ownerStaffBadgeGreen,
-                      ]}
-                    >
-                      <Text style={styles.ownerStaffBadgeText}>{member.badge}</Text>
-                    </View>
-                  </View>
+              {staffRows.length ? (
+                staffRows.map((member) => {
+                  const isOpen = expandedStaffId === member.id;
+                  const todayWorkedText = formatWorked(member.todayMinutes, member.currentStatus);
+                  const weekWorkedText = formatDuration(member.weekMinutes);
+                  const statusPillStyle =
+                    member.currentStatus === 'Clocked In'
+                      ? styles.ownerStaffStatusPillGreen
+                      : member.currentStatus === 'Clocked Out'
+                        ? styles.ownerStaffStatusPillOrange
+                        : { backgroundColor: COLORS.muted };
 
-                  <View style={styles.ownerStaffMetaList}>
-                    <View style={styles.ownerStaffMetaRow}>
-                      <Text style={styles.ownerStaffMetaLabel}>Status</Text>
-                      <View
-                        style={[
-                          styles.ownerStaffStatusPill,
-                          member.status === 'Clocked In'
-                            ? styles.ownerStaffStatusPillGreen
-                            : styles.ownerStaffStatusPillOrange,
+                  return (
+                    <View key={member.id} style={styles.ownerStaffCard}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() =>
+                          setExpandedStaffId((current) => (current === member.id ? null : member.id))
+                        }
+                        style={({ pressed }) => [
+                          styles.ownerStudentTopRow,
+                          pressed && styles.pressedButton,
+                        ]}
+                        >
+                        <View style={styles.ownerStudentMainBlock}>
+                          <Text style={styles.ownerStudentName}>{member.name}</Text>
+                          <Text style={styles.ownerStudentParent}>
+                            {member.email || member.id}
+                          </Text>
+                        </View>
+                        <View style={[styles.ownerStaffStatusPill, statusPillStyle]}>
+                          <Text style={styles.ownerStaffStatusPillText}>
+                            {member.currentStatus}
+                          </Text>
+                        </View>
+                      </Pressable>
+
+                      <View style={styles.ownerStaffMetaList}>
+                        <View style={styles.ownerStaffMetaRow}>
+                          <Text style={styles.ownerStaffMetaLabel}>Today Worked</Text>
+                          <Text style={styles.ownerStaffMetaValue}>{todayWorkedText}</Text>
+                        </View>
+                        <View style={styles.ownerStaffMetaRow}>
+                          <Text style={styles.ownerStaffMetaLabel}>This Week</Text>
+                          <Text style={styles.ownerStaffMetaValue}>{weekWorkedText}</Text>
+                        </View>
+                      </View>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() =>
+                          setExpandedStaffId((current) => (current === member.id ? null : member.id))
+                        }
+                        style={({ pressed }) => [
+                          styles.ownerStaffProfileButton,
+                          { backgroundColor: staffAccent },
+                          pressed && styles.pressedButton,
                         ]}
                       >
-                        <Text style={styles.ownerStaffStatusPillText}>{member.status}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.ownerStaffMetaRow}>
-                      <Text style={styles.ownerStaffMetaLabel}>Today</Text>
-                      <Text style={styles.ownerStaffMetaValue}>{member.today}</Text>
-                    </View>
-                    <View style={styles.ownerStaffMetaRow}>
-                      <Text style={styles.ownerStaffMetaLabel}>Hours This Week</Text>
-                      <Text style={styles.ownerStaffMetaValue}>{member.hours}</Text>
-                    </View>
-                    <View style={styles.ownerStaffMetaRow}>
-                      <Text style={styles.ownerStaffMetaLabel}>Review Status</Text>
-                      <View
-                        style={[
-                          styles.ownerStaffReviewPill,
-                          member.review === 'Approved'
-                            ? reviewToneStyles.green
-                            : reviewToneStyles.orange,
-                        ]}
-                      >
-                        <Text style={styles.ownerStaffReviewPillText}>{member.review}</Text>
-                      </View>
-                    </View>
-                  </View>
+                        <Text style={styles.ownerStaffProfileButtonText}>
+                          {isOpen ? 'Hide Recent Time Entries' : 'Recent Time Entries'}
+                        </Text>
+                      </Pressable>
 
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => onShowComingSoon('View Staff Profile')}
-                    style={({ pressed }) => [
-                      styles.ownerStaffProfileButton,
-                      { backgroundColor: staffAccent },
-                      pressed && styles.pressedButton,
-                    ]}
-                  >
-                    <Text style={styles.ownerStaffProfileButtonText}>View Staff Profile</Text>
-                  </Pressable>
-                </View>
-              ))}
+                      {isOpen ? (
+                        <View style={styles.ownerStaffMetaList}>
+                          <Text style={styles.ownerAccordionTitle}>Recent Time Entries</Text>
+                          {member.sortedWeekEntries.length ? (
+                            member.sortedWeekEntries.map((entry) => (
+                              <View key={entry.id} style={styles.ownerStaffCard}>
+                                <View
+                                  style={[
+                                    styles.ownerStaffMetaRow,
+                                    { alignItems: 'center', justifyContent: 'space-between' },
+                                  ]}
+                                >
+                                  <Text style={styles.ownerStaffMetaLabel}>Review Status</Text>
+                                  <View
+                                    style={[
+                                      styles.ownerStaffStatusPill,
+                                      entry.review_status === 'approved'
+                                        ? styles.ownerStaffStatusPillGreen
+                                        : entry.review_status === 'rejected'
+                                          ? styles.ownerStaffStatusPillOrange
+                                          : { backgroundColor: COLORS.warning },
+                                    ]}
+                                  >
+                                    <Text style={styles.ownerStaffStatusPillText}>
+                                      {getReviewStatusText(entry)}
+                                    </Text>
+                                  </View>
+                                </View>
+                                <View style={styles.ownerStaffMetaRow}>
+                                  <Text style={styles.ownerStaffMetaLabel}>Date</Text>
+                                  <Text style={styles.ownerStaffMetaValue}>
+                                    {formatDate(entry.created_at || entry.clock_in)}
+                                  </Text>
+                                </View>
+                                <View style={styles.ownerStaffMetaRow}>
+                                  <Text style={styles.ownerStaffMetaLabel}>Clock In</Text>
+                                  <Text style={styles.ownerStaffMetaValue}>
+                                    {formatTime(entry.clock_in)}
+                                  </Text>
+                                </View>
+                                <View style={styles.ownerStaffMetaRow}>
+                                  <Text style={styles.ownerStaffMetaLabel}>Clock Out</Text>
+                                  <Text style={styles.ownerStaffMetaValue}>
+                                    {entry.clock_out ? formatTime(entry.clock_out) : 'Still clocked in'}
+                                  </Text>
+                                </View>
+                                <View style={styles.ownerStaffMetaRow}>
+                                  <Text style={styles.ownerStaffMetaLabel}>Total Worked</Text>
+                                  <Text style={styles.ownerStaffMetaValue}>
+                                    {entry.total_minutes > 0
+                                      ? formatDuration(entry.total_minutes)
+                                      : entry.status === 'clocked_in'
+                                        ? 'In progress'
+                                        : '0 min'}
+                                  </Text>
+                                </View>
+                                <View style={styles.ownerStaffMetaRow}>
+                                  <Text style={styles.ownerStaffMetaLabel}>Status</Text>
+                                  <Text style={styles.ownerStaffMetaValue}>
+                                    {entry.status === 'clocked_in'
+                                      ? 'Clocked In'
+                                      : entry.status === 'clocked_out'
+                                        ? 'Clocked Out'
+                                        : 'Unknown'}
+                                  </Text>
+                                </View>
+                                <View style={styles.ownerStaffMetaRow}>
+                                  <Text style={styles.ownerStaffMetaLabel}>Review Note</Text>
+                                  <Text style={styles.ownerStaffMetaValue}>
+                                    {getReviewDetailText(entry)}
+                                  </Text>
+                                </View>
+                                {entry.review_status === 'pending' ? (
+                                  <View style={styles.ownerActionButtonStack}>
+                                    <Pressable
+                                      accessibilityRole="button"
+                                      disabled={reviewActionId === entry.id}
+                                      onPress={() => onApproveTimeEntry?.(entry)}
+                                      style={({ pressed }) => [
+                                        styles.primaryButton,
+                                        pressed && reviewActionId !== entry.id && styles.pressedButton,
+                                        reviewActionId === entry.id && styles.ownerMessageSendDisabled,
+                                      ]}
+                                    >
+                                      <Text style={styles.primaryButtonText}>
+                                        {reviewActionId === entry.id ? 'Approving...' : 'Approve'}
+                                      </Text>
+                                    </Pressable>
+                                    <Pressable
+                                      accessibilityRole="button"
+                                      disabled={reviewActionId === entry.id}
+                                      onPress={() => {
+                                        setRejectingEntry(entry);
+                                        setRejectReason('');
+                                      }}
+                                      style={({ pressed }) => [
+                                        styles.secondaryButton,
+                                        pressed && reviewActionId !== entry.id && styles.pressedButton,
+                                        reviewActionId === entry.id && styles.ownerMessageSendDisabled,
+                                      ]}
+                                    >
+                                      <Text style={styles.secondaryButtonText}>Reject</Text>
+                                    </Pressable>
+                                  </View>
+                                ) : null}
+                              </View>
+                            ))
+                          ) : (
+                            <Text style={styles.parentAttendanceStateText}>
+                              No recent time entries.
+                            </Text>
+                          )}
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })
+              ) : (
+                <Text style={styles.parentAttendanceStateText}>No staff time entries yet.</Text>
+              )}
             </View>
           </View>
+
+          {rejectingEntry ? (
+            <View
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(15, 23, 42, 0.55)',
+                justifyContent: 'center',
+                padding: 20,
+                zIndex: 50,
+              }}
+            >
+              <View
+                style={[
+                  styles.ownerAccordionCard,
+                  {
+                    width: '100%',
+                    maxWidth: 520,
+                    alignSelf: 'center',
+                    marginBottom: 0,
+                  },
+                ]}
+              >
+                <Text style={styles.ownerAccordionTitle}>Reject Time Entry</Text>
+                <Text style={styles.ownerAccordionSummary}>
+                  Provide a reason before rejecting this staff entry.
+                </Text>
+                <TextInput
+                  value={rejectReason}
+                  onChangeText={setRejectReason}
+                  placeholder="Reason not approved"
+                  placeholderTextColor={COLORS.muted}
+                  multiline
+                  style={[
+                    styles.ownerMessageInput,
+                    {
+                      minHeight: 110,
+                      marginTop: 14,
+                    },
+                  ]}
+                />
+                <View style={styles.ownerActionButtonStack}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setRejectingEntry(null);
+                      setRejectReason('');
+                    }}
+                    style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
+                  >
+                    <Text style={styles.secondaryButtonText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      if (!rejectReason.trim()) {
+                        Alert.alert('Reason required.', 'Please provide a reason before rejecting.');
+                        return;
+                      }
+                      onRejectTimeEntry?.(rejectingEntry, rejectReason);
+                      setRejectingEntry(null);
+                      setRejectReason('');
+                    }}
+                    style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}
+                  >
+                    <Text style={styles.primaryButtonText}>Submit Rejection</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          ) : null}
 
           <View style={styles.ownerAccordionCard}>
             <Text style={styles.ownerAccordionTitle}>Owner Staff Actions</Text>
@@ -5521,12 +5957,37 @@ function OwnerStaffScreen({ onBack, onLogout, onShowComingSoon }) {
 function StaffClockInOutScreen({
   onBack,
   onLogout,
+  currentUserId,
   staffStatus,
-  onToggleStaffStatus,
-  lastClockInTime,
-  lastClockOutTime,
+  loading,
+  error,
+  timeEntries,
+  onClockIn,
+  onClockOut,
+  saving,
 }) {
   const isCheckedOut = staffStatus === 'Checked Out';
+  const entriesForUser = (Array.isArray(timeEntries) ? timeEntries : []).filter(
+    (entry) => entry.staff_profile_id === currentUserId
+  );
+  const latestEntry = entriesForUser[0] || null;
+  const latestClockIn = latestEntry?.clock_in || '';
+  const latestClockOut = latestEntry?.clock_out || '';
+  const latestTotalMinutes = latestEntry?.total_minutes || 0;
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayEntries = entriesForUser.filter((entry) =>
+    (entry.created_at || entry.clock_in || '').slice(0, 10) === todayKey
+  );
+  const todayWorkedMinutes = todayEntries.reduce(
+    (total, entry) => total + (entry.total_minutes || 0),
+    0
+  );
+  const todayWorkedValue =
+    todayWorkedMinutes > 0
+      ? formatDuration(todayWorkedMinutes)
+      : isCheckedOut
+        ? '0 min'
+        : 'In progress';
 
   return (
     <View style={styles.parentHomePage}>
@@ -5584,12 +6045,16 @@ function StaffClockInOutScreen({
                 <Text style={styles.staffClockDetailValue}>{staffStatus}</Text>
               </View>
               <View style={styles.staffClockDetailRow}>
-                <Text style={styles.staffClockDetailLabel}>Today&apos;s shift</Text>
-                <Text style={styles.staffClockDetailValue}>{STAFF_MEMBER.shift}</Text>
+                <Text style={styles.staffClockDetailLabel}>Today worked</Text>
+                <Text style={styles.staffClockDetailValue}>{todayWorkedValue}</Text>
               </View>
               <View style={styles.staffClockDetailRow}>
-                <Text style={styles.staffClockDetailLabel}>Current mock time</Text>
-                <Text style={styles.staffClockDetailValue}>{STAFF_CLOCK_CURRENT_TIME}</Text>
+                <Text style={styles.staffClockDetailLabel}>Last clock in</Text>
+                <Text style={styles.staffClockDetailValue}>{formatTime(latestClockIn)}</Text>
+              </View>
+              <View style={styles.staffClockDetailRow}>
+                <Text style={styles.staffClockDetailLabel}>Last clock out</Text>
+                <Text style={styles.staffClockDetailValue}>{formatTime(latestClockOut)}</Text>
               </View>
             </View>
           </View>
@@ -5617,44 +6082,34 @@ function StaffClockInOutScreen({
 
             <Pressable
               accessibilityRole="button"
-              onPress={onToggleStaffStatus}
+              onPress={isCheckedOut ? onClockIn : onClockOut}
+              disabled={loading || saving}
               style={({ pressed }) => [
                 styles.staffClockPrimaryButton,
+                (loading || saving) && styles.pressedButton,
                 pressed && styles.pressedButton,
               ]}
             >
               <Text style={styles.staffClockPrimaryButtonText}>
-                {isCheckedOut ? 'Clock In' : 'Clock Out'}
+                {loading || saving
+                  ? 'Saving...'
+                  : isCheckedOut
+                    ? 'Clock In'
+                    : 'Clock Out'}
               </Text>
             </Pressable>
 
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
             <View style={styles.staffClockDetailList}>
               <View style={styles.staffClockDetailRow}>
-                <Text style={styles.staffClockDetailLabel}>Last clock in</Text>
-                <Text style={styles.staffClockDetailValue}>
-                  {lastClockInTime || 'Not logged yet'}
-                </Text>
+                <Text style={styles.staffClockDetailLabel}>Today&apos;s total</Text>
+                <Text style={styles.staffClockDetailValue}>{formatMinutes(latestTotalMinutes)}</Text>
               </View>
               <View style={styles.staffClockDetailRow}>
-                <Text style={styles.staffClockDetailLabel}>Last clock out</Text>
-                <Text style={styles.staffClockDetailValue}>
-                  {lastClockOutTime || 'Not logged yet'}
-                </Text>
+                <Text style={styles.staffClockDetailLabel}>Current day status</Text>
+                <Text style={styles.staffClockDetailValue}>{latestEntry?.status || 'Not logged yet'}</Text>
               </View>
-            </View>
-          </View>
-
-          <View style={styles.profileCard}>
-            <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Owner Review</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>Pending</Text>
-            </View>
-
-            <Text style={styles.billingNote}>
-              Your hours are tracked for owner review.
-            </Text>
-            <View style={styles.staffClockOwnerPill}>
-              <Text style={styles.staffClockOwnerPillText}>Approval Status: Pending</Text>
             </View>
           </View>
 
@@ -7603,6 +8058,10 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
   const [selectedParentId, setSelectedParentId] = useState('');
   const [selectedChildId, setSelectedChildId] = useState('');
   const [selectedInvoiceId, setSelectedInvoiceId] = useState('');
+  const [paymentMethodModalVisible, setPaymentMethodModalVisible] = useState(false);
+  const [pendingPaymentInvoice, setPendingPaymentInvoice] = useState(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
+  const [showPaidReport, setShowPaidReport] = useState(false);
   const [billingSuccess, setBillingSuccess] = useState('');
   const [billingForm, setBillingForm] = useState({
     billingPeriodStart: '',
@@ -7614,7 +8073,7 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
     status: 'pending',
   });
 
-  const loadOwnerBillingInvoices = useCallback(async () => {
+  const loadOwnerBillingInvoices = useCallback(async (skipAutoOverdue = false) => {
     if (!currentUserId) {
       setInvoices([]);
       setInvoicesError('');
@@ -7649,6 +8108,37 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
       }
 
       const rawInvoices = Array.isArray(invoicesData) ? invoicesData : [];
+      if (!skipAutoOverdue) {
+        const todayKey = new Date().toISOString().split('T')[0];
+        const overdueIds = rawInvoices
+          .filter((invoice) => {
+            const dueDateKey = String(invoice.due_date || '').slice(0, 10);
+            return (
+              invoice.status === 'pending' &&
+              dueDateKey &&
+              dueDateKey < todayKey
+            );
+          })
+          .map((invoice) => invoice.id)
+          .filter(Boolean);
+
+        if (overdueIds.length) {
+          const { error: overdueUpdateError } = await supabase
+            .from('invoices')
+            .update({ status: 'overdue' })
+            .in('id', overdueIds);
+
+          if (overdueUpdateError) {
+            throw new Error(
+              overdueUpdateError.message || 'Could not update overdue invoices.'
+            );
+          }
+
+          await loadOwnerBillingInvoices(true);
+          return;
+        }
+      }
+
       const parentIds = Array.from(
         new Set(rawInvoices.map((invoice) => invoice.parent_profile_id).filter(Boolean))
       );
@@ -7657,7 +8147,12 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
       );
       const invoiceIds = Array.from(new Set(rawInvoices.map((invoice) => invoice.id).filter(Boolean)));
 
-      const [invoiceParentsResult, invoiceChildrenResult, invoiceLineItemsResult] = await Promise.all([
+      const [
+        invoiceParentsResult,
+        invoiceChildrenResult,
+        invoiceLineItemsResult,
+        invoicePaymentsResult,
+      ] = await Promise.all([
         parentIds.length
           ? supabase.from('profiles').select('id, email').in('id', parentIds)
           : Promise.resolve({ data: [], error: null }),
@@ -7673,6 +8168,13 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
               .select('id, invoice_id, description, quantity, rate, amount')
               .in('invoice_id', invoiceIds)
           : Promise.resolve({ data: [], error: null }),
+        invoiceIds.length
+          ? supabase
+              .from('payments')
+              .select('id, invoice_id, amount, payment_method, payment_date, status')
+              .in('invoice_id', invoiceIds)
+              .order('payment_date', { ascending: false })
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
       if (invoiceParentsResult.error) {
@@ -7687,6 +8189,10 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
         throw new Error(
           invoiceLineItemsResult.error.message || 'Could not load invoice line items.'
         );
+      }
+
+      if (invoicePaymentsResult.error) {
+        throw new Error(invoicePaymentsResult.error.message || 'Could not load payments.');
       }
 
       const parentById = (Array.isArray(invoiceParentsResult.data)
@@ -7715,11 +8221,22 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
         return acc;
       }, {});
 
+      const paymentByInvoiceId = (Array.isArray(invoicePaymentsResult.data)
+        ? invoicePaymentsResult.data
+        : []
+      ).reduce((acc, payment) => {
+        if (!acc[payment.invoice_id]) {
+          acc[payment.invoice_id] = payment;
+        }
+        return acc;
+      }, {});
+
       setInvoices(
         rawInvoices.map((invoice) => {
           const parent = parentById[invoice.parent_profile_id];
           const child = childById[invoice.child_id];
           const lineItem = lineItemByInvoiceId[invoice.id];
+          const payment = paymentByInvoiceId[invoice.id];
 
           return {
             ...invoice,
@@ -7727,6 +8244,9 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
             description: lineItem?.description || '',
             quantity: String(lineItem?.quantity ?? ''),
             rate: String(lineItem?.rate ?? ''),
+            paymentDate: payment?.payment_date || '',
+            paymentMethod: payment?.payment_method || '',
+            amountPaid: payment?.amount ?? invoice.total ?? 0,
             parentEmail: parent?.email || 'Unknown parent',
             childName:
               `${child?.first_name || ''} ${child?.last_name || ''}`.trim() ||
@@ -7878,32 +8398,51 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
     loadOwnerBillingChildren(selectedParentId);
   }, [loadOwnerBillingChildren, selectedParentId]);
 
+  const currentMonth = new Date();
+  const outstandingBalance = invoices
+    .filter((invoice) => invoice.status === 'pending' || invoice.status === 'overdue')
+    .reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+  const pendingCount = invoices.filter((invoice) => invoice.status === 'pending').length;
+  const overdueCount = invoices.filter((invoice) => invoice.status === 'overdue').length;
+  const paidThisMonth = invoices
+    .filter((invoice) => {
+      if (invoice.status !== 'paid' || !invoice.paymentDate) {
+        return false;
+      }
+
+      const paymentDate = new Date(invoice.paymentDate);
+      return (
+        !Number.isNaN(paymentDate.getTime()) &&
+        paymentDate.getMonth() === currentMonth.getMonth() &&
+        paymentDate.getFullYear() === currentMonth.getFullYear()
+      );
+    })
+    .reduce((sum, invoice) => sum + Number(invoice.amountPaid ?? invoice.total ?? 0), 0);
+
   const billingSummaryCards = [
     {
-      title: 'Total Outstanding',
-      value: formatCurrency(
-        invoices.filter((invoice) => invoice.status !== 'paid').reduce((sum, invoice) => sum + Number(invoice.total || 0), 0)
-      ),
+      title: 'Outstanding Balance',
+      value: formatCurrency(outstandingBalance),
       accent: 'orange',
       note: 'Pending and overdue balances',
     },
     {
-      title: 'Paid',
-      value: String(invoices.filter((invoice) => invoice.status === 'paid').length),
-      accent: 'green',
-      note: 'Completed invoices',
-    },
-    {
-      title: 'Pending',
-      value: String(invoices.filter((invoice) => invoice.status === 'pending').length),
+      title: 'Pending Invoices',
+      value: String(pendingCount),
       accent: 'orange',
       note: 'Awaiting payment',
     },
     {
-      title: 'Overdue',
-      value: String(invoices.filter((invoice) => invoice.status === 'overdue').length),
+      title: 'Overdue Invoices',
+      value: String(overdueCount),
       accent: 'red',
-      note: 'Needs follow-up',
+      note: 'Past due balances',
+    },
+    {
+      title: 'Paid This Month',
+      value: formatCurrency(paidThisMonth),
+      accent: 'green',
+      note: 'Collected this month',
     },
   ];
 
@@ -7929,6 +8468,7 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
     setBillingSuccess('');
     setSelectedInvoiceId('');
     resetForm();
+    setShowPaidReport(false);
     setShowCreateForm(true);
   };
 
@@ -7940,6 +8480,7 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
   const handleOpenEditInvoice = useCallback(
     (invoice) => {
       setBillingSuccess('');
+      setShowPaidReport(false);
       setSelectedInvoiceId(invoice.id);
       setSelectedParentId(invoice.parent_profile_id || '');
       setSelectedChildId(invoice.child_id || '');
@@ -7956,6 +8497,69 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
     },
     []
   );
+
+  const handleMarkPaid = useCallback(
+    (invoice) => {
+      if (!invoice?.id) {
+        return;
+      }
+
+      setPendingPaymentInvoice(invoice);
+      setSelectedPaymentMethod('');
+      setPaymentMethodModalVisible(true);
+    },
+    []
+  );
+
+  const handleConfirmMarkPaid = useCallback(async () => {
+    if (!currentUserId || !pendingPaymentInvoice?.id) {
+      return;
+    }
+
+    if (!selectedPaymentMethod) {
+      Alert.alert('Select a payment method.');
+      return;
+    }
+
+    setSavingInvoice(true);
+
+    try {
+      const paidDate = new Date().toISOString();
+      const paymentMethodValue = selectedPaymentMethod.trim().toLowerCase();
+
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({ status: 'paid' })
+        .eq('id', pendingPaymentInvoice.id);
+
+      if (updateError) {
+        throw new Error(updateError.message || 'Could not mark invoice as paid.');
+      }
+
+      const { error: paymentError } = await supabase.from('payments').insert({
+        invoice_id: pendingPaymentInvoice.id,
+        amount: pendingPaymentInvoice.total,
+        payment_method: paymentMethodValue,
+        payment_date: paidDate,
+        status: 'completed',
+      });
+
+      if (paymentError) {
+        throw new Error(paymentError.message || 'Could not save payment.');
+      }
+
+      await loadOwnerBillingInvoices();
+      setBillingSuccess('Invoice marked paid.');
+      setPaymentMethodModalVisible(false);
+      setPendingPaymentInvoice(null);
+      setSelectedPaymentMethod('');
+      Alert.alert('Invoice marked paid.');
+    } catch (markPaidError) {
+      Alert.alert('Could not mark invoice paid.', markPaidError?.message || 'Try again.');
+    } finally {
+      setSavingInvoice(false);
+    }
+  }, [currentUserId, loadOwnerBillingInvoices, pendingPaymentInvoice, selectedPaymentMethod]);
 
   const handleSaveInvoice = useCallback(async () => {
     if (!currentUserId || !selectedParentId || !selectedChildId) {
@@ -8127,6 +8731,73 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
+  const paidInvoices = invoices.filter((invoice) => invoice.status === 'paid');
+  const paidReportRows = paidInvoices.map((invoice) => ({
+    ...invoice,
+    paymentDate: invoice.paymentDate || invoice.created_at || '',
+    paymentMethod: invoice.paymentMethod || 'cash',
+  }));
+  const billingPaymentMethods = [
+    'Cash',
+    'Check',
+    'Zelle',
+    'Venmo',
+    'ACH',
+    'Credit Card',
+    'Other',
+  ];
+
+  const buildPaidReportCsv = () => {
+    const headers = [
+      'Invoice Number',
+      'Parent',
+      'Child',
+      'Amount',
+      'Payment Method',
+      'Payment Date',
+    ];
+
+    const escapeCsv = (value) =>
+      `"${String(value ?? '')
+        .replace(/"/g, '""')
+        .replace(/\r?\n/g, ' ')
+        .trim()}"`;
+
+    const rows = paidReportRows.map((invoice) => [
+      invoice.invoice_number,
+      invoice.parentEmail,
+      invoice.childName,
+      formatCurrency(invoice.total),
+      invoice.paymentMethod || 'cash',
+      formatDateTime(invoice.paymentDate),
+    ]);
+
+    return [headers, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\n');
+  };
+
+  const handleExportPaidReportCsv = () => {
+    const csv = buildPaidReportCsv();
+    const filename = `paid-report-${new Date().toISOString().split('T')[0]}.csv`;
+
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      return;
+    }
+
+    Share.share({
+      message: csv,
+      title: filename,
+    });
+  };
+
   return (
     <View style={styles.page}>
       <View style={styles.ownerBillingHero}>
@@ -8216,6 +8887,96 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
               })}
             </View>
 
+            <View style={styles.billingActionRow}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setShowPaidReport((current) => !current)}
+                style={({ pressed }) => [
+                  styles.ownerCreateInvoiceButton,
+                  pressed && styles.pressedButton,
+                ]}
+              >
+                <Text style={styles.ownerCreateInvoiceButtonText}>Paid Report</Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => Alert.alert('Export Report', 'Paid report export coming soon.')}
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  styles.billingReportSecondaryButton,
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <Text style={styles.secondaryButtonText}>Export Report</Text>
+              </Pressable>
+            </View>
+
+            {showPaidReport ? (
+              <View style={styles.profileCard}>
+                <View style={styles.parentSectionHeaderRow}>
+                  <Text style={styles.parentSectionHeaderTitle}>Paid Report</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={handleExportPaidReportCsv}
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      styles.billingReportSecondaryButton,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.secondaryButtonText}>Export CSV</Text>
+                  </Pressable>
+                </View>
+
+                <Text style={styles.parentSectionHeaderSubtle}>
+                  {paidReportRows.length} invoices
+                </Text>
+
+                {paidReportRows.length ? (
+                  <View style={styles.billingInvoiceList}>
+                    {paidReportRows.map((invoice) => (
+                      <View key={`paid-${invoice.id}`} style={styles.billingInvoiceCard}>
+                        <View style={styles.billingInvoiceCardHeader}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.billingInvoicePeriod}>{invoice.invoice_number}</Text>
+                            <Text style={styles.billingInvoiceDetail}>{invoice.parentEmail}</Text>
+                            <Text style={styles.billingInvoiceDetail}>{invoice.childName}</Text>
+                          </View>
+                          <View style={styles.billingStatusPill}>
+                            <Text style={styles.billingStatusPillText}>Paid</Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.billingDetailList}>
+                          <View style={styles.billingDetailRow}>
+                            <Text style={styles.billingDetailLabel}>Total</Text>
+                            <Text style={styles.billingDetailValue}>
+                              {formatCurrency(invoice.total)}
+                            </Text>
+                          </View>
+                          <View style={styles.billingDetailRow}>
+                            <Text style={styles.billingDetailLabel}>Payment Date</Text>
+                            <Text style={styles.billingDetailValue}>
+                              {formatDateTime(invoice.paymentDate)}
+                            </Text>
+                          </View>
+                          <View style={styles.billingDetailRow}>
+                            <Text style={styles.billingDetailLabel}>Payment Method</Text>
+                            <Text style={styles.billingDetailValue}>
+                              {invoice.paymentMethod || 'cash'}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.parentAttendanceStateText}>No paid invoices yet.</Text>
+                )}
+              </View>
+            ) : null}
+
             {invoicesLoading ? (
               <Text style={styles.parentAttendanceStateText}>Loading invoices...</Text>
             ) : invoicesError ? (
@@ -8246,7 +9007,7 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
                       </View>
                     </View>
 
-                      <View style={styles.ownerInvoiceDetailGrid}>
+                    <View style={styles.ownerInvoiceDetailGrid}>
                       <View style={styles.ownerInvoiceDetailRow}>
                         <Text style={styles.ownerInvoiceDetailLabel}>Total</Text>
                         <Text style={styles.ownerInvoiceDetailValue}>
@@ -8267,6 +9028,22 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
                           )}`}
                         </Text>
                       </View>
+                      {invoice.status === 'paid' ? (
+                        <>
+                          <View style={styles.ownerInvoiceDetailRow}>
+                            <Text style={styles.ownerInvoiceDetailLabel}>Payment Date</Text>
+                            <Text style={styles.ownerInvoiceDetailValue}>
+                              {formatDateTime(invoice.paymentDate)}
+                            </Text>
+                          </View>
+                          <View style={styles.ownerInvoiceDetailRow}>
+                            <Text style={styles.ownerInvoiceDetailLabel}>Amount Paid</Text>
+                            <Text style={styles.ownerInvoiceDetailValue}>
+                              {formatCurrency(invoice.amountPaid)}
+                            </Text>
+                          </View>
+                        </>
+                      ) : null}
                     </View>
 
                     <View style={styles.ownerInvoiceCardActions}>
@@ -8280,6 +9057,19 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
                       >
                         <Text style={styles.ownerInvoiceActionButtonText}>Edit</Text>
                       </Pressable>
+                      {(invoice.status === 'pending' || invoice.status === 'overdue') ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => handleMarkPaid(invoice)}
+                          style={({ pressed }) => [
+                            styles.ownerInvoiceActionButton,
+                            styles.ownerInvoiceMarkPaidButton,
+                            pressed && styles.pressedButton,
+                          ]}
+                        >
+                          <Text style={styles.ownerInvoiceActionButtonText}>Mark Paid</Text>
+                        </Pressable>
+                      ) : null}
                     </View>
                   </View>
                 ))}
@@ -8542,6 +9332,102 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
               </View>
             </View>
           ) : null}
+
+          <Modal
+            animationType="fade"
+            transparent
+            visible={paymentMethodModalVisible}
+            onRequestClose={() => {
+              setPaymentMethodModalVisible(false);
+              setPendingPaymentInvoice(null);
+              setSelectedPaymentMethod('');
+            }}
+          >
+            <View style={styles.billingModalBackdrop}>
+              <View style={styles.billingModalCard}>
+              <Text style={styles.ownerAccordionTitle}>Select Payment Method</Text>
+              <Text style={styles.parentAttendanceStateText}>
+                Choose how this invoice was paid before marking it complete.
+              </Text>
+
+                {pendingPaymentInvoice ? (
+                  <View style={styles.billingDetailList}>
+                    <View style={styles.billingDetailRow}>
+                      <Text style={styles.billingDetailLabel}>Invoice</Text>
+                      <Text style={styles.billingDetailValue}>
+                        {pendingPaymentInvoice.invoice_number}
+                      </Text>
+                    </View>
+                    <View style={styles.billingDetailRow}>
+                      <Text style={styles.billingDetailLabel}>Amount</Text>
+                      <Text style={styles.billingDetailValue}>
+                        {formatCurrency(pendingPaymentInvoice.total)}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+
+                <View style={styles.billingPaymentMethodList}>
+                  {billingPaymentMethods.map((method) => {
+                    const active =
+                      selectedPaymentMethod.toLowerCase() === method.toLowerCase();
+
+                    return (
+                      <Pressable
+                        key={method}
+                        accessibilityRole="button"
+                        onPress={() => setSelectedPaymentMethod(method)}
+                        style={({ pressed }) => [
+                          styles.ownerBillingOptionCard,
+                          active && styles.ownerBillingOptionCardActive,
+                          pressed && styles.pressedButton,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.ownerBillingOptionCardText,
+                            active && styles.ownerBillingOptionCardTextActive,
+                          ]}
+                        >
+                          {method}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.ownerInvoiceCreateActions}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setPaymentMethodModalVisible(false);
+                      setPendingPaymentInvoice(null);
+                      setSelectedPaymentMethod('');
+                    }}
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.secondaryButtonText}>Cancel</Text>
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={handleConfirmMarkPaid}
+                    disabled={!selectedPaymentMethod}
+                    style={({ pressed }) => [
+                      styles.primaryButton,
+                      !selectedPaymentMethod && styles.buttonDisabled,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text style={styles.primaryButtonText}>Confirm Paid</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </Modal>
 
           {billingSuccess ? (
             <View style={styles.ownerAccordionCard}>
@@ -9266,65 +10152,482 @@ function OwnerReportsScreen({ onBack, onLogout, onShowComingSoon }) {
   const reportsAccent = OWNER_MODULE_COLORS.Reports;
   const [openReportId, setOpenReportId] = useState(null);
   const [activeFilter, setActiveFilter] = useState('This Week');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reportExports, setReportExports] = useState({
+    attendance: [],
+    staffHours: [],
+    billing: [],
+    incident: [],
+    forms: [],
+  });
+  const [summary, setSummary] = useState({
+    attendance: {
+      checkIns: 0,
+      checkOuts: 0,
+      recentActivity: '',
+    },
+    staffHours: {
+      totalMinutesThisWeek: 0,
+      pendingApprovals: 0,
+      approvedHours: 0,
+      rejectedHours: 0,
+    },
+    billing: {
+      outstandingBalance: 0,
+      paidTotal: 0,
+      overdueTotal: 0,
+      pendingInvoices: 0,
+    },
+    incident: {
+      pendingReview: 0,
+      approved: 0,
+      acknowledged: 0,
+    },
+    forms: {
+      totalForms: 0,
+      signedCount: 0,
+      pendingCount: 0,
+    },
+  });
+
+  const loadOwnerReports = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const weekStart = (() => {
+        const now = new Date();
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(now);
+        monday.setHours(0, 0, 0, 0);
+        monday.setDate(diff);
+        return monday.toISOString().split('T')[0];
+      })();
+
+      const [
+        attendanceResult,
+        staffHoursResult,
+        invoicesResult,
+        paymentsResult,
+        incidentsResult,
+        formsResult,
+        signaturesResult,
+        childrenResult,
+        profilesResult,
+      ] = await Promise.all([
+        supabase
+          .from('attendance_events')
+          .select('id, child_id, event_type, event_time')
+          .order('event_time', { ascending: false }),
+        supabase
+          .from('staff_time_entries')
+          .select('id, staff_profile_id, total_minutes, status, clock_in, clock_out, created_at, reviewed_at, review_status')
+          .gte('created_at', `${weekStart}T00:00:00.000Z`),
+        supabase.from('invoices').select('id, invoice_number, parent_profile_id, child_id, total, status, due_date, created_at'),
+        supabase.from('payments').select('id, invoice_id, amount, payment_date, status'),
+        supabase.from('incident_reports').select('id, child_id, review_status, parent_acknowledged_at, created_at'),
+        supabase.from('forms_documents').select('id, title, audience_type, recipient_profile_id, created_at'),
+        supabase.from('form_signatures').select('id, form_id, parent_profile_id, created_at'),
+        supabase.from('children').select('id, first_name, last_name'),
+        supabase.from('profiles').select('id, email, first_name, last_name, role, account_status'),
+      ]);
+
+      const attendanceRows = Array.isArray(attendanceResult.data) ? attendanceResult.data : [];
+      const staffRows = Array.isArray(staffHoursResult.data) ? staffHoursResult.data : [];
+      const invoiceRows = Array.isArray(invoicesResult.data) ? invoicesResult.data : [];
+      const paymentRows = Array.isArray(paymentsResult.data) ? paymentsResult.data : [];
+      const incidentRows = Array.isArray(incidentsResult.data) ? incidentsResult.data : [];
+      const formRows = Array.isArray(formsResult.data) ? formsResult.data : [];
+      const signatureRows = Array.isArray(signaturesResult.data) ? signaturesResult.data : [];
+      const childRows = Array.isArray(childrenResult.data) ? childrenResult.data : [];
+      const profileRows = Array.isArray(profilesResult.data) ? profilesResult.data : [];
+
+      if (attendanceResult.error) throw new Error(attendanceResult.error.message || 'Could not load attendance report.');
+      if (staffHoursResult.error) throw new Error(staffHoursResult.error.message || 'Could not load staff hours report.');
+      if (invoicesResult.error) throw new Error(invoicesResult.error.message || 'Could not load billing report.');
+      if (paymentsResult.error) throw new Error(paymentsResult.error.message || 'Could not load payments report.');
+      if (incidentsResult.error) throw new Error(incidentsResult.error.message || 'Could not load incident report.');
+      if (formsResult.error) throw new Error(formsResult.error.message || 'Could not load forms report.');
+      if (signaturesResult.error) throw new Error(signaturesResult.error.message || 'Could not load signatures report.');
+      if (childrenResult.error) throw new Error(childrenResult.error.message || 'Could not load child lookup data.');
+      if (profilesResult.error) throw new Error(profilesResult.error.message || 'Could not load profile lookup data.');
+
+      const childNameMap = new Map(
+        childRows.map((child) => [child.id, [child.first_name, child.last_name].filter(Boolean).join(' ') || 'Unknown Child'])
+      );
+
+      const profileNameMap = new Map(
+        profileRows.map((profile) => [
+          profile.id,
+          [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.email || 'Unknown Person',
+        ])
+      );
+
+      const activeParentProfiles = profileRows.filter(
+        (profile) => profile.role === 'parent' && profile.account_status === 'active'
+      );
+      const activeStaffProfiles = profileRows.filter(
+        (profile) => profile.role === 'staff' && profile.account_status === 'active'
+      );
+
+      const signatureCountByForm = signatureRows.reduce((acc, signature) => {
+        acc[signature.form_id] = (acc[signature.form_id] || 0) + 1;
+        return acc;
+      }, {});
+
+      const paidInvoiceIds = new Set(
+        paymentRows.filter((payment) => payment.status === 'completed').map((payment) => payment.invoice_id)
+      );
+
+      const outstandingBalance = invoiceRows
+        .filter((invoice) => invoice.status === 'pending' || invoice.status === 'overdue')
+        .reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+
+      const paidTotal = invoiceRows
+        .filter((invoice) => invoice.status === 'paid' || paidInvoiceIds.has(invoice.id))
+        .reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+
+      const overdueTotal = invoiceRows
+        .filter((invoice) => invoice.status === 'overdue')
+        .reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+
+      const pendingInvoices = invoiceRows.filter((invoice) => invoice.status === 'pending').length;
+
+      const checkIns = attendanceRows.filter((row) => row.event_type === 'check_in').length;
+      const checkOuts = attendanceRows.filter((row) => row.event_type === 'check_out').length;
+      const recentAttendance = attendanceRows[0];
+
+      const totalMinutesThisWeek = staffRows.reduce((sum, row) => sum + Number(row.total_minutes || 0), 0);
+      const pendingApprovals = staffRows.filter((row) => row.review_status === 'pending').length;
+      const approvedHours = staffRows.filter((row) => row.review_status === 'approved').length;
+      const rejectedHours = staffRows.filter((row) => row.review_status === 'rejected').length;
+
+      const pendingReview = incidentRows.filter((row) => row.review_status === 'pending').length;
+      const approved = incidentRows.filter((row) => row.review_status === 'approved').length;
+      const acknowledged = incidentRows.filter((row) => row.parent_acknowledged_at).length;
+
+      const signedCount = signatureRows.length;
+      const totalForms = formRows.length;
+
+      const attendanceExportRows = attendanceRows.map((row) => ({
+        child: childNameMap.get(row.child_id) || 'Unknown Child',
+        eventType: formatMessageTypeLabel(row.event_type),
+        date: formatDate(row.event_time),
+        time: formatTime(row.event_time),
+      }));
+
+      const staffHoursExportRows = staffRows.map((row) => ({
+        staff: profileNameMap.get(row.staff_profile_id) || 'Staff Member',
+        date: formatDate(row.clock_in || row.created_at),
+        clockIn: formatTime(row.clock_in),
+        clockOut: row.clock_out ? formatTime(row.clock_out) : 'Still clocked in',
+        totalMinutes: formatMinutes(row.total_minutes),
+        reviewStatus:
+          row.review_status === 'approved'
+            ? 'Approved'
+            : row.review_status === 'rejected'
+              ? 'Rejected'
+              : 'Pending Review',
+      }));
+
+      const billingExportRows = invoiceRows.map((row) => ({
+        invoiceNumber: row.invoice_number || `Invoice ${String(row.id).slice(0, 8)}`,
+        parent: profileNameMap.get(row.parent_profile_id) || 'Unknown Parent',
+        child: childNameMap.get(row.child_id) || 'Unknown Child',
+        total: formatCurrency(row.total),
+        status: row.status,
+        dueDate: row.due_date ? formatDate(row.due_date) : '—',
+      }));
+
+      const incidentExportRows = incidentRows.map((row) => ({
+        child: childNameMap.get(row.child_id) || 'Unknown Child',
+        date: formatDate(row.created_at),
+        status:
+          row.review_status === 'approved'
+            ? 'Approved'
+            : row.review_status === 'rejected'
+              ? 'Rejected'
+              : 'Pending Review',
+        parentAcknowledged: row.parent_acknowledged_at ? 'Yes' : 'No',
+      }));
+
+      const formsExportRows = formRows.map((form) => {
+        const sentCount =
+          form.audience_type === 'all_parents'
+            ? activeParentProfiles.length
+            : form.audience_type === 'specific_parent'
+              ? 1
+              : form.audience_type === 'all_staff'
+                ? activeStaffProfiles.length
+                : form.audience_type === 'specific_staff'
+                  ? 1
+                  : 0;
+        const signed = signatureCountByForm[form.id] || 0;
+        return {
+          formTitle: form.title,
+          audience:
+            form.audience_type === 'all_parents'
+              ? 'All Parents'
+              : form.audience_type === 'specific_parent'
+                ? 'Specific Parent'
+                : form.audience_type === 'all_staff'
+                  ? 'All Staff'
+                  : form.audience_type === 'specific_staff'
+                    ? 'Specific Staff'
+                    : form.audience_type || '—',
+          signedCount: String(signed),
+          pendingCount: String(Math.max(0, sentCount - signed)),
+        };
+      });
+
+      setReportExports({
+        attendance: attendanceExportRows,
+        staffHours: staffHoursExportRows,
+        billing: billingExportRows,
+        incident: incidentExportRows,
+        forms: formsExportRows,
+      });
+
+      setSummary({
+        attendance: {
+          checkIns,
+          checkOuts,
+          recentActivity: recentAttendance
+            ? `${formatMessageTypeLabel(recentAttendance.event_type)} • ${formatDateTime(recentAttendance.event_time)}`
+            : 'No activity yet.',
+        },
+        staffHours: {
+          totalMinutesThisWeek,
+          pendingApprovals,
+          approvedHours,
+          rejectedHours,
+        },
+        billing: {
+          outstandingBalance,
+          paidTotal,
+          overdueTotal,
+          pendingInvoices,
+        },
+        incident: {
+          pendingReview,
+          approved,
+          acknowledged,
+        },
+        forms: {
+          totalForms,
+          signedCount,
+          pendingCount: Math.max(0, totalForms - signedCount),
+        },
+      });
+    } catch (loadError) {
+      console.log('Owner reports load error', loadError);
+      setError(loadError?.message || 'Could not load reports.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const csvEscape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
+  const buildCsv = (headers, rows) => {
+    const headerLine = headers.map(csvEscape).join(',');
+    const dataLines = rows.map((row) => headers.map((header) => csvEscape(row[header])).join(','));
+    return [headerLine, ...dataLines].join('\n');
+  };
+
+  const handleExportCsv = async (reportId) => {
+    const exportConfigs = {
+      'attendance-report': {
+        title: 'Attendance Report',
+        headers: ['Child', 'Event Type', 'Date', 'Time'],
+        rows: reportExports.attendance.map((row) => ({
+          Child: row.child,
+          'Event Type': row.eventType,
+          Date: row.date,
+          Time: row.time,
+        })),
+      },
+      'staff-hours-report': {
+        title: 'Staff Hours Report',
+        headers: ['Staff', 'Date', 'Clock In', 'Clock Out', 'Total Minutes', 'Review Status'],
+        rows: reportExports.staffHours.map((row) => ({
+          Staff: row.staff,
+          Date: row.date,
+          'Clock In': row.clockIn,
+          'Clock Out': row.clockOut,
+          'Total Minutes': row.totalMinutes,
+          'Review Status': row.reviewStatus,
+        })),
+      },
+      'billing-report': {
+        title: 'Billing Report',
+        headers: ['Invoice Number', 'Parent', 'Child', 'Total', 'Status', 'Due Date'],
+        rows: reportExports.billing.map((row) => ({
+          'Invoice Number': row.invoiceNumber,
+          Parent: row.parent,
+          Child: row.child,
+          Total: row.total,
+          Status: row.status,
+          'Due Date': row.dueDate,
+        })),
+      },
+      'incident-report': {
+        title: 'Incident Report',
+        headers: ['Child', 'Date', 'Status', 'Parent Acknowledged'],
+        rows: reportExports.incident.map((row) => ({
+          Child: row.child,
+          Date: row.date,
+          Status: row.status,
+          'Parent Acknowledged': row.parentAcknowledged,
+        })),
+      },
+      'forms-report': {
+        title: 'Forms Completion Report',
+        headers: ['Form Title', 'Audience', 'Signed Count', 'Pending Count'],
+        rows: reportExports.forms.map((row) => ({
+          'Form Title': row.formTitle,
+          Audience: row.audience,
+          'Signed Count': row.signedCount,
+          'Pending Count': row.pendingCount,
+        })),
+      },
+    };
+
+    const reportConfig = exportConfigs[reportId];
+    if (!reportConfig) return;
+
+    const csvText = buildCsv(reportConfig.headers, reportConfig.rows);
+
+    try {
+      if (Platform.OS === 'web') {
+        Alert.alert(
+          `${reportConfig.title} CSV`,
+          `${csvText}\n\nInstall expo-sharing for native file export.`,
+        );
+        return;
+      }
+
+      await Share.share({
+        title: reportConfig.title,
+        message: csvText,
+      });
+    } catch (_shareError) {
+      Alert.alert(
+        `${reportConfig.title} CSV`,
+        `${csvText}\n\nInstall expo-sharing for native file export.`,
+      );
+    }
+  };
+
+  useEffect(() => {
+    loadOwnerReports();
+  }, [loadOwnerReports]);
 
   const reportSummaryCards = [
-    { title: 'Attendance Records', value: '128', accent: 'blue', note: 'All attendance logs' },
-    { title: 'Billing Reports', value: '14', accent: 'orange', note: 'Balances and invoices' },
-    { title: 'Staff Hour Reports', value: '6', accent: 'green', note: 'Time review queue' },
-    { title: 'Camp Headcount Reports', value: '8', accent: 'purple', note: 'Camp totals' },
+    {
+      title: 'Attendance Report',
+      value: String(summary.attendance.checkIns),
+      accent: 'blue',
+      note: `Check-ins: ${summary.attendance.checkIns} • Check-outs: ${summary.attendance.checkOuts}`,
+      detail: summary.attendance.recentActivity,
+    },
+    {
+      title: 'Staff Hours Report',
+      value: formatMinutes(summary.staffHours.totalMinutesThisWeek),
+      accent: 'green',
+      note: `Pending: ${summary.staffHours.pendingApprovals} • Approved: ${summary.staffHours.approvedHours} • Rejected: ${summary.staffHours.rejectedHours}`,
+    },
+    {
+      title: 'Billing Report',
+      value: formatCurrency(summary.billing.outstandingBalance),
+      accent: 'orange',
+      note: `Paid total: ${formatCurrency(summary.billing.paidTotal)} • Overdue: ${formatCurrency(summary.billing.overdueTotal)} • Pending: ${summary.billing.pendingInvoices}`,
+    },
+    {
+      title: 'Incident Report',
+      value: String(summary.incident.pendingReview),
+      accent: 'purple',
+      note: `Approved: ${summary.incident.approved} • Acknowledged: ${summary.incident.acknowledged}`,
+    },
+    {
+      title: 'Forms Completion Report',
+      value: String(summary.forms.totalForms),
+      accent: 'pink',
+      note: `Signed: ${summary.forms.signedCount} • Pending: ${summary.forms.pendingCount}`,
+    },
   ];
+
+  const filters = ['This Week', 'This Month', 'All Time', 'Attendance', 'Billing', 'Staff Hours', 'Incident', 'Forms'];
 
   const reports = [
     {
-      id: 'ba-attendance',
-      title: 'Before & After Care Attendance',
-      description: 'Daily drop-off, bus, return, and pickup records',
-      dateRange: 'May 27 - June 1',
-      lastGenerated: 'Today at 9:15 AM',
+      id: 'attendance-report',
+      title: 'Attendance Report',
+      description: 'Total check-ins, check-outs, and recent attendance activity',
+      dateRange: 'Current',
+      lastGenerated: new Date().toISOString(),
       status: 'Ready',
+      detailRows: [
+        { label: 'Total check-ins', value: String(summary.attendance.checkIns) },
+        { label: 'Total check-outs', value: String(summary.attendance.checkOuts) },
+        { label: 'Recent activity', value: summary.attendance.recentActivity },
+      ],
     },
     {
-      id: 'camp-headcounts',
-      title: 'Summer Camp Headcounts',
-      description: 'Group confirmation and owner check-in totals',
+      id: 'staff-hours-report',
+      title: 'Staff Hours Report',
+      description: 'Weekly totals and hour review state',
       dateRange: 'This Week',
-      lastGenerated: 'Today at 8:45 AM',
+      lastGenerated: new Date().toISOString(),
       status: 'Ready',
+      detailRows: [
+        { label: 'Total hours this week', value: formatMinutes(summary.staffHours.totalMinutesThisWeek) },
+        { label: 'Pending approvals', value: String(summary.staffHours.pendingApprovals) },
+        { label: 'Approved hours', value: String(summary.staffHours.approvedHours) },
+        { label: 'Rejected hours', value: String(summary.staffHours.rejectedHours) },
+      ],
     },
     {
-      id: 'staff-hours',
-      title: 'Staff Hours',
-      description: 'Clock-in/out records and owner review status',
-      dateRange: 'May 27 - June 1',
-      lastGenerated: 'Yesterday at 6:00 PM',
-      status: 'Pending Review',
-    },
-    {
-      id: 'billing-summary',
-      title: 'Billing Summary',
-      description: 'Pending, paid, and overdue balances',
+      id: 'billing-report',
+      title: 'Billing Report',
+      description: 'Outstanding balance, paid total, overdue total, and pending invoices',
       dateRange: 'This Month',
-      lastGenerated: 'Today at 7:30 AM',
+      lastGenerated: new Date().toISOString(),
       status: 'Ready',
+      detailRows: [
+        { label: 'Outstanding balance', value: formatCurrency(summary.billing.outstandingBalance) },
+        { label: 'Paid total', value: formatCurrency(summary.billing.paidTotal) },
+        { label: 'Overdue total', value: formatCurrency(summary.billing.overdueTotal) },
+        { label: 'Pending invoices', value: String(summary.billing.pendingInvoices) },
+      ],
     },
     {
-      id: 'daily-notes',
-      title: 'Daily Notes',
-      description: 'Notes submitted by staff for parent review',
-      dateRange: 'This Week',
-      lastGenerated: 'Today at 10:00 AM',
+      id: 'incident-report',
+      title: 'Incident Report',
+      description: 'Incident review, approvals, and acknowledgements',
+      dateRange: 'Current',
+      lastGenerated: new Date().toISOString(),
       status: 'Ready',
+      detailRows: [
+        { label: 'Pending review', value: String(summary.incident.pendingReview) },
+        { label: 'Approved', value: String(summary.incident.approved) },
+        { label: 'Acknowledged', value: String(summary.incident.acknowledged) },
+      ],
     },
-  ];
-
-  const filters = [
-    'Today',
-    'This Week',
-    'This Month',
-    'Before & After Care',
-    'Summer Camp',
-    'Staff',
-    'Billing',
+    {
+      id: 'forms-report',
+      title: 'Forms Completion Report',
+      description: 'Signed and pending forms and waivers',
+      dateRange: 'Current',
+      lastGenerated: new Date().toISOString(),
+      status: 'Ready',
+      detailRows: [
+        { label: 'Total forms', value: String(summary.forms.totalForms) },
+        { label: 'Signed count', value: String(summary.forms.signedCount) },
+        { label: 'Pending count', value: String(summary.forms.pendingCount) },
+      ],
+    },
   ];
 
   return (
@@ -9369,6 +10672,20 @@ function OwnerReportsScreen({ onBack, onLogout, onShowComingSoon }) {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.contentStack}>
+          {loading ? (
+            <View style={styles.ownerAccordionCard}>
+              <Text style={styles.ownerAccordionTitle}>Loading reports...</Text>
+              <Text style={styles.ownerCommunicationNote}>Refreshing live report data.</Text>
+            </View>
+          ) : null}
+
+          {error ? (
+            <View style={styles.ownerAccordionCard}>
+              <Text style={styles.ownerAccordionTitle}>Reports Error</Text>
+              <Text style={styles.ownerCommunicationNote}>{error}</Text>
+            </View>
+          ) : null}
+
           <View style={styles.ownerAccordionCard}>
             <Text style={styles.ownerAccordionTitle}>Report Summary</Text>
             <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
@@ -9380,7 +10697,7 @@ function OwnerReportsScreen({ onBack, onLogout, onShowComingSoon }) {
                   title={card.title}
                   value={card.value}
                   note={card.note}
-                  fill="Owner"
+                  fill={card.detail ? 'Live' : 'Owner'}
                 />
               ))}
             </View>
@@ -9424,26 +10741,39 @@ function OwnerReportsScreen({ onBack, onLogout, onShowComingSoon }) {
                           <Text style={styles.ownerParentDetailValue}>{report.description}</Text>
                         </View>
                         <View style={styles.ownerParentDetailRow}>
-                          <Text style={styles.ownerParentDetailLabel}>Mock date range</Text>
+                          <Text style={styles.ownerParentDetailLabel}>Date range</Text>
                           <Text style={styles.ownerParentDetailValue}>{report.dateRange}</Text>
                         </View>
                         <View style={styles.ownerParentDetailRow}>
                           <Text style={styles.ownerParentDetailLabel}>Last generated</Text>
-                          <Text style={styles.ownerParentDetailValue}>{report.lastGenerated}</Text>
+                          <Text style={styles.ownerParentDetailValue}>
+                            {formatDateTime(report.lastGenerated)}
+                          </Text>
                         </View>
                         <View style={styles.ownerParentDetailRow}>
                           <Text style={styles.ownerParentDetailLabel}>Status</Text>
                           <Text style={styles.ownerParentDetailValue}>{report.status}</Text>
                         </View>
 
+                        {report.detailRows.map((row) => (
+                          <View key={row.label} style={styles.ownerParentDetailRow}>
+                            <Text style={styles.ownerParentDetailLabel}>{row.label}</Text>
+                            <Text style={styles.ownerParentDetailValue}>{row.value}</Text>
+                          </View>
+                        ))}
+
                         <View style={styles.ownerParentActionList}>
-                          {['View Report', 'Export PDF', 'Send to Owner Email'].map((label) => (
+                          {['View Report', 'Export CSV', 'Send to Owner Email'].map((label) => (
                             <OwnerNavCard
                               key={label}
                               accentColor={reportsAccent}
                               title={label}
-                              subtitle="Coming Soon"
-                              onPress={() => onShowComingSoon(label)}
+                              subtitle={label === 'Export CSV' ? 'Download data' : 'Coming Soon'}
+                              onPress={() =>
+                                label === 'Export CSV'
+                                  ? handleExportCsv(report.id)
+                                  : onShowComingSoon(label)
+                              }
                             />
                           ))}
                         </View>
@@ -10029,7 +11359,6 @@ function getCampGroupCanonicalName(value) {
 const STAFF_MEMBER = {
   name: 'Ms. Sarah',
   status: 'Checked Out',
-  shift: '7:30 AM - 4:00 PM',
 };
 
 const STAFF_WORKSPACE_CARDS = [
@@ -10037,7 +11366,7 @@ const STAFF_WORKSPACE_CARDS = [
     accent: 'green',
     title: 'Clock In / Out',
     value: STAFF_MEMBER.status,
-    note: `${STAFF_MEMBER.shift} · Location required for clock in`,
+    note: 'Location required for clock in',
   },
   {
     accent: 'orange',
@@ -10081,36 +11410,12 @@ const STAFF_WORKSPACE_CARDS = [
     value: 'See alerts',
     note: 'Unread messages and attention needed',
   },
-];
-
-const STAFF_HOURS_THIS_WEEK = [
-  { day: 'Monday', hours: '8.0 hrs' },
-  { day: 'Tuesday', hours: '8.5 hrs' },
-  { day: 'Wednesday', hours: '7.5 hrs' },
-  { day: 'Thursday', hours: '8.0 hrs' },
-  { day: 'Friday', hours: '0.0 hrs' },
-];
-
-const STAFF_HOURS_APPROVED_WEEKS = [
   {
-    title: 'Last Week',
-    total: '38.5',
-    status: 'Approved',
-    date: 'May 24',
+    accent: 'blue',
+    title: 'Documents',
+    value: 'Forms and policies',
+    note: 'Staff forms and center documents',
   },
-  {
-    title: 'Previous Week',
-    total: '36.0',
-    status: 'Approved',
-    date: 'May 17',
-  },
-];
-
-const STAFF_HOURS_CLOCK_ACTIVITY = [
-  { label: 'Clock In', time: '7:30 AM' },
-  { label: 'Lunch Out', time: '12:00 PM' },
-  { label: 'Lunch In', time: '12:30 PM' },
-  { label: 'Clock Out', time: '4:00 PM' },
 ];
 
 const STAFF_DAILY_NOTE_CHIPS = [
@@ -10483,6 +11788,7 @@ const OWNER_MODULES = [
   'Messages',
   'Notifications',
   'Camp Events',
+  'Document Center',
   'Invite Codes',
   'Reports',
 ];
@@ -10495,9 +11801,232 @@ const OWNER_MODULE_COLORS = {
   Messages: '#38BDF8',
   Notifications: '#7C4DFF',
   'Camp Events': '#14B8A6',
+  'Document Center': '#0EA5E9',
   'Invite Codes': '#F97366',
   Reports: '#001B3D',
 };
+
+const OWNER_DOCUMENT_CENTER_SECTIONS = [
+  {
+    title: 'Enrollment Forms',
+    documents: [
+      {
+        title: 'Enrollment Packet',
+        category: 'Enrollment Forms',
+        uploadedAt: '2026-05-12T14:30:00.000Z',
+        status: 'Active',
+      },
+      {
+        title: 'Emergency Contact Update',
+        category: 'Enrollment Forms',
+        uploadedAt: '2026-05-20T13:15:00.000Z',
+        status: 'Draft',
+      },
+    ],
+  },
+  {
+    title: 'Parent Waivers',
+    documents: [
+      {
+        title: 'Field Trip Waiver',
+        category: 'Parent Waivers',
+        uploadedAt: '2026-05-18T12:00:00.000Z',
+        status: 'Active',
+      },
+      {
+        title: 'Photo Consent Waiver',
+        category: 'Parent Waivers',
+        uploadedAt: '2026-05-22T10:10:00.000Z',
+        status: 'Draft',
+      },
+    ],
+  },
+  {
+    title: 'Medical Forms',
+    documents: [
+      {
+        title: 'Medication Authorization',
+        category: 'Medical Forms',
+        uploadedAt: '2026-05-21T09:45:00.000Z',
+        status: 'Active',
+      },
+    ],
+  },
+  {
+    title: 'Staff Documents',
+    documents: [
+      {
+        title: 'Staff Handbook Acknowledgement',
+        category: 'Staff Documents',
+        uploadedAt: '2026-05-16T16:15:00.000Z',
+        status: 'Active',
+      },
+      {
+        title: 'Training Checklist',
+        category: 'Staff Documents',
+        uploadedAt: '2026-05-24T11:05:00.000Z',
+        status: 'Draft',
+      },
+    ],
+  },
+  {
+    title: 'Camp Forms',
+    documents: [
+      {
+        title: 'Summer Camp Registration',
+        category: 'Camp Forms',
+        uploadedAt: '2026-05-25T15:25:00.000Z',
+        status: 'Active',
+      },
+      {
+        title: 'Camp Permission Slip',
+        category: 'Camp Forms',
+        uploadedAt: '2026-05-27T14:00:00.000Z',
+        status: 'Draft',
+      },
+    ],
+  },
+];
+
+const PARENT_DOCUMENT_CENTER_SECTIONS = [
+  {
+    title: 'Family Documents',
+    documents: [
+      {
+        title: 'Enrollment Form',
+        status: 'Needs Review',
+      },
+      {
+        title: 'Summer Camp Waiver',
+        status: 'Completed',
+      },
+      {
+        title: 'Emergency Medical Form',
+        status: 'Needs Review',
+      },
+      {
+        title: 'Parent Handbook',
+        status: 'Completed',
+      },
+    ],
+  },
+];
+
+const STAFF_DOCUMENT_CENTER_SECTIONS = [
+  {
+    title: 'Staff Forms & Policies',
+    documents: [
+      {
+        title: 'Staff Handbook',
+        category: 'Policies',
+      },
+      {
+        title: 'Emergency Procedures',
+        category: 'Safety',
+      },
+      {
+        title: 'Camp Counselor Guide',
+        category: 'Training',
+      },
+      {
+        title: 'Incident Report Policy',
+        category: 'Reporting',
+      },
+    ],
+  },
+];
+
+const INITIAL_DOCUMENT_FORMS = [
+  {
+    id: 'form-enrollment-packet',
+    title: 'Enrollment Packet',
+    formType: 'Enrollment',
+    description: 'Complete the enrollment packet before the first day of attendance.',
+    required: true,
+    status: 'Active',
+    category: 'Forms & Waivers',
+    uploadedAt: '2026-06-01T13:00:00.000Z',
+    audience_type: 'all_parents',
+    recipient_profile_id: null,
+  },
+  {
+    id: 'form-summer-camp-waiver',
+    title: 'Summer Camp Waiver',
+    formType: 'Waiver',
+    description: 'Required for summer camp participation and outings.',
+    required: true,
+    status: 'Draft',
+    category: 'Forms & Waivers',
+    uploadedAt: '2026-06-02T14:30:00.000Z',
+    audience_type: 'all_parents',
+    recipient_profile_id: null,
+  },
+];
+
+const DOCUMENT_TEMPLATE_LIBRARY = [
+  {
+    groupTitle: 'Parent Templates',
+    audienceRole: 'parent',
+    category: 'Forms & Waivers',
+    templates: [
+      {
+        title: 'Parent Handbook',
+        description: 'Guide for families covering center policies and expectations.',
+      },
+      {
+        title: 'Enrollment Agreement',
+        description: 'Required agreement for new student enrollment.',
+      },
+      {
+        title: 'Emergency Medical Authorization',
+        description: 'Authorizes emergency medical care when a parent cannot be reached.',
+      },
+      {
+        title: 'Photo Release Form',
+        description: 'Permission for photos and media use at the center.',
+      },
+      {
+        title: 'Summer Camp Waiver',
+        description: 'Required waiver for summer camp participation and activities.',
+      },
+      {
+        title: 'Before & After Care Agreement',
+        description: 'Agreement for before and after care attendance and billing policies.',
+      },
+    ],
+  },
+  {
+    groupTitle: 'Staff Templates',
+    audienceRole: 'staff',
+    category: 'Staff Documents',
+    templates: [
+      {
+        title: 'Employee Handbook',
+        description: 'Center handbook for staff policies, schedules, and conduct.',
+      },
+      {
+        title: 'CPR Requirements',
+        description: 'Certification and compliance requirements for CPR training.',
+      },
+      {
+        title: 'Emergency Procedures',
+        description: 'Emergency response procedures and safety expectations.',
+      },
+      {
+        title: 'Incident Reporting Policy',
+        description: 'Guidelines for documenting and reporting incidents.',
+      },
+      {
+        title: 'Summer Camp Counselor Guide',
+        description: 'Camp counseling expectations, routines, and supervision guide.',
+      },
+      {
+        title: 'Staff Code of Conduct',
+        description: 'Professional conduct expectations for all staff members.',
+      },
+    ],
+  },
+];
 
 const OWNER_SUMMER_CAMP_INITIAL_SUMMARY = {
   total: 0,
@@ -10529,6 +12058,18 @@ function getCampGroupDisplayName(group) {
     group?.camp_group_name ||
     group?.display_name ||
     ''
+  );
+}
+
+function getProfileDisplayName(profile, fallbackLabel = 'Profile') {
+  if (!profile) {
+    return fallbackLabel;
+  }
+
+  return (
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
+    profile?.email ||
+    fallbackLabel
   );
 }
 
@@ -10631,6 +12172,1678 @@ function OwnerNavCard({ accentColor, title, subtitle, onPress }) {
       </View>
       <Text style={styles.ownerNavChevron}>›</Text>
     </Pressable>
+  );
+}
+
+function getDocumentStatusTheme(status) {
+  const value = `${status || ''}`.trim().toLowerCase();
+
+  if (value === 'active' || value === 'completed' || value === 'signed') {
+    return {
+      backgroundColor: '#E8F8F1',
+      textColor: '#0F7A42',
+    };
+  }
+
+  if (value === 'needs review' || value === 'draft' || value === 'pending signature') {
+    return {
+      backgroundColor: '#FFF4E5',
+      textColor: '#C05600',
+    };
+  }
+
+  return {
+    backgroundColor: '#EEF2FF',
+    textColor: COLORS.blue,
+  };
+}
+
+function DocumentStatusPill({ status }) {
+  if (!status) {
+    return null;
+  }
+
+  const theme = getDocumentStatusTheme(status);
+
+  return (
+    <View style={[styles.documentStatusPill, { backgroundColor: theme.backgroundColor }]}>
+      <Text style={[styles.documentStatusPillText, { color: theme.textColor }]}>{status}</Text>
+    </View>
+  );
+}
+
+function getDocumentDisplayType(form) {
+  return form?.formType || form?.form_type || form?.category || 'Form';
+}
+
+function formatDocumentAudienceLabel(audienceType) {
+  switch (audienceType) {
+    case 'all_parents':
+      return 'All Parents';
+    case 'specific_parent':
+      return 'Specific Parent';
+    case 'all_staff':
+      return 'All Staff';
+    case 'specific_staff':
+      return 'Specific Staff';
+    default:
+      return audienceType ? String(audienceType) : 'All Parents';
+  }
+}
+
+function buildDocumentSections(forms = [], role = 'owner', currentUserId = '') {
+  const filteredForms = (Array.isArray(forms) ? forms : []).filter((form) => {
+    const audienceType = form?.audience_type || (role === 'staff' ? 'all_staff' : 'all_parents');
+
+    if (role === 'owner') {
+      return true;
+    }
+
+    if (role === 'staff') {
+      return audienceType === 'all_staff' || form?.recipient_profile_id === currentUserId;
+    }
+
+    return audienceType === 'all_parents' || form?.recipient_profile_id === currentUserId;
+  });
+
+  const grouped = filteredForms.reduce((acc, form) => {
+    const sectionTitle = form?.category || 'Documents';
+    if (!acc[sectionTitle]) {
+      acc[sectionTitle] = [];
+    }
+    acc[sectionTitle].push({
+      title: form?.title || 'Untitled Document',
+      category: form?.category || '',
+      status: form?.status || 'Draft',
+      uploadedAt: form?.created_at || form?.uploadedAt || null,
+      description: form?.description || '',
+      required: Boolean(form?.required),
+      audienceType: form?.audience_type || 'all_parents',
+      createdAt: form?.created_at || form?.uploadedAt || null,
+    });
+    return acc;
+  }, {});
+
+  return Object.entries(grouped).map(([title, documents]) => ({ title, documents }));
+}
+
+function DocumentItemCard({
+  title,
+  category,
+  status,
+  uploadedAt,
+  createdAt,
+  description,
+  required,
+  audienceType,
+  onView,
+  onSendToParents,
+  showSendButton,
+}) {
+  return (
+    <View style={styles.profileCardInner}>
+      <View style={styles.documentItemHeaderRow}>
+        <View style={styles.documentItemHeadingBlock}>
+          <Text style={styles.documentItemTitle}>{title}</Text>
+          {category ? <Text style={styles.documentItemMeta}>{category}</Text> : null}
+        </View>
+
+        {status ? <DocumentStatusPill status={status} /> : null}
+      </View>
+
+      {createdAt || uploadedAt ? (
+        <Text style={styles.documentItemMeta}>
+          Created {formatDate(createdAt || uploadedAt)}
+        </Text>
+      ) : null}
+
+      {description ? <Text style={styles.documentItemSummary}>{description}</Text> : null}
+
+      {typeof required === 'boolean' ? (
+        <Text style={styles.documentItemMeta}>{required ? 'Required' : 'Optional'}</Text>
+      ) : null}
+
+      {audienceType ? (
+        <Text style={styles.documentItemMeta}>
+          Audience: {formatDocumentAudienceLabel(audienceType)}
+        </Text>
+      ) : null}
+
+      <View style={styles.documentItemActionRow}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onView}
+          style={({ pressed }) => [
+            styles.documentItemButton,
+            styles.documentItemButtonSecondary,
+            pressed && styles.pressedButton,
+          ]}
+        >
+          <Text style={styles.documentItemButtonText}>View</Text>
+        </Pressable>
+
+        {showSendButton ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={onSendToParents}
+            style={({ pressed }) => [
+              styles.documentItemButton,
+              styles.documentItemButtonPrimary,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.documentItemButtonTextPrimary}>Send to Parents</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function OwnerFormsWaiversPanel({
+  forms,
+  signatures,
+  availableParentProfiles,
+  availableParentProfilesLoading = false,
+  availableParentProfilesError = '',
+  availableStaffProfiles = [],
+  availableStaffProfilesLoading = false,
+  availableStaffProfilesError = '',
+  onCreateForm,
+}) {
+  const [expandedFormId, setExpandedFormId] = useState(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [showCustomTemplateForm, setShowCustomTemplateForm] = useState(false);
+  const [customTemplateTitle, setCustomTemplateTitle] = useState('');
+  const [customTemplateCategory, setCustomTemplateCategory] = useState('Parent Form');
+  const [customTemplateDescription, setCustomTemplateDescription] = useState('');
+  const [customTemplateRequired, setCustomTemplateRequired] = useState(true);
+  const [draftAudienceType, setDraftAudienceType] = useState('all_parents');
+  const [draftRecipientProfileId, setDraftRecipientProfileId] = useState('');
+  const [formError, setFormError] = useState('');
+
+  const formRows = Array.isArray(forms) ? forms : [];
+  const signatureRows = Array.isArray(signatures) ? signatures : [];
+  const parentProfiles = Array.isArray(availableParentProfiles) ? availableParentProfiles : [];
+  const staffProfiles = Array.isArray(availableStaffProfiles) ? availableStaffProfiles : [];
+
+  const templateRows = DOCUMENT_TEMPLATE_LIBRARY.flatMap((group) =>
+    group.templates.map((template) => ({
+      id: `${group.audienceRole}:${template.title}`,
+      title: template.title,
+      description: template.description,
+      category: group.category,
+      audienceRole: group.audienceRole,
+      groupTitle: group.groupTitle,
+    }))
+  );
+  const selectedTemplate = templateRows.find((template) => template.id === selectedTemplateId) || null;
+  const isStaffTemplate = selectedTemplate?.audienceRole === 'staff';
+  const isCustomStaffTemplate =
+    customTemplateCategory === 'Staff Form' || customTemplateCategory === 'Policy';
+  const customAudienceOptions = isCustomStaffTemplate
+    ? [
+        { label: 'All Staff', value: 'all_staff' },
+        { label: 'Specific Staff', value: 'specific_staff' },
+      ]
+    : [
+        { label: 'All Parents', value: 'all_parents' },
+        { label: 'Specific Parent', value: 'specific_parent' },
+      ];
+  const sendToOptions = isStaffTemplate
+    ? [
+        { label: 'All Staff', value: 'all_staff' },
+        { label: 'Specific Staff', value: 'specific_staff' },
+      ]
+    : [
+        { label: 'All Parents', value: 'all_parents' },
+        { label: 'Specific Parent', value: 'specific_parent' },
+      ];
+
+  const getRecipientParent = (parentId) =>
+    parentProfiles.find((parent) => parent.id === parentId) || null;
+  const getRecipientStaff = (staffId) =>
+    staffProfiles.find((staff) => staff.id === staffId) || null;
+  const getRecipientName = (profile, fallbackLabel) => getProfileDisplayName(profile, fallbackLabel);
+
+  const getFormRecipients = (form) => {
+    const audienceType = form.audience_type || 'all_parents';
+
+    if (audienceType === 'specific_parent') {
+      return [getRecipientParent(form.recipient_profile_id)].filter(Boolean);
+    }
+
+    if (audienceType === 'specific_staff') {
+      return [getRecipientStaff(form.recipient_profile_id)].filter(Boolean);
+    }
+
+    if (audienceType === 'all_staff') {
+      return staffProfiles;
+    }
+
+    return parentProfiles;
+  };
+
+  const getSignedIdsForForm = (form) =>
+    new Set(
+      signatureRows
+        .filter((signature) => signature.formId === form.id)
+        .map((signature) => signature.parentId || signature.parent_profile_id)
+        .filter(Boolean)
+    );
+
+  const ownerFormCards = formRows.map((form) => {
+    const recipients = getFormRecipients(form);
+    const signedIds = getSignedIdsForForm(form);
+    const signaturesForForm = signatureRows.filter((signature) => signature.formId === form.id);
+    const signedRecordCount = signaturesForForm.length;
+    const sentCount = recipients.length;
+    const pendingFormCount = Math.max(0, sentCount - signedRecordCount);
+    const audienceLabel = formatDocumentAudienceLabel(form.audience_type || 'all_parents');
+
+    return {
+      form,
+      recipients,
+      signedIds,
+      signaturesForForm,
+      signedRecordCount,
+      sentCount,
+      pendingFormCount,
+      audienceLabel,
+    };
+  });
+
+  const totalSignedCount = ownerFormCards.reduce((sum, item) => sum + item.signedRecordCount, 0);
+  const totalPendingCount = ownerFormCards.reduce((sum, item) => sum + item.pendingFormCount, 0);
+  const totalSentCount = ownerFormCards.reduce((sum, item) => sum + item.sentCount, 0);
+
+  const handleTemplateSelect = (template) => {
+    setSelectedTemplateId(template.id);
+    setDraftAudienceType(template.audienceRole === 'staff' ? 'all_staff' : 'all_parents');
+    setDraftRecipientProfileId('');
+    setFormError('');
+    setExpandedFormId(null);
+    setShowCustomTemplateForm(false);
+  };
+
+  const handleCustomTemplateCategoryChange = (category) => {
+    setCustomTemplateCategory(category);
+    setDraftAudienceType(category === 'Staff Form' || category === 'Policy' ? 'all_staff' : 'all_parents');
+    setDraftRecipientProfileId('');
+    setFormError('');
+  };
+
+  const handleSaveCustomTemplate = () => {
+    const cleanTitle = customTemplateTitle.trim();
+    const cleanDescription = customTemplateDescription.trim();
+    const audienceOptions = customAudienceOptions;
+    const audienceRequiresRecipient =
+      draftAudienceType === 'specific_parent' || draftAudienceType === 'specific_staff';
+
+    if (!cleanTitle || !cleanDescription) {
+      setFormError('Complete the custom template fields.');
+      Alert.alert('Complete the custom template fields.');
+      return;
+    }
+
+    if (audienceRequiresRecipient && !draftRecipientProfileId) {
+      setFormError(
+        draftAudienceType === 'specific_staff' ? 'Please select a staff member.' : 'Please select a parent.'
+      );
+      Alert.alert(
+        draftAudienceType === 'specific_staff' ? 'Please select a staff member.' : 'Please select a parent.'
+      );
+      return;
+    }
+
+    if (!audienceOptions.some((option) => option.value === draftAudienceType)) {
+      setFormError('Select a recipient option.');
+      Alert.alert('Select a recipient option.');
+      return;
+    }
+
+    onCreateForm?.({
+      title: cleanTitle,
+      formType: customTemplateCategory,
+      description: cleanDescription,
+      required: customTemplateRequired,
+      status: 'active',
+      category: customTemplateCategory,
+      audience_type: draftAudienceType,
+      recipient_profile_id: audienceRequiresRecipient ? draftRecipientProfileId : null,
+    });
+
+    setCustomTemplateTitle('');
+    setCustomTemplateCategory('Parent Form');
+    setCustomTemplateDescription('');
+    setCustomTemplateRequired(true);
+    setDraftAudienceType('all_parents');
+    setDraftRecipientProfileId('');
+    setShowCustomTemplateForm(false);
+    setFormError('');
+  };
+
+  const handleSendTemplate = () => {
+    if (!selectedTemplate) {
+      setFormError('Select a template first.');
+      Alert.alert('Select a template first.');
+      return;
+    }
+
+    if (
+      draftAudienceType === 'specific_parent' &&
+      !draftRecipientProfileId &&
+      !isStaffTemplate
+    ) {
+      setFormError('Please select a parent.');
+      Alert.alert('Please select a parent.');
+      return;
+    }
+
+    if (draftAudienceType === 'specific_staff' && !draftRecipientProfileId && isStaffTemplate) {
+      setFormError('Please select a staff member.');
+      Alert.alert('Please select a staff member.');
+      return;
+    }
+
+    onCreateForm?.({
+      title: selectedTemplate.title,
+      formType: selectedTemplate.title,
+      description: selectedTemplate.description,
+      required: true,
+      status: 'active',
+      category: selectedTemplate.category,
+      audience_type: draftAudienceType,
+      recipient_profile_id:
+        draftAudienceType === 'specific_parent' || draftAudienceType === 'specific_staff'
+          ? draftRecipientProfileId
+          : null,
+    });
+
+    setSelectedTemplateId('');
+    setDraftAudienceType(isStaffTemplate ? 'all_staff' : 'all_parents');
+    setDraftRecipientProfileId('');
+    setFormError('');
+  };
+
+  return (
+    <View style={styles.profileCard}>
+      <View style={styles.parentSectionHeaderRow}>
+        <Text style={styles.parentSectionHeaderTitle}>Forms & Waivers</Text>
+        <Text style={styles.parentSectionHeaderSubtle}>{`${formRows.length} forms`}</Text>
+      </View>
+
+      <View style={[styles.ownerSectionDetailsGrid, { marginTop: 12 }]}>
+        <SummaryTile
+          accent="green"
+          badge="S"
+          title="Signed"
+          value={String(totalSignedCount)}
+          note="Acknowledged forms"
+          fill="Forms"
+        />
+        <SummaryTile
+          accent="orange"
+          badge="P"
+          title="Pending"
+          value={String(totalPendingCount)}
+          note="Awaiting signatures"
+          fill="Review"
+        />
+        <SummaryTile
+          accent="blue"
+          badge="T"
+          title="Sent"
+          value={String(totalSentCount)}
+          note="Total recipient sends"
+          fill="Tracks"
+        />
+      </View>
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => {
+          setShowCustomTemplateForm((current) => !current);
+          setSelectedTemplateId('');
+          setFormError('');
+        }}
+        style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton, { marginTop: 14 }]}
+      >
+        <Text style={styles.primaryButtonText}>
+          {showCustomTemplateForm ? 'Hide Custom Template' : 'Create Custom Template'}
+        </Text>
+      </Pressable>
+
+      {showCustomTemplateForm ? (
+        <View style={[styles.ownerAccordionCard, { marginTop: 14 }]}>
+          <Text style={styles.ownerAccordionTitle}>Create Custom Template</Text>
+          <Text style={styles.ownerAccordionSummary}>
+            Build your own electronic form or policy and send it to parents or staff.
+          </Text>
+
+          {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
+
+          <Text style={styles.ownerStudentFormLabel}>Template Title</Text>
+          <TextInput
+            placeholder="Template Title"
+            placeholderTextColor={COLORS.muted}
+            value={customTemplateTitle}
+            onChangeText={setCustomTemplateTitle}
+            style={styles.ownerTitleInput}
+          />
+
+          <View style={styles.ownerChipGroup}>
+            <Text style={styles.ownerChipGroupLabel}>Category</Text>
+            <View style={styles.ownerFilterPillRow}>
+              {['Parent Form', 'Staff Form', 'Camp Form', 'Waiver', 'Policy'].map((category) => {
+                const isActive = customTemplateCategory === category;
+                return (
+                  <Pressable
+                    key={category}
+                    accessibilityRole="button"
+                    onPress={() => handleCustomTemplateCategoryChange(category)}
+                    style={({ pressed }) => [
+                      styles.ownerFilterPill,
+                      isActive && styles.ownerFilterPillActive,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.ownerFilterPillText,
+                        isActive && styles.ownerFilterPillTextActive,
+                      ]}
+                    >
+                      {category}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <Text style={styles.ownerStudentFormLabel}>Description / Form Text</Text>
+          <TextInput
+            placeholder="Description / Form Text"
+            placeholderTextColor={COLORS.muted}
+            value={customTemplateDescription}
+            onChangeText={setCustomTemplateDescription}
+            multiline
+            style={styles.ownerMessageInput}
+          />
+
+          <View style={styles.ownerChipGroup}>
+            <Text style={styles.ownerChipGroupLabel}>Required</Text>
+            <View style={styles.ownerFilterPillRow}>
+              {[
+                { label: 'Yes', value: true },
+                { label: 'No', value: false },
+              ].map((option) => {
+                const isActive = customTemplateRequired === option.value;
+                return (
+                  <Pressable
+                    key={option.label}
+                    accessibilityRole="button"
+                    onPress={() => setCustomTemplateRequired(option.value)}
+                    style={({ pressed }) => [
+                      styles.ownerFilterPill,
+                      isActive && styles.ownerFilterPillActive,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.ownerFilterPillText,
+                        isActive && styles.ownerFilterPillTextActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.ownerChipGroup}>
+            <Text style={styles.ownerChipGroupLabel}>Send To</Text>
+            <View style={styles.ownerFilterPillRow}>
+              {customAudienceOptions.map((option) => {
+                const isActive = draftAudienceType === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setDraftAudienceType(option.value);
+                      if (option.value === 'all_parents' || option.value === 'all_staff') {
+                        setDraftRecipientProfileId('');
+                      }
+                      setFormError('');
+                    }}
+                    style={({ pressed }) => [
+                      styles.ownerFilterPill,
+                      isActive && styles.ownerFilterPillActive,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.ownerFilterPillText,
+                        isActive && styles.ownerFilterPillTextActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {(draftAudienceType === 'specific_parent' || draftAudienceType === 'specific_staff') ? (
+            <View style={styles.ownerChipGroup}>
+              <Text style={styles.ownerChipGroupLabel}>
+                {isCustomStaffTemplate ? 'Select Staff' : 'Select Parent'}
+              </Text>
+              {isCustomStaffTemplate ? (
+                availableStaffProfilesError ? (
+                  <Text style={styles.errorText}>{availableStaffProfilesError}</Text>
+                ) : availableStaffProfilesLoading ? (
+                  <Text style={styles.parentAttendanceStateText}>Loading active staff...</Text>
+                ) : staffProfiles.length ? (
+                  <View style={styles.profileList}>
+                    {staffProfiles.map((staff) => {
+                      const isActive = draftRecipientProfileId === staff.id;
+                      return (
+                        <Pressable
+                          key={staff.id}
+                          accessibilityRole="button"
+                          onPress={() => setDraftRecipientProfileId(staff.id)}
+                          style={({ pressed }) => [
+                            styles.profileCardInner,
+                            isActive && styles.ownerFilterPillActive,
+                            pressed && styles.pressedTile,
+                            {
+                              borderWidth: isActive ? 2 : 1,
+                              borderColor: isActive ? COLORS.blue : COLORS.border,
+                              backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
+                            },
+                          ]}
+                        >
+                          <Text style={styles.documentItemTitle}>
+                            {getProfileDisplayName(staff, 'Staff Member')}
+                          </Text>
+                          <Text style={styles.documentItemMeta}>{staff.email}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <Text style={styles.parentAttendanceStateText}>No active staff found.</Text>
+                )
+              ) : availableParentProfilesError ? (
+                <Text style={styles.errorText}>{availableParentProfilesError}</Text>
+              ) : availableParentProfilesLoading ? (
+                <Text style={styles.parentAttendanceStateText}>Loading active parents...</Text>
+              ) : parentProfiles.length ? (
+                <View style={styles.profileList}>
+                  {parentProfiles.map((parent) => {
+                    const isActive = draftRecipientProfileId === parent.id;
+                    return (
+                      <Pressable
+                        key={parent.id}
+                        accessibilityRole="button"
+                        onPress={() => setDraftRecipientProfileId(parent.id)}
+                        style={({ pressed }) => [
+                          styles.profileCardInner,
+                          isActive && styles.ownerFilterPillActive,
+                          pressed && styles.pressedTile,
+                          {
+                            borderWidth: isActive ? 2 : 1,
+                            borderColor: isActive ? COLORS.blue : COLORS.border,
+                            backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
+                          },
+                        ]}
+                      >
+                        <Text style={styles.documentItemTitle}>
+                          {getProfileDisplayName(parent, 'Parent')}
+                        </Text>
+                        <Text style={styles.documentItemMeta}>{parent.email}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text style={styles.parentAttendanceStateText}>No active parents found.</Text>
+              )}
+            </View>
+          ) : null}
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleSaveCustomTemplate}
+            style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}
+          >
+            <Text style={styles.primaryButtonText}>Save Template</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <View style={styles.ownerAccordionCard}>
+        <Text style={styles.ownerAccordionTitle}>Template Library</Text>
+        <Text style={styles.ownerAccordionSummary}>
+          Choose a built-in form or waiver and send it to parents or staff.
+        </Text>
+        {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
+
+        {DOCUMENT_TEMPLATE_LIBRARY.map((group) => (
+          <View key={group.groupTitle} style={{ marginTop: 14 }}>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.parentSectionHeaderTitle}>{group.groupTitle}</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>{group.templates.length} templates</Text>
+            </View>
+            <View style={styles.profileList}>
+              {group.templates.map((template) => {
+                const templateId = `${group.audienceRole}:${template.title}`;
+                const isActive = selectedTemplateId === templateId;
+                return (
+                  <Pressable
+                    key={templateId}
+                    accessibilityRole="button"
+                    onPress={() =>
+                      handleTemplateSelect({
+                        id: templateId,
+                        title: template.title,
+                        description: template.description,
+                        category: group.category,
+                        audienceRole: group.audienceRole,
+                        groupTitle: group.groupTitle,
+                      })
+                    }
+                    style={({ pressed }) => [
+                      styles.profileCardInner,
+                      isActive && styles.ownerFilterPillActive,
+                      pressed && styles.pressedTile,
+                      {
+                        borderWidth: isActive ? 2 : 1,
+                        borderColor: isActive ? COLORS.blue : COLORS.border,
+                        backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
+                      },
+                    ]}
+                  >
+                    <View style={styles.documentItemHeaderRow}>
+                      <View style={styles.documentItemHeadingBlock}>
+                        <Text style={styles.documentItemTitle}>{template.title}</Text>
+                        <Text style={styles.documentItemMeta}>{group.groupTitle}</Text>
+                      </View>
+                      <DocumentStatusPill status={group.audienceRole === 'staff' ? 'Staff' : 'Parent'} />
+                    </View>
+                    <Text style={styles.documentItemMeta}>{template.description}</Text>
+                    <Text style={styles.documentItemMeta}>Tap to select this template</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ))}
+
+        {selectedTemplate ? (
+          <View style={[styles.ownerAccordionCard, { marginTop: 16 }]}>
+            <Text style={styles.ownerAccordionTitle}>Template Details</Text>
+            <View style={styles.ownerStaffMetaList}>
+              <View style={styles.ownerStaffMetaRow}>
+                <Text style={styles.ownerStaffMetaLabel}>Template Name</Text>
+                <Text style={styles.ownerStaffMetaValue}>{selectedTemplate.title}</Text>
+              </View>
+              <View style={styles.ownerStaffMetaRow}>
+                <Text style={styles.ownerStaffMetaLabel}>Description</Text>
+                <Text style={styles.ownerStaffMetaValue}>{selectedTemplate.description}</Text>
+              </View>
+              <View style={styles.ownerStaffMetaRow}>
+                <Text style={styles.ownerStaffMetaLabel}>Recipient Selection</Text>
+                <Text style={styles.ownerStaffMetaValue}>
+                  {isStaffTemplate ? 'Staff Recipients' : 'Parent Recipients'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.ownerChipGroup}>
+              <Text style={styles.ownerChipGroupLabel}>Send To</Text>
+              <View style={styles.ownerFilterPillRow}>
+                {sendToOptions.map((option) => {
+                  const isActive = draftAudienceType === option.value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      accessibilityRole="button"
+                      onPress={() => {
+                        setDraftAudienceType(option.value);
+                        if (option.value === 'all_parents' || option.value === 'all_staff') {
+                          setDraftRecipientProfileId('');
+                        }
+                        setFormError('');
+                      }}
+                      style={({ pressed }) => [
+                        styles.ownerFilterPill,
+                        isActive && styles.ownerFilterPillActive,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.ownerFilterPillText,
+                          isActive && styles.ownerFilterPillTextActive,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {(draftAudienceType === 'specific_parent' || draftAudienceType === 'specific_staff') ? (
+              <View style={styles.ownerChipGroup}>
+                <Text style={styles.ownerChipGroupLabel}>
+                  {isStaffTemplate ? 'Select Staff' : 'Select Parent'}
+                </Text>
+                {isStaffTemplate ? (
+                  availableStaffProfilesError ? (
+                    <Text style={styles.errorText}>{availableStaffProfilesError}</Text>
+                  ) : availableStaffProfilesLoading ? (
+                    <Text style={styles.parentAttendanceStateText}>Loading active staff...</Text>
+                  ) : staffProfiles.length ? (
+                    <View style={styles.profileList}>
+                      {staffProfiles.map((staff) => {
+                        const isActive = draftRecipientProfileId === staff.id;
+                        return (
+                          <Pressable
+                            key={staff.id}
+                            accessibilityRole="button"
+                            onPress={() => {
+                              setDraftRecipientProfileId(staff.id);
+                              setFormError('');
+                            }}
+                            style={({ pressed }) => [
+                              styles.profileCardInner,
+                              isActive && styles.ownerFilterPillActive,
+                              pressed && styles.pressedTile,
+                              {
+                                borderWidth: isActive ? 2 : 1,
+                                borderColor: isActive ? COLORS.blue : COLORS.border,
+                                backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
+                              },
+                            ]}
+                          >
+                            <Text style={styles.documentItemTitle}>
+                              {getProfileDisplayName(staff, 'Staff Member')}
+                            </Text>
+                            <Text style={styles.documentItemMeta}>{staff.email}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <Text style={styles.parentAttendanceStateText}>No active staff found.</Text>
+                  )
+                ) : availableParentProfilesError ? (
+                  <Text style={styles.errorText}>{availableParentProfilesError}</Text>
+                ) : availableParentProfilesLoading ? (
+                  <Text style={styles.parentAttendanceStateText}>Loading active parents...</Text>
+                ) : parentProfiles.length ? (
+                  <View style={styles.profileList}>
+                    {parentProfiles.map((parent) => {
+                      const isActive = draftRecipientProfileId === parent.id;
+                      return (
+                        <Pressable
+                          key={parent.id}
+                          accessibilityRole="button"
+                          onPress={() => {
+                            setDraftRecipientProfileId(parent.id);
+                            setFormError('');
+                          }}
+                          style={({ pressed }) => [
+                            styles.profileCardInner,
+                            isActive && styles.ownerFilterPillActive,
+                            pressed && styles.pressedTile,
+                            {
+                              borderWidth: isActive ? 2 : 1,
+                              borderColor: isActive ? COLORS.blue : COLORS.border,
+                              backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
+                            },
+                          ]}
+                        >
+                          <Text style={styles.documentItemTitle}>
+                            {getProfileDisplayName(parent, 'Parent')}
+                          </Text>
+                          <Text style={styles.documentItemMeta}>{parent.email}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <Text style={styles.parentAttendanceStateText}>No active parents found.</Text>
+                )}
+              </View>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleSendTemplate}
+              style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}
+            >
+              <Text style={styles.primaryButtonText}>Send Form</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Text style={styles.parentAttendanceStateText}>
+            Select a template to send it to parents or staff.
+          </Text>
+        )}
+      </View>
+
+      <View style={styles.profileList}>
+        {ownerFormCards.length ? (
+          ownerFormCards.map((item) => {
+            const { form, recipients, signedIds, signaturesForForm, signedRecordCount, sentCount, pendingFormCount, audienceLabel } = item;
+            const isOpen = expandedFormId === form.id;
+            return (
+              <Pressable
+                key={form.id}
+                accessibilityRole="button"
+                onPress={() =>
+                  setExpandedFormId((current) => (current === form.id ? null : form.id))
+                }
+                style={({ pressed }) => [styles.profileCardInner, pressed && styles.pressedTile]}
+              >
+                <View style={styles.documentItemHeaderRow}>
+                  <View style={styles.documentItemHeadingBlock}>
+                    <Text style={styles.documentItemTitle}>{form.title}</Text>
+                    <Text style={styles.documentItemMeta}>{getDocumentDisplayType(form)}</Text>
+                  </View>
+
+                  <DocumentStatusPill status={form.status || 'Active'} />
+                </View>
+
+                <Text style={styles.documentItemMeta}>
+                  Created {formatDate(form.createdAt || form.uploadedAt)}
+                </Text>
+                <Text style={styles.documentItemMeta}>Sent To: {audienceLabel}</Text>
+
+                <View style={styles.documentItemHeaderRow}>
+                <Text style={styles.documentItemMeta}>Sent Count: {sentCount}</Text>
+                <Text style={styles.documentItemMeta}>Signed: {signedRecordCount}</Text>
+                <Text style={styles.documentItemMeta}>Pending: {pendingFormCount}</Text>
+                <Text style={styles.ownerAccordionChevron}>{isOpen ? '⌃' : '⌄'}</Text>
+              </View>
+
+                {isOpen ? (
+                  <View style={styles.ownerStaffMetaList}>
+                    <Text style={styles.ownerAccordionSummary}>{form.description}</Text>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Required</Text>
+                      <Text style={styles.ownerStaffMetaValue}>
+                        {form.required ? 'Required' : 'Optional'}
+                      </Text>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Signed Users</Text>
+                      <Text style={styles.ownerStaffMetaValue}>
+                        {signaturesForForm.length
+                          ? signaturesForForm
+                              .map((signature) => {
+                                const matchedRecipient = recipients.find(
+                                  (recipient) =>
+                                    recipient.id ===
+                                    (signature.parentId || signature.parent_profile_id)
+                                );
+                                const signedName = matchedRecipient
+                                  ? getRecipientName(matchedRecipient, 'Signed User')
+                                  : signature.typedName || signature.childName || 'Signed User';
+                                const signedDate = signature.signedAt
+                                  ? formatDate(signature.signedAt)
+                                  : 'Unknown date';
+                                return `${signedName} · ${signedDate}`;
+                              })
+                              .join(' | ')
+                          : 'No signatures yet.'}
+                      </Text>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Pending Users</Text>
+                      <Text style={styles.ownerStaffMetaValue}>
+                        {pendingFormCount > 0
+                          ? recipients
+                              .filter((recipient) => !signedIds.has(recipient.id))
+                              .map((recipient) => getRecipientName(recipient, 'Pending User'))
+                              .join(' | ')
+                          : 'All recipients signed.'}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          })
+        ) : (
+          <Text style={styles.parentAttendanceStateText}>No forms yet.</Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function ParentFormsWaiversPanel({
+  forms,
+  signatures,
+  linkedChildren,
+  currentUserId,
+  onSignForm,
+}) {
+  const [selectedChildId, setSelectedChildId] = useState(linkedChildren[0]?.id ?? '');
+  const [expandedFormId, setExpandedFormId] = useState(null);
+  const [typedName, setTypedName] = useState('');
+  const [acknowledged, setAcknowledged] = useState(false);
+
+  useEffect(() => {
+    if (linkedChildren.length === 1) {
+      setSelectedChildId(linkedChildren[0]?.id || '');
+    } else if (!selectedChildId && linkedChildren.length) {
+      setSelectedChildId(linkedChildren[0]?.id || '');
+    }
+  }, [linkedChildren, selectedChildId]);
+
+  const activeForms = (Array.isArray(forms) ? forms : []).filter((form) => {
+    if (form.category === 'Staff Documents') {
+      return false;
+    }
+
+    const audienceType = form.audience_type || 'all_parents';
+    return audienceType === 'all_parents' || form.recipient_profile_id === currentUserId;
+  });
+  const selectedChild =
+    linkedChildren.find((child) => child.id === selectedChildId) || linkedChildren[0] || null;
+
+  const getSignatureForForm = (formId) =>
+    (Array.isArray(signatures) ? signatures : []).find(
+      (signature) => signature.formId === formId && signature.parentId === currentUserId
+    ) || null;
+
+  const handleSign = (form) => {
+    const cleanName = typedName.trim();
+
+    if (!selectedChild) {
+      Alert.alert('No child selected.');
+      return;
+    }
+
+    if (!cleanName || !acknowledged) {
+      Alert.alert('Complete the signature section.');
+      return;
+    }
+
+    onSignForm?.({
+      formId: form.id,
+      childId: selectedChild.id,
+      childName:
+        `${selectedChild.first_name || ''} ${selectedChild.last_name || ''}`.trim() || 'Child',
+      typedName: cleanName,
+    });
+
+    setTypedName('');
+    setAcknowledged(false);
+  };
+
+  return (
+    <View style={styles.profileCard}>
+      <View style={styles.parentSectionHeaderRow}>
+        <Text style={styles.parentSectionHeaderTitle}>Forms & Waivers</Text>
+        <Text style={styles.parentSectionHeaderSubtle}>
+          {selectedChild
+            ? `${selectedChild.first_name || ''} ${selectedChild.last_name || ''}`.trim()
+            : 'No child selected'}
+        </Text>
+      </View>
+
+      {linkedChildren.length ? (
+        <View style={styles.ownerChipGroup}>
+          <Text style={styles.ownerChipGroupLabel}>Select Child</Text>
+          <View style={styles.ownerFilterPillRow}>
+            {linkedChildren.map((child) => {
+              const isActive = selectedChildId === child.id;
+              return (
+                <Pressable
+                  key={child.id}
+                  accessibilityRole="button"
+                  onPress={() => setSelectedChildId(child.id)}
+                  style={({ pressed }) => [
+                    styles.ownerFilterPill,
+                    isActive && styles.ownerFilterPillActive,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.ownerFilterPillText,
+                      isActive && styles.ownerFilterPillTextActive,
+                    ]}
+                  >
+                    {`${child.first_name || ''} ${child.last_name || ''}`.trim()}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ) : (
+        <Text style={styles.parentAttendanceStateText}>No children linked to this account.</Text>
+      )}
+
+      <View style={styles.profileList}>
+        {activeForms.length ? (
+          activeForms.map((form) => {
+            const signedRecord = selectedChild ? getSignatureForForm(form.id) : null;
+            const isOpen = expandedFormId === form.id;
+
+            return (
+              <Pressable
+                key={form.id}
+                accessibilityRole="button"
+                onPress={() =>
+                  setExpandedFormId((current) => (current === form.id ? null : form.id))
+                }
+                style={({ pressed }) => [styles.profileCardInner, pressed && styles.pressedTile]}
+              >
+                <View style={styles.documentItemHeaderRow}>
+                  <View style={styles.documentItemHeadingBlock}>
+                    <Text style={styles.documentItemTitle}>{form.title}</Text>
+                    <Text style={styles.documentItemMeta}>{getDocumentDisplayType(form)}</Text>
+                  </View>
+
+                  <DocumentStatusPill
+                    status={signedRecord ? 'Signed' : 'Pending Signature'}
+                  />
+                </View>
+
+                <Text style={styles.documentItemMeta}>
+                  Status: {signedRecord ? 'Signed' : 'Pending Signature'}
+                </Text>
+
+                <View style={styles.documentItemHeaderRow}>
+                  <Text style={styles.documentItemMeta}>
+                    {form.required ? 'Required' : 'Optional'}
+                  </Text>
+                  <Text style={styles.ownerAccordionChevron}>{isOpen ? '⌃' : '⌄'}</Text>
+                </View>
+
+                {isOpen ? (
+                  <View style={styles.ownerStaffMetaList}>
+                    <Text style={styles.ownerAccordionSummary}>{form.description}</Text>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Title</Text>
+                      <Text style={styles.ownerStaffMetaValue}>{form.title}</Text>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Type</Text>
+                      <Text style={styles.ownerStaffMetaValue}>{getDocumentDisplayType(form)}</Text>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Description</Text>
+                      <Text style={styles.ownerStaffMetaValue}>{form.description}</Text>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Audience</Text>
+                      <Text style={styles.ownerStaffMetaValue}>
+                        {formatDocumentAudienceLabel(form.audience_type || 'all_parents')}
+                      </Text>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Created</Text>
+                      <Text style={styles.ownerStaffMetaValue}>
+                        {form.createdAt || form.created_at || form.uploadedAt
+                          ? formatDate(form.createdAt || form.created_at || form.uploadedAt)
+                          : '—'}
+                      </Text>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Status</Text>
+                      <Text style={styles.ownerStaffMetaValue}>
+                        {signedRecord ? 'Signed' : 'Pending Signature'}
+                      </Text>
+                    </View>
+
+                    {!signedRecord ? (
+                      <>
+                        <TextInput
+                          placeholder="Typed Parent Name"
+                          placeholderTextColor={COLORS.muted}
+                          value={typedName}
+                          onChangeText={setTypedName}
+                          style={styles.ownerTitleInput}
+                        />
+
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => setAcknowledged((current) => !current)}
+                          style={({ pressed }) => [
+                            styles.ownerFilterPill,
+                            acknowledged && styles.ownerFilterPillActive,
+                            pressed && styles.pressedButton,
+                            {
+                              marginTop: 10,
+                              alignSelf: 'flex-start',
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 10,
+                            },
+                          ]}
+                        >
+                          <View
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: 4,
+                              borderWidth: 1.5,
+                              borderColor: acknowledged ? COLORS.white : COLORS.blue,
+                              backgroundColor: acknowledged ? COLORS.blue : COLORS.white,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            {acknowledged ? (
+                              <Text style={{ color: COLORS.white, fontSize: 12, fontWeight: '800' }}>
+                                ✓
+                              </Text>
+                            ) : null}
+                          </View>
+                          <Text
+                            style={[
+                              styles.ownerFilterPillText,
+                              acknowledged && styles.ownerFilterPillTextActive,
+                            ]}
+                          >
+                            I acknowledge and agree
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => handleSign(form)}
+                          style={({ pressed }) => [
+                            styles.primaryButton,
+                            { marginTop: 12 },
+                            pressed && styles.pressedButton,
+                          ]}
+                        >
+                          <Text style={styles.primaryButtonText}>Sign Form</Text>
+                        </Pressable>
+                      </>
+                    ) : (
+                      <View style={styles.ownerStaffMetaRow}>
+                        <Text style={styles.ownerStaffMetaLabel}>Signed At</Text>
+                        <Text style={styles.ownerStaffMetaValue}>
+                          {signedRecord?.signedAt ? formatDateTime(signedRecord.signedAt) : 'Signed'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          })
+        ) : (
+          <Text style={styles.parentAttendanceStateText}>No forms available yet.</Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function StaffFormsWaiversPanel({ forms, signatures, currentUserId, onSignForm }) {
+  const [expandedFormId, setExpandedFormId] = useState(null);
+  const [typedName, setTypedName] = useState('');
+  const [acknowledged, setAcknowledged] = useState(false);
+
+  const staffForms = (Array.isArray(forms) ? forms : []).filter((form) => {
+    const audienceType = form.audience_type || 'all_staff';
+    return audienceType === 'all_staff' || audienceType === 'specific_staff';
+  });
+
+  const signatureRows = Array.isArray(signatures) ? signatures : [];
+  const getSignatureForForm = (formId) =>
+    signatureRows.find(
+      (signature) => signature.formId === formId && signature.parentId === currentUserId
+    ) || null;
+
+  const handleSign = (form) => {
+    const cleanName = typedName.trim();
+
+    if (!cleanName || !acknowledged) {
+      Alert.alert('Complete the signature section.');
+      return;
+    }
+
+    onSignForm?.({
+      formId: form.id,
+      childId: null,
+      childName: getProfileDisplayName(
+        { first_name: '', last_name: '', email: '' },
+        'Staff Member'
+      ),
+      typedName: cleanName,
+    });
+
+    setTypedName('');
+    setAcknowledged(false);
+  };
+
+  return (
+    <View style={styles.profileCard}>
+      <View style={styles.parentSectionHeaderRow}>
+        <Text style={styles.parentSectionHeaderTitle}>Staff Forms</Text>
+        <Text style={styles.parentSectionHeaderSubtle}>{`${staffForms.length} forms`}</Text>
+      </View>
+
+      <View style={styles.profileList}>
+        {staffForms.length ? (
+          staffForms.map((form) => {
+            const signedRecord = getSignatureForForm(form.id);
+            const isOpen = expandedFormId === form.id;
+
+            return (
+              <Pressable
+                key={form.id}
+                accessibilityRole="button"
+                onPress={() =>
+                  setExpandedFormId((current) => (current === form.id ? null : form.id))
+                }
+                style={({ pressed }) => [styles.profileCardInner, pressed && styles.pressedTile]}
+              >
+                <View style={styles.documentItemHeaderRow}>
+                  <View style={styles.documentItemHeadingBlock}>
+                    <Text style={styles.documentItemTitle}>{form.title}</Text>
+                    <Text style={styles.documentItemMeta}>{getDocumentDisplayType(form)}</Text>
+                  </View>
+
+                  <DocumentStatusPill
+                    status={signedRecord ? 'Signed' : 'Pending Signature'}
+                  />
+                </View>
+
+                <Text style={styles.documentItemMeta}>
+                  Status: {signedRecord ? 'Signed' : 'Pending Signature'}
+                </Text>
+
+                <View style={styles.documentItemHeaderRow}>
+                  <Text style={styles.documentItemMeta}>
+                    {form.required ? 'Required' : 'Optional'}
+                  </Text>
+                  <Text style={styles.ownerAccordionChevron}>{isOpen ? '⌃' : '⌄'}</Text>
+                </View>
+
+                {isOpen ? (
+                  <View style={styles.ownerStaffMetaList}>
+                    <Text style={styles.ownerAccordionSummary}>{form.description}</Text>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Title</Text>
+                      <Text style={styles.ownerStaffMetaValue}>{form.title}</Text>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Type</Text>
+                      <Text style={styles.ownerStaffMetaValue}>{getDocumentDisplayType(form)}</Text>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Description</Text>
+                      <Text style={styles.ownerStaffMetaValue}>{form.description}</Text>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Audience</Text>
+                      <Text style={styles.ownerStaffMetaValue}>
+                        {formatDocumentAudienceLabel(form.audience_type || 'all_staff')}
+                      </Text>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Created</Text>
+                      <Text style={styles.ownerStaffMetaValue}>
+                        {form.createdAt || form.created_at || form.uploadedAt
+                          ? formatDate(form.createdAt || form.created_at || form.uploadedAt)
+                          : '—'}
+                      </Text>
+                    </View>
+                    <View style={styles.ownerStaffMetaRow}>
+                      <Text style={styles.ownerStaffMetaLabel}>Status</Text>
+                      <Text style={styles.ownerStaffMetaValue}>
+                        {signedRecord ? 'Signed' : 'Pending Signature'}
+                      </Text>
+                    </View>
+
+                    {!signedRecord ? (
+                      <>
+                        <TextInput
+                          placeholder="Typed Staff Name"
+                          placeholderTextColor={COLORS.muted}
+                          value={typedName}
+                          onChangeText={setTypedName}
+                          style={styles.ownerTitleInput}
+                        />
+
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => setAcknowledged((current) => !current)}
+                          style={({ pressed }) => [
+                            styles.ownerFilterPill,
+                            acknowledged && styles.ownerFilterPillActive,
+                            pressed && styles.pressedButton,
+                            {
+                              marginTop: 10,
+                              alignSelf: 'flex-start',
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 10,
+                            },
+                          ]}
+                        >
+                          <View
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: 4,
+                              borderWidth: 1.5,
+                              borderColor: acknowledged ? COLORS.white : COLORS.blue,
+                              backgroundColor: acknowledged ? COLORS.blue : COLORS.white,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            {acknowledged ? (
+                              <Text style={{ color: COLORS.white, fontSize: 12, fontWeight: '800' }}>
+                                ✓
+                              </Text>
+                            ) : null}
+                          </View>
+                          <Text
+                            style={[
+                              styles.ownerFilterPillText,
+                              acknowledged && styles.ownerFilterPillTextActive,
+                            ]}
+                          >
+                            I acknowledge and agree
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => handleSign(form)}
+                          style={({ pressed }) => [
+                            styles.primaryButton,
+                            { marginTop: 12 },
+                            pressed && styles.pressedButton,
+                          ]}
+                        >
+                          <Text style={styles.primaryButtonText}>Sign Form</Text>
+                        </Pressable>
+                      </>
+                    ) : (
+                      <View style={styles.ownerStaffMetaRow}>
+                        <Text style={styles.ownerStaffMetaLabel}>Signed At</Text>
+                        <Text style={styles.ownerStaffMetaValue}>
+                          {signedRecord?.signedAt ? formatDateTime(signedRecord.signedAt) : 'Signed'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          })
+        ) : (
+          <Text style={styles.parentAttendanceStateText}>No forms available yet.</Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function DocumentCenterScreen({
+  onBack,
+  onLogout,
+  title,
+  subtitle,
+  badgeText,
+  introTitle,
+  introText,
+  sections,
+  allowSendButton,
+  onShowComingSoon,
+  topContent = null,
+}) {
+  const sectionCount = sections.reduce(
+    (count, section) => count + (Array.isArray(section.documents) ? section.documents.length : 0),
+    0
+  );
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.ownerDailyNotesReviewStickyHeader}>
+          <View style={styles.ownerDailyNotesReviewHeaderTopRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <View style={[styles.ownerAccessPill, { backgroundColor: COLORS.blue }]}>
+              <Text style={styles.ownerAccessPillText}>{badgeText}</Text>
+            </View>
+          </View>
+
+          <View style={styles.ownerDailyNotesReviewHeroMain}>
+            <View style={styles.ownerDailyNotesReviewHeroCopy}>
+              <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+              <Text style={styles.shellHeroTitle}>{title}</Text>
+              <Text style={styles.ownerDailyNotesReviewSubtitle}>{subtitle}</Text>
+            </View>
+
+            <View style={[styles.ownerDailyNotesReviewCountBadge, { backgroundColor: COLORS.blue }]}>
+              <Text style={styles.ownerDailyNotesReviewCountValue}>{sectionCount}</Text>
+              <Text style={styles.ownerDailyNotesReviewCountLabel}>Docs</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          <View style={styles.notificationsIntroCard}>
+            <Text style={styles.parentSectionHeaderTitle}>{introTitle}</Text>
+            <Text style={styles.notificationsIntroText}>{introText}</Text>
+          </View>
+
+          {topContent}
+
+          {sections.length ? (
+            sections.map((section) => (
+              <View key={section.title} style={styles.profileCard}>
+                <View style={styles.parentSectionHeaderRow}>
+                  <Text style={styles.parentSectionHeaderTitle}>{section.title}</Text>
+                  <Text style={styles.parentSectionHeaderSubtle}>
+                    {Array.isArray(section.documents) ? `${section.documents.length} docs` : '0 docs'}
+                  </Text>
+                </View>
+
+                <View style={styles.profileList}>
+                  {(Array.isArray(section.documents) ? section.documents : []).map((document) => (
+                    <DocumentItemCard
+                      key={document.title}
+                      title={document.title}
+                      category={document.category}
+                      status={document.status}
+                      uploadedAt={document.uploadedAt}
+                      showSendButton={allowSendButton}
+                      onView={() =>
+                        onShowComingSoon(
+                          'View Document',
+                          'Document viewing will be connected to Supabase Storage later.'
+                        )
+                      }
+                      onSendToParents={() =>
+                        onShowComingSoon(
+                          'Send to Parents',
+                          'Document sharing will be connected later.'
+                        )
+                      }
+                    />
+                  ))}
+                </View>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.parentAttendanceStateText}>No documents yet.</Text>
+          )}
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function OwnerDocumentCenterScreen({
+  onBack,
+  onLogout,
+  onShowComingSoon,
+  documentForms = [],
+  documentSignatures = [],
+  availableParentProfiles = [],
+  availableParentProfilesLoading = false,
+  availableParentProfilesError = '',
+  availableStaffProfiles = [],
+  availableStaffProfilesLoading = false,
+  availableStaffProfilesError = '',
+  onCreateDocumentForm,
+}) {
+  const documentSections = buildDocumentSections(documentForms, 'owner');
+
+  return (
+    <DocumentCenterScreen
+      onBack={onBack}
+      onLogout={onLogout}
+      title="Document Center"
+      subtitle="Manage forms, waivers, and center documents"
+      badgeText="Owner Access"
+      introTitle="Owner Library"
+      introText="Mock documents only for now. View and send options will connect later."
+      sections={documentSections.length ? documentSections : OWNER_DOCUMENT_CENTER_SECTIONS}
+      allowSendButton
+      onShowComingSoon={onShowComingSoon}
+      topContent={
+        <OwnerFormsWaiversPanel
+          forms={documentForms}
+          signatures={documentSignatures}
+          availableParentProfiles={availableParentProfiles}
+          availableParentProfilesLoading={availableParentProfilesLoading}
+          availableParentProfilesError={availableParentProfilesError}
+          availableStaffProfiles={availableStaffProfiles}
+          availableStaffProfilesLoading={availableStaffProfilesLoading}
+          availableStaffProfilesError={availableStaffProfilesError}
+          onCreateForm={onCreateDocumentForm}
+        />
+      }
+    />
+  );
+}
+
+function ParentDocumentsScreen({
+  onBack,
+  onLogout,
+  onShowComingSoon,
+  documentForms = [],
+  documentSignatures = [],
+  linkedChildren = [],
+  currentUserId = '',
+  onSignForm,
+}) {
+  const documentSections = buildDocumentSections(documentForms, 'parent', currentUserId);
+
+  return (
+    <DocumentCenterScreen
+      onBack={onBack}
+      onLogout={onLogout}
+      title="Documents"
+      subtitle="Forms and waivers for your child"
+      badgeText="Family Access"
+      introTitle="Family Documents"
+      introText="View required child forms and completed waivers."
+      sections={documentSections.length ? documentSections : PARENT_DOCUMENT_CENTER_SECTIONS}
+      allowSendButton={false}
+      onShowComingSoon={onShowComingSoon}
+      topContent={
+        <ParentFormsWaiversPanel
+          forms={documentForms}
+          signatures={documentSignatures}
+          linkedChildren={linkedChildren}
+          currentUserId={currentUserId}
+          onSignForm={onSignForm}
+        />
+      }
+    />
+  );
+}
+
+function StaffDocumentsScreen({
+  onBack,
+  onLogout,
+  onShowComingSoon,
+  documentForms = [],
+  documentSignatures = [],
+  currentUserId = '',
+  onSignForm,
+}) {
+  const documentSections = buildDocumentSections(documentForms, 'staff', currentUserId);
+
+  return (
+    <DocumentCenterScreen
+      onBack={onBack}
+      onLogout={onLogout}
+      title="Documents"
+      subtitle="Staff forms and center policies"
+      badgeText="Staff Access"
+      introTitle="Staff Documents"
+      introText="View staff forms, guides, and center policies."
+      sections={documentSections.length ? documentSections : STAFF_DOCUMENT_CENTER_SECTIONS}
+      allowSendButton={false}
+      onShowComingSoon={onShowComingSoon}
+      topContent={
+        <StaffFormsWaiversPanel
+          forms={documentForms}
+          signatures={documentSignatures}
+          currentUserId={currentUserId}
+          onSignForm={onSignForm}
+        />
+      }
+    />
   );
 }
 
@@ -12075,8 +15288,11 @@ export default function App() {
   const [pendingInvite, setPendingInvite] = useState(null);
   const [activationStep, setActivationStep] = useState('verify');
   const [staffStatus, setStaffStatus] = useState(STAFF_MEMBER.status);
-  const [lastClockInTime, setLastClockInTime] = useState('');
-  const [lastClockOutTime, setLastClockOutTime] = useState('');
+  const [staffTimeEntries, setStaffTimeEntries] = useState([]);
+  const [ownerStaffProfiles, setOwnerStaffProfiles] = useState([]);
+  const [staffTimeEntriesLoading, setStaffTimeEntriesLoading] = useState(true);
+  const [staffTimeEntriesError, setStaffTimeEntriesError] = useState('');
+  const [staffTimeSaving, setStaffTimeSaving] = useState(false);
   const [staffBeforeAfterChildren, setStaffBeforeAfterChildren] = useState(() =>
     createStaffBeforeAfterChildren()
   );
@@ -12138,6 +15354,7 @@ export default function App() {
   const [ownerIncidentReportsPendingError, setOwnerIncidentReportsPendingError] = useState('');
   const [ownerIncidentReportsReviewActionId, setOwnerIncidentReportsReviewActionId] =
     useState('');
+  const [ownerStaffReviewActionId, setOwnerStaffReviewActionId] = useState('');
   const [ownerBeforeAfterCounts, setOwnerBeforeAfterCounts] = useState({
     droppedOff: 0,
     onBus: 0,
@@ -12190,6 +15407,14 @@ export default function App() {
   const [parentLinkedChildren, setParentLinkedChildren] = useState([]);
   const [parentLinkedChildrenLoading, setParentLinkedChildrenLoading] = useState(true);
   const [parentLinkedChildrenError, setParentLinkedChildrenError] = useState('');
+  const [availableParentProfiles, setAvailableParentProfiles] = useState([]);
+  const [availableParentProfilesLoading, setAvailableParentProfilesLoading] = useState(true);
+  const [availableParentProfilesError, setAvailableParentProfilesError] = useState('');
+  const [availableStaffProfiles, setAvailableStaffProfiles] = useState([]);
+  const [availableStaffProfilesLoading, setAvailableStaffProfilesLoading] = useState(true);
+  const [availableStaffProfilesError, setAvailableStaffProfilesError] = useState('');
+  const [documentForms, setDocumentForms] = useState(() => INITIAL_DOCUMENT_FORMS);
+  const [documentSignatures, setDocumentSignatures] = useState([]);
 
   useEffect(() => {
     childProfileSelectedChildRef.current = childProfileSelectedChild;
@@ -13057,6 +16282,131 @@ export default function App() {
     }
   }, [session?.user?.id]);
 
+  const loadAvailableParentProfiles = useCallback(async () => {
+    if (!session?.user?.id) {
+      setAvailableParentProfiles([]);
+      setAvailableParentProfilesError('');
+      setAvailableParentProfilesLoading(false);
+      return;
+    }
+
+    setAvailableParentProfilesLoading(true);
+    setAvailableParentProfilesError('');
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, first_name, last_name, role, account_status')
+        .eq('role', 'parent')
+        .eq('account_status', 'active');
+
+      if (error) {
+        throw new Error(error.message || 'Could not load active parent profiles.');
+      }
+
+      setAvailableParentProfiles(Array.isArray(data) ? data : []);
+    } catch (loadError) {
+      setAvailableParentProfiles([]);
+      setAvailableParentProfilesError(loadError?.message || 'Could not load active parent profiles.');
+    } finally {
+      setAvailableParentProfilesLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const loadAvailableStaffProfiles = useCallback(async () => {
+    if (!session?.user?.id) {
+      setAvailableStaffProfiles([]);
+      setAvailableStaffProfilesError('');
+      setAvailableStaffProfilesLoading(false);
+      return;
+    }
+
+    setAvailableStaffProfilesLoading(true);
+    setAvailableStaffProfilesError('');
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, first_name, last_name, role, account_status')
+        .eq('role', 'staff')
+        .eq('account_status', 'active');
+
+      if (error) {
+        throw new Error(error.message || 'Could not load active staff profiles.');
+      }
+
+      setAvailableStaffProfiles(Array.isArray(data) ? data : []);
+    } catch (loadError) {
+      setAvailableStaffProfiles([]);
+      setAvailableStaffProfilesError(loadError?.message || 'Could not load active staff profiles.');
+    } finally {
+      setAvailableStaffProfilesLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const loadDocumentCenterData = useCallback(async () => {
+    if (!session?.user?.id) {
+      setDocumentForms([]);
+      setDocumentSignatures([]);
+      return;
+    }
+
+    try {
+      const { data: formsData, error: formsError } = await supabase
+        .from('forms_documents')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (formsError) {
+        throw new Error(formsError.message || 'Could not load documents.');
+      }
+
+      setDocumentForms(
+        (Array.isArray(formsData) ? formsData : []).map((form) => ({
+          id: form.id,
+          title: form.title || 'Untitled Document',
+          formType: form.form_type || form.formType || form.category || 'Form',
+          description: form.description || '',
+          required: Boolean(form.required),
+          status: form.status || 'Draft',
+          category: form.category || '',
+          uploadedAt: form.created_at || form.uploadedAt || null,
+          createdAt: form.created_at || form.createdAt || null,
+          audience_type: form.audience_type || 'all_parents',
+          recipient_profile_id: form.recipient_profile_id || null,
+          created_by: form.created_by || null,
+        }))
+      );
+
+      const { data: signaturesData, error: signaturesError } = await supabase
+        .from('form_signatures')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (signaturesError) {
+        console.log('Document center signatures load error', signaturesError);
+        setDocumentSignatures([]);
+        return;
+      }
+
+      setDocumentSignatures(
+        (Array.isArray(signaturesData) ? signaturesData : []).map((signature) => ({
+          id: signature.id,
+          formId: signature.form_id || signature.formId,
+          parentId: signature.parent_profile_id || signature.parentId,
+          childId: signature.child_id || signature.childId || '',
+          typedName: signature.typed_name || signature.typedName || '',
+          acknowledged: Boolean(signature.acknowledged),
+          signedAt: signature.signed_at || signature.created_at || signature.signedAt || null,
+        }))
+      );
+    } catch (loadError) {
+      console.log('Document center load error', loadError);
+      setDocumentForms([]);
+      setDocumentSignatures([]);
+    }
+  }, [session?.user?.id]);
+
   const loadOwnerBeforeAfterCounts = useCallback(async () => {
     if (!session?.user?.id) {
       setOwnerBeforeAfterCounts({ droppedOff: 0, onBus: 0, returned: 0, pickedUp: 0 });
@@ -13555,6 +16905,79 @@ export default function App() {
       setAuthorizedPickupRowsError(loadError?.message || 'Could not load authorized pickups.');
     } finally {
       setAuthorizedPickupRowsLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const loadStaffTimeEntries = useCallback(async () => {
+    if (!session?.user?.id) {
+      setStaffTimeEntries([]);
+      setOwnerStaffProfiles([]);
+      setStaffTimeEntriesError('');
+      setStaffTimeEntriesLoading(false);
+      return;
+    }
+
+    setStaffTimeEntriesLoading(true);
+    setStaffTimeEntriesError('');
+
+    try {
+      const [{ data, error }, profileResult] = await Promise.all([
+        supabase
+          .from('staff_time_entries')
+          .select(
+            'id, staff_profile_id, clock_in, clock_out, total_minutes, status, created_at, review_status, reviewed_by, reviewed_at, review_note'
+          )
+          .order('created_at', { ascending: false }),
+        supabase.from('profiles').select('id, email, first_name, last_name, role').eq('role', 'staff'),
+      ]);
+
+      if (error) {
+        throw new Error(error.message || 'Could not load staff time entries.');
+      }
+
+      if (profileResult.error) {
+        console.log('Staff profile load error', profileResult.error);
+      }
+
+      const rows = Array.isArray(data) ? data : [];
+      const profileRows = Array.isArray(profileResult.data) ? profileResult.data : [];
+      setOwnerStaffProfiles(profileRows);
+
+      const profileById = profileRows.reduce((acc, profile) => {
+        acc[profile.id] = profile;
+        return acc;
+      }, {});
+
+      setStaffTimeEntries(
+        rows.map((row) => {
+          const profile = profileById[row.staff_profile_id] || {};
+          const displayName =
+            [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
+            profile?.email ||
+            'Staff Member';
+          return {
+            ...row,
+            staff_name: displayName || row.staff_profile_id || 'Staff Member',
+            staff_email: profile.email || '',
+          };
+        })
+      );
+
+      const latestForCurrentUser = rows.find((row) => row.staff_profile_id === session.user.id) || null;
+      setStaffStatus(
+        latestForCurrentUser?.status === 'clocked_in'
+          ? 'Checked In'
+          : latestForCurrentUser?.status === 'clocked_out'
+            ? 'Checked Out'
+            : STAFF_MEMBER.status
+      );
+    } catch (loadError) {
+      setStaffTimeEntries([]);
+      setOwnerStaffProfiles([]);
+      setStaffTimeEntriesError(loadError?.message || 'Could not load staff time entries.');
+      setStaffStatus(STAFF_MEMBER.status);
+    } finally {
+      setStaffTimeEntriesLoading(false);
     }
   }, [session?.user?.id]);
 
@@ -14280,6 +17703,45 @@ export default function App() {
       return;
     }
 
+    loadAvailableParentProfiles();
+  }, [authLoading, loadAvailableParentProfiles]);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    loadAvailableStaffProfiles();
+  }, [authLoading, loadAvailableStaffProfiles]);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    loadDocumentCenterData();
+  }, [authLoading, loadDocumentCenterData]);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (!session?.user?.id) {
+      setStaffTimeEntries([]);
+      setStaffTimeEntriesError('');
+      setStaffTimeEntriesLoading(false);
+      return;
+    }
+
+    loadStaffTimeEntries();
+  }, [authLoading, loadStaffTimeEntries, session?.user?.id]);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
     if (screen !== 'child-profile') {
       return;
     }
@@ -14461,6 +17923,122 @@ export default function App() {
     [loadOwnerIncidentReportsReview, loadParentIncidentReports, loadStaffIncidentReportsData, session?.user?.id]
   );
 
+  const handleOwnerStaffReviewDecision = useCallback(
+    async (entry, reviewStatus, reviewNote = '') => {
+      if (!session?.user?.id || !entry?.id) {
+        return;
+      }
+
+      const cleanReviewNote = typeof reviewNote === 'string' ? reviewNote.trim() : '';
+      if (reviewStatus === 'rejected' && !cleanReviewNote) {
+        Alert.alert('Reason required.', 'Please provide a reason before rejecting this entry.');
+        return;
+      }
+
+      setOwnerStaffReviewActionId(entry.id);
+
+      try {
+        const { error: updateError } = await supabase
+          .from('staff_time_entries')
+          .update({
+            review_status: reviewStatus,
+            reviewed_by: session.user.id,
+            reviewed_at: new Date().toISOString(),
+            review_note: reviewStatus === 'approved' ? null : cleanReviewNote,
+          })
+          .eq('id', entry.id);
+
+        if (updateError) {
+          throw new Error(updateError.message || 'Could not update staff hours.');
+        }
+
+        await loadStaffTimeEntries();
+        Alert.alert(
+          reviewStatus === 'approved' ? 'Staff hours approved.' : 'Staff hours rejected.'
+        );
+      } catch (reviewError) {
+        Alert.alert('Could not update staff hours.', reviewError?.message || 'Try again.');
+      } finally {
+        setOwnerStaffReviewActionId('');
+      }
+    },
+    [loadStaffTimeEntries, session?.user?.id]
+  );
+
+  const handleCreateDocumentForm = useCallback(
+    async (formPayload) => {
+      if (!session?.user?.id) {
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('forms_documents')
+          .insert({
+            title: formPayload.title,
+            category: formPayload.category || 'Forms & Waivers',
+            description: formPayload.description,
+            audience_type: formPayload.audience_type || 'all_parents',
+            recipient_profile_id: formPayload.recipient_profile_id || null,
+            status: formPayload.status || 'Draft',
+            required: Boolean(formPayload.required),
+            created_by: session.user.id,
+          })
+          .select('*')
+          .single();
+
+        if (error) {
+          throw new Error(error.message || 'Could not create form.');
+        }
+
+        if (data) {
+          await loadDocumentCenterData();
+        }
+
+        Alert.alert('Form created.');
+      } catch (createError) {
+        Alert.alert('Could not create form.', createError?.message || 'Try again.');
+      }
+    },
+    [loadDocumentCenterData, session?.user?.id]
+  );
+
+  const handleSignDocumentForm = useCallback(
+    async ({ formId, typedName }) => {
+      if (!session?.user?.id) {
+        return;
+      }
+
+      const existingSignature = documentSignatures.find(
+        (entry) => entry.formId === formId && entry.parentId === session.user.id
+      );
+
+      if (existingSignature) {
+        Alert.alert('Form already signed.');
+        return;
+      }
+
+      try {
+        const { error } = await supabase.from('form_signatures').insert({
+          form_id: formId,
+          parent_profile_id: session.user.id,
+          typed_name: typedName,
+          acknowledged: true,
+        });
+
+        if (error) {
+          throw new Error(error.message || 'Could not sign form.');
+        }
+
+        await loadDocumentCenterData();
+        Alert.alert('Form signed.');
+      } catch (signError) {
+        Alert.alert('Could not sign form.', signError?.message || 'Try again.');
+      }
+    },
+    [documentSignatures, loadDocumentCenterData, session?.user?.id]
+  );
+
   const handleParentAcknowledgeIncidentReport = useCallback(
     async (report) => {
       if (!session?.user?.id || !report?.id) {
@@ -14624,8 +18202,6 @@ export default function App() {
     setOwnerIncidentReportsPending([]);
     setOwnerIncidentReportsReviewActionId('');
     setStaffStatus(STAFF_MEMBER.status);
-    setLastClockInTime('');
-    setLastClockOutTime('');
     setStaffBeforeAfterChildren(createStaffBeforeAfterChildren());
     setStaffBeforeAfterSelectedChildId(createStaffBeforeAfterChildren()[0]?.id ?? null);
     setStaffBeforeAfterPickupChildId(null);
@@ -14822,16 +18398,84 @@ export default function App() {
     setPendingInvite(null);
   };
 
-  const toggleStaffStatus = () => {
-    if (staffStatus === 'Checked Out') {
-      setStaffStatus('Checked In');
-      setLastClockInTime(STAFF_CLOCK_CURRENT_TIME);
+  const handleStaffClockIn = useCallback(async () => {
+    if (!session?.user?.id) {
       return;
     }
 
-    setStaffStatus('Checked Out');
-    setLastClockOutTime(STAFF_CLOCK_CURRENT_TIME);
-  };
+    setStaffTimeEntriesError('');
+    setStaffTimeSaving(true);
+
+    try {
+      const latestEntry = staffTimeEntries[0] || null;
+      if (latestEntry?.status === 'clocked_in') {
+        Alert.alert('You are already clocked in.');
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const { error } = await supabase.from('staff_time_entries').insert({
+        staff_profile_id: session.user.id,
+        clock_in: now,
+        status: 'clocked_in',
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Could not clock in.');
+      }
+
+      await loadStaffTimeEntries();
+    } catch (clockError) {
+      setStaffTimeEntriesError(clockError?.message || 'Could not clock in.');
+      Alert.alert('Could not clock in.', clockError?.message || 'Try again.');
+    } finally {
+      setStaffTimeSaving(false);
+    }
+  }, [loadStaffTimeEntries, session?.user?.id, staffTimeEntries]);
+
+  const handleStaffClockOut = useCallback(async () => {
+    if (!session?.user?.id) {
+      return;
+    }
+
+    setStaffTimeEntriesError('');
+    setStaffTimeSaving(true);
+
+    try {
+      const latestOpenEntry = staffTimeEntries.find((entry) => entry.status === 'clocked_in') || null;
+
+      if (!latestOpenEntry?.id) {
+        Alert.alert('No clock-in found for today.');
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const totalMinutes = Math.max(
+        0,
+        Math.round((new Date(now).getTime() - new Date(latestOpenEntry.clock_in).getTime()) / 60000)
+      );
+
+      const { error } = await supabase
+        .from('staff_time_entries')
+        .update({
+          clock_out: now,
+          total_minutes: totalMinutes,
+          status: 'clocked_out',
+        })
+        .eq('id', latestOpenEntry.id);
+
+      if (error) {
+        throw new Error(error.message || 'Could not clock out.');
+      }
+
+      await loadStaffTimeEntries();
+    } catch (clockError) {
+      setStaffTimeEntriesError(clockError?.message || 'Could not clock out.');
+      Alert.alert('Could not clock out.', clockError?.message || 'Try again.');
+    } finally {
+      setStaffTimeSaving(false);
+    }
+  }, [loadStaffTimeEntries, session?.user?.id, staffTimeEntries]);
 
   const openBeforeAfterPickup = (childId) => {
     const child = staffBeforeAfterChildren.find((entry) => entry.id === childId);
@@ -15948,6 +19592,23 @@ export default function App() {
 
                 <Pressable
                   accessibilityRole="button"
+                  onPress={() => setScreen('parent-documents')}
+                  style={({ pressed }) => [
+                    styles.parentQuickCard,
+                    styles.parentQuickBlue,
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <View style={styles.parentQuickAccentBlue} />
+                  <Text style={styles.parentQuickTitle}>Documents</Text>
+                  <Text style={styles.parentQuickValue}>Forms</Text>
+                  <Text style={styles.parentQuickNote}>
+                    Forms and waivers for your child
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
                   onPress={() => setScreen('parent-emergency-contacts')}
                   style={({ pressed }) => [
                     styles.parentQuickCard,
@@ -16087,6 +19748,17 @@ export default function App() {
           acknowledgingId={parentIncidentAcknowledgingId}
           onAcknowledge={handleParentAcknowledgeIncidentReport}
         />
+      ) : screen === 'parent-documents' ? (
+        <ParentDocumentsScreen
+          onBack={() => setScreen('parent-home')}
+          onLogout={handleLogout}
+          onShowComingSoon={showComingSoon}
+          documentForms={documentForms}
+          documentSignatures={documentSignatures}
+          linkedChildren={parentLinkedChildren}
+          currentUserId={session?.user?.id || ''}
+          onSignForm={handleSignDocumentForm}
+        />
       ) : screen === 'notifications' ? (
         <NotificationsScreen
           onBack={() => setScreen('parent-home')}
@@ -16139,8 +19811,10 @@ export default function App() {
           onOpenIncidentReports={() => setScreen('staff-incident-reports')}
           onOpenMessages={() => setScreen('staff-messages')}
           onOpenNotifications={() => setScreen('staff-notifications')}
+          onOpenDocuments={() => setScreen('staff-documents')}
           onOpenNotes={() => setScreen('staff-daily-notes')}
           onOpenHours={() => setScreen('staff-hours')}
+          timeEntries={staffTimeEntries}
           staffStatus={staffStatus}
           messages={recipientMessages}
           loading={recipientMessagesLoading}
@@ -16161,6 +19835,16 @@ export default function App() {
           loading={staffNotificationsLoading}
           error={recipientMessagesError || staffSummerCampError}
         />
+      ) : screen === 'staff-documents' ? (
+        <StaffDocumentsScreen
+          onBack={() => setScreen('staff-home')}
+          onLogout={handleLogout}
+          onShowComingSoon={showComingSoon}
+          documentForms={documentForms}
+          documentSignatures={documentSignatures}
+          currentUserId={session?.user?.id || ''}
+          onSignForm={handleSignDocumentForm}
+        />
       ) : screen === 'staff-messages' ? (
         <NotificationsScreen
           onBack={() => setScreen('staff-home')}
@@ -16179,10 +19863,14 @@ export default function App() {
         <StaffClockInOutScreen
           onBack={() => setScreen('staff-home')}
           onLogout={handleLogout}
+          currentUserId={session?.user?.id}
           staffStatus={staffStatus}
-          onToggleStaffStatus={toggleStaffStatus}
-          lastClockInTime={lastClockInTime}
-          lastClockOutTime={lastClockOutTime}
+          loading={staffTimeEntriesLoading}
+          error={staffTimeEntriesError}
+          timeEntries={staffTimeEntries}
+          onClockIn={handleStaffClockIn}
+          onClockOut={handleStaffClockOut}
+          saving={staffTimeSaving}
         />
       ) : screen === 'staff-before-after-attendance' ? (
         <StaffBeforeAfterAttendanceScreen
@@ -16271,6 +19959,10 @@ export default function App() {
         <StaffMyHoursScreen
           onBack={() => setScreen('staff-home')}
           onLogout={handleLogout}
+          currentUserId={session?.user?.id}
+          loading={staffTimeEntriesLoading}
+          error={staffTimeEntriesError}
+          timeEntries={staffTimeEntries}
         />
       ) : screen === 'staff-daily-notes' ? (
         <StaffDailyNotesScreen
@@ -16346,6 +20038,21 @@ export default function App() {
           onLogout={handleLogout}
           onShowComingSoon={showComingSoon}
         />
+      ) : screen === 'owner-documents' ? (
+        <OwnerDocumentCenterScreen
+          onBack={() => setScreen('owner-home')}
+          onLogout={handleLogout}
+          onShowComingSoon={showComingSoon}
+          documentForms={documentForms}
+          documentSignatures={documentSignatures}
+          availableParentProfiles={availableParentProfiles}
+          availableParentProfilesLoading={availableParentProfilesLoading}
+          availableParentProfilesError={availableParentProfilesError}
+          availableStaffProfiles={availableStaffProfiles}
+          availableStaffProfilesLoading={availableStaffProfilesLoading}
+          availableStaffProfilesError={availableStaffProfilesError}
+          onCreateDocumentForm={handleCreateDocumentForm}
+        />
       ) : screen === 'owner-daily-notes-review' ? (
         <OwnerDailyNotesReviewScreen
           onBack={() => setScreen('owner-home')}
@@ -16371,6 +20078,13 @@ export default function App() {
           onBack={() => setScreen('owner-home')}
           onLogout={handleLogout}
           onShowComingSoon={showComingSoon}
+          staffTimeEntries={staffTimeEntries}
+          staffProfiles={ownerStaffProfiles}
+          onApproveTimeEntry={(entry) => handleOwnerStaffReviewDecision(entry, 'approved')}
+          onRejectTimeEntry={(entry, reason) =>
+            handleOwnerStaffReviewDecision(entry, 'rejected', reason)
+          }
+          reviewActionId={ownerStaffReviewActionId}
         />
       ) : screen === 'owner-summer-camp-check-in' ? (
         <OwnerSummerCampCheckInScreen
@@ -16406,6 +20120,7 @@ export default function App() {
           onOpenNotifications={() => setScreen('owner-notifications')}
           onOpenBilling={() => setScreen('owner-billing')}
           onOpenCampEvents={() => setScreen('owner-camp-events')}
+          onOpenDocuments={() => setScreen('owner-documents')}
           onOpenInviteCodes={() => setScreen('owner-invite-codes')}
           onOpenReports={() => setScreen('owner-reports')}
           onOpenSummerCampCheckIn={() => setScreen('owner-summer-camp-check-in')}
@@ -18628,7 +22343,10 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   ownerInvoiceCardActions: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
     marginTop: 14,
   },
   ownerInvoiceActionButton: {
@@ -18636,6 +22354,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.navyDark,
     borderRadius: 999,
     minHeight: 44,
+    minWidth: 96,
     justifyContent: 'center',
     paddingHorizontal: 18,
     paddingVertical: 12,
@@ -18645,11 +22364,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
   },
+  ownerInvoiceMarkPaidButton: {
+    backgroundColor: COLORS.success,
+  },
   ownerInvoiceCreateActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
     marginTop: 16,
+  },
+  billingActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 14,
+    marginTop: 14,
+  },
+  billingReportSecondaryButton: {
+    minHeight: 44,
+    minWidth: 122,
+  },
+  billingModalBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  billingModalCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    maxWidth: 520,
+    padding: 20,
+    width: '100%',
+  },
+  billingPaymentMethodList: {
+    gap: 10,
+    marginTop: 14,
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -21281,6 +25034,70 @@ parentHeroPhotoWrap: {
   recipientMessageExpandedValue: {
     color: COLORS.text,
     fontSize: 12,
+    fontWeight: '900',
+  },
+  documentStatusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  documentStatusPillText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.35,
+  },
+  documentItemHeaderRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  documentItemHeadingBlock: {
+    flex: 1,
+    gap: 4,
+  },
+  documentItemTitle: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '900',
+    lineHeight: 22,
+  },
+  documentItemMeta: {
+    color: COLORS.muted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  documentItemActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 12,
+  },
+  documentItemButton: {
+    alignItems: 'center',
+    borderRadius: 999,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+  },
+  documentItemButtonSecondary: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#C7D2FE',
+    borderWidth: 1,
+  },
+  documentItemButtonPrimary: {
+    backgroundColor: COLORS.blue,
+  },
+  documentItemButtonText: {
+    color: COLORS.blue,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  documentItemButtonTextPrimary: {
+    color: COLORS.white,
+    fontSize: 13,
     fontWeight: '900',
   },
   loginBackgroundImage: {
