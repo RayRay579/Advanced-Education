@@ -12,6 +12,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from './supabase';
 
@@ -8595,6 +8597,16 @@ function OwnerReportsScreen({ onBack, onLogout, onShowComingSoon }) {
   const reportsAccent = OWNER_MODULE_COLORS.Reports;
   const [openReportId, setOpenReportId] = useState(null);
   const [activeFilter, setActiveFilter] = useState('This Week');
+  const [billingReportFilter, setBillingReportFilter] = useState('this_month');
+  const [paidBillingReportLoading, setPaidBillingReportLoading] = useState(true);
+  const [paidBillingReportError, setPaidBillingReportError] = useState('');
+  const [paidBillingReport, setPaidBillingReport] = useState({
+    totalRevenue: 0,
+    paymentsThisMonth: 0,
+    paidInvoices: 0,
+    averageInvoiceAmount: 0,
+    paymentRows: [],
+  });
 
   const reportSummaryCards = [
     { title: 'Attendance Records', value: '128', accent: 'blue', note: 'All attendance logs' },
@@ -8656,6 +8668,198 @@ function OwnerReportsScreen({ onBack, onLogout, onShowComingSoon }) {
     'Billing',
   ];
 
+  const loadPaidBillingReport = useCallback(async () => {
+    setPaidBillingReportLoading(true);
+    setPaidBillingReportError('');
+
+    try {
+      const [invoiceResult, paymentResult, parentResult, childResult] = await Promise.all([
+        supabase.from('invoices').select('*'),
+        supabase.from('payments').select('*').eq('status', 'completed'),
+        supabase.from('profiles').select('id, email, first_name, last_name, role'),
+        supabase.from('children').select('id, first_name, last_name'),
+      ]);
+
+      if (invoiceResult.error) throw invoiceResult.error;
+      if (paymentResult.error) throw paymentResult.error;
+      if (parentResult.error) throw parentResult.error;
+      if (childResult.error) throw childResult.error;
+
+      const invoices = Array.isArray(invoiceResult.data) ? invoiceResult.data : [];
+      const payments = Array.isArray(paymentResult.data) ? paymentResult.data : [];
+      const parentMap = new Map((parentResult.data || []).map((parent) => [parent.id, parent]));
+      const childMap = new Map((childResult.data || []).map((child) => [child.id, child]));
+
+      const currentDate = new Date();
+      const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+      const lastMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+      const thisYearStart = new Date(currentDate.getFullYear(), 0, 1);
+
+      const visiblePayments = payments.filter((payment) => {
+        const paidDate = new Date(payment.payment_date || payment.created_at || 0);
+        if (billingReportFilter === 'this_month') {
+          return paidDate >= monthStart && paidDate < nextMonth;
+        }
+        if (billingReportFilter === 'last_month') {
+          const lastMonthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+          return paidDate >= lastMonthStart && paidDate < lastMonthEnd;
+        }
+        if (billingReportFilter === 'this_year') {
+          return paidDate >= thisYearStart;
+        }
+        return true;
+      });
+
+      const invoiceMap = new Map(invoices.map((invoice) => [invoice.id, invoice]));
+      const rows = visiblePayments
+        .map((payment) => {
+          const invoice = invoiceMap.get(payment.invoice_id);
+          if (!invoice) return null;
+          const parent = parentMap.get(invoice.parent_profile_id);
+          const child = childMap.get(invoice.child_id);
+          return {
+            id: payment.id,
+            payment_date: payment.payment_date,
+            invoice_number: invoice.invoice_number,
+            parentName: getDisplayName(parent, 'Parent not found'),
+            childName: getChildDisplayName(child),
+            amount: Number(payment.amount || 0),
+            payment_method: payment.payment_method || 'cash',
+            invoice_total: Number(invoice.total || 0),
+          };
+        })
+        .filter(Boolean);
+
+      const completedPayments = payments.filter((payment) => payment.status === 'completed');
+      const paidInvoices = invoices.filter((invoice) => invoice.status === 'paid');
+      const totalRevenue = completedPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+      const paymentsThisMonth = payments
+        .filter((payment) => {
+          const paidDate = new Date(payment.payment_date || payment.created_at || 0);
+          return paidDate >= monthStart && paidDate < nextMonth;
+        })
+        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+      const averageInvoiceAmount = paidInvoices.length
+        ? paidInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0) / paidInvoices.length
+        : 0;
+
+      setPaidBillingReport({
+        totalRevenue,
+        paymentsThisMonth,
+        paidInvoices: paidInvoices.length,
+        averageInvoiceAmount,
+        paymentRows: rows,
+      });
+    } catch (reportError) {
+      console.log('Paid billing report load error', reportError);
+      setPaidBillingReportError('Could not load this section.');
+      setPaidBillingReport({
+        totalRevenue: 0,
+        paymentsThisMonth: 0,
+        paidInvoices: 0,
+        averageInvoiceAmount: 0,
+        paymentRows: [],
+      });
+    } finally {
+      setPaidBillingReportLoading(false);
+    }
+  }, [billingReportFilter]);
+
+  useEffect(() => {
+    loadPaidBillingReport();
+  }, [loadPaidBillingReport]);
+
+  const handleExportPaidBillingCsv = useCallback(async () => {
+    try {
+      console.log('CSV export started');
+
+      const paidBillingRows = paidBillingReport.paymentRows || [];
+      console.log('CSV rows', paidBillingRows);
+
+      if (!paidBillingRows.length) {
+        Alert.alert('No paid billing data to export.');
+        return;
+      }
+
+      let csvContent;
+      try {
+        const csvEscape = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+        const headers = [
+          'Payment Date',
+          'Invoice Number',
+          'Parent Name',
+          'Child Name',
+          'Amount',
+          'Payment Method',
+          'Invoice Total',
+        ];
+        const csvRows = [
+          headers.join(','),
+          ...paidBillingRows.map((row) =>
+            [
+              csvEscape(formatDate(row.payment_date)),
+              csvEscape(row.invoice_number),
+              csvEscape(row.parentName),
+              csvEscape(row.childName),
+              csvEscape(formatCurrency(row.amount)),
+              csvEscape(row.payment_method),
+              csvEscape(formatCurrency(row.invoice_total)),
+            ].join(',')
+          ),
+        ];
+        csvContent = csvRows.join('\r\n');
+      } catch (generateError) {
+        console.log('CSV generation error', generateError);
+        Alert.alert(`Could not generate CSV: ${generateError?.message || 'Unknown error'}`);
+        return;
+      }
+
+      console.log('CSV string length', csvContent?.length);
+
+      let fileUri;
+      try {
+        console.log('FileSystem documentDirectory', FileSystem.documentDirectory);
+        fileUri = `${FileSystem.cacheDirectory || FileSystem.documentDirectory}paid-billing-report.csv`;
+        console.log('CSV fileUri', fileUri);
+        await FileSystem.writeAsStringAsync(fileUri, csvContent);
+      } catch (fileError) {
+        console.log('CSV write error', fileError);
+        Alert.alert(`Could not write CSV file: ${fileError?.message || 'Unknown error'}`);
+        return;
+      }
+
+      let sharingAvailable = false;
+      try {
+        sharingAvailable = await Sharing.isAvailableAsync();
+        console.log('Sharing available', sharingAvailable);
+      } catch (sharingCheckError) {
+        console.log('Sharing availability check error', sharingCheckError);
+        Alert.alert(`Could not check sharing availability: ${sharingCheckError?.message || 'Unknown error'}`);
+        return;
+      }
+
+      if (!sharingAvailable) {
+        Alert.alert('Sharing is not available on this device.');
+        return;
+      }
+
+      try {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/csv',
+          dialogTitle: 'Export Paid Billing Report',
+          UTI: 'public.comma-separated-values-text',
+        });
+      } catch (shareError) {
+        console.log('CSV share error', shareError);
+        Alert.alert(`Could not open share sheet: ${shareError?.message || 'Unknown error'}`);
+      }
+    } catch (exportError) {
+      console.log('CSV export error', exportError);
+      Alert.alert(`Could not export CSV: ${exportError?.message || 'Unknown error'}`);
+    }
+  }, [paidBillingReport.paymentRows]);
+
   return (
     <View style={styles.page}>
       <View style={styles.ownerReportsHero}>
@@ -8713,6 +8917,154 @@ function OwnerReportsScreen({ onBack, onLogout, onShowComingSoon }) {
                 />
               ))}
             </View>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                setOpenReportId((current) => (current === 'paid-billing-report' ? null : 'paid-billing-report'))
+              }
+              style={({ pressed }) => [
+                styles.ownerParentCardHeader,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <View style={styles.ownerParentHeaderTextBlock}>
+                <Text style={styles.ownerParentName}>Paid Billing Report</Text>
+                <Text style={styles.ownerParentChildCount}>
+                  Revenue, paid invoices, and payment history
+                </Text>
+              </View>
+
+              <View style={styles.ownerParentHeaderRight}>
+                <View style={[styles.ownerReportsStatusPill, styles.ownerReportsStatusReady]}>
+                  <Text style={styles.ownerReportsStatusPillText}>Ready</Text>
+                </View>
+                <Text style={styles.ownerNavChevron}>
+                  {openReportId === 'paid-billing-report' ? '⌃' : '›'}
+                </Text>
+              </View>
+            </Pressable>
+
+            {openReportId === 'paid-billing-report' ? (
+              <View style={styles.ownerParentExpandedContent}>
+                {paidBillingReportError ? (
+                  <Text style={styles.errorText}>{paidBillingReportError}</Text>
+                ) : null}
+                {paidBillingReportLoading ? (
+                  <Text style={styles.sectionHelperText}>Loading billing report...</Text>
+                ) : null}
+
+                <View style={[styles.ownerFilterPillRow, { marginTop: 0 }]}>
+                  {[
+                    { label: 'This Month', value: 'this_month' },
+                    { label: 'Last Month', value: 'last_month' },
+                    { label: 'This Year', value: 'this_year' },
+                    { label: 'All Time', value: 'all_time' },
+                  ].map((filter) => {
+                    const isActive = billingReportFilter === filter.value;
+                    return (
+                      <Pressable
+                        key={filter.value}
+                        accessibilityRole="button"
+                        onPress={() => setBillingReportFilter(filter.value)}
+                        style={({ pressed }) => [
+                          styles.ownerFilterPill,
+                          isActive && styles.ownerFilterPillActive,
+                          pressed && styles.pressedButton,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.ownerFilterPillText,
+                            isActive && styles.ownerFilterPillTextActive,
+                          ]}
+                        >
+                          {filter.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.ownerSectionDetailsGrid}>
+                  <SummaryTile
+                    accent="green"
+                    badge="$"
+                    title="Total Revenue"
+                    value={formatCurrency(paidBillingReport.totalRevenue)}
+                    note="Completed payments"
+                    fill="Owner"
+                  />
+                  <SummaryTile
+                    accent="blue"
+                    badge="M"
+                    title="Payments This Month"
+                    value={formatCurrency(paidBillingReport.paymentsThisMonth)}
+                    note="Current month"
+                    fill="Owner"
+                  />
+                  <SummaryTile
+                    accent="orange"
+                    badge="P"
+                    title="Paid Invoices"
+                    value={String(paidBillingReport.paidInvoices)}
+                    note="Invoices marked paid"
+                    fill="Owner"
+                  />
+                  <SummaryTile
+                    accent="purple"
+                    badge="A"
+                    title="Average Invoice Amount"
+                    value={formatCurrency(paidBillingReport.averageInvoiceAmount)}
+                    note="Average paid invoice"
+                    fill="Owner"
+                  />
+                </View>
+
+                <View style={styles.billingInvoiceList}>
+                  {paidBillingReport.paymentRows.length === 0 ? (
+                    <Text style={styles.parentAttendanceStateText}>No reports available yet.</Text>
+                  ) : (
+                    paidBillingReport.paymentRows.map((row) => (
+                      <View key={row.id} style={styles.billingInvoiceRow}>
+                        <View style={styles.billingInvoiceCopy}>
+                          <Text style={styles.billingInvoicePeriod}>{row.invoice_number}</Text>
+                          <Text style={styles.billingInvoiceDetail}>{row.parentName}</Text>
+                          <Text style={styles.billingInvoiceDetail}>{row.childName}</Text>
+                          <Text style={styles.billingInvoiceDetail}>
+                            {formatDate(row.payment_date)}
+                          </Text>
+                        </View>
+
+                        <View style={styles.billingInvoiceCopy}>
+                          <Text style={styles.billingInvoiceAmount}>{formatCurrency(row.amount)}</Text>
+                          <Text style={styles.billingInvoiceDetail}>
+                            {String(row.payment_method || '').toUpperCase()}
+                          </Text>
+                          <Text style={styles.billingInvoiceDetail}>
+                            Invoice Total: {formatCurrency(row.invoice_total)}
+                          </Text>
+                        </View>
+                      </View>
+                    ))
+                  )}
+                </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleExportPaidBillingCsv}
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    { backgroundColor: reportsAccent },
+                    pressed && styles.pressedButton,
+                  ]}
+                >
+                  <Text style={styles.primaryButtonText}>Export CSV</Text>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.ownerAccordionCard}>
@@ -19137,6 +19489,7 @@ parentHeroPhotoWrap: {
   },
   billingInvoiceCopy: {
     flex: 1,
+    minWidth: 120,
   },
   billingInvoicePeriod: {
     color: COLORS.text,
