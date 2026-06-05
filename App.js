@@ -10228,7 +10228,7 @@ function OwnerReportsScreen({ onBack, onLogout, onShowComingSoon }) {
         supabase.from('payments').select('id, invoice_id, amount, payment_date, status'),
         supabase.from('incident_reports').select('id, child_id, review_status, parent_acknowledged_at, created_at'),
         supabase.from('forms_documents').select('id, title, audience_type, recipient_profile_id, created_at'),
-        supabase.from('form_signatures').select('id, form_id, parent_profile_id, created_at'),
+        supabase.from('form_signatures').select('id, form_id, parent_profile_id, signed_at'),
         supabase.from('children').select('id, first_name, last_name'),
         supabase.from('profiles').select('id, email, first_name, last_name, role, account_status'),
       ]);
@@ -12252,6 +12252,7 @@ function buildDocumentSections(forms = [], role = 'owner', currentUserId = '') {
       acc[sectionTitle] = [];
     }
     acc[sectionTitle].push({
+      id: form?.id || `${sectionTitle}-${form?.title || 'document'}`,
       title: form?.title || 'Untitled Document',
       category: form?.category || '',
       status: form?.status || 'Draft',
@@ -12264,7 +12265,11 @@ function buildDocumentSections(forms = [], role = 'owner', currentUserId = '') {
     return acc;
   }, {});
 
-  return Object.entries(grouped).map(([title, documents]) => ({ title, documents }));
+  return Object.entries(grouped).map(([title, documents]) => ({
+    id: title,
+    title,
+    documents,
+  }));
 }
 
 function DocumentItemCard({
@@ -12349,9 +12354,11 @@ function OwnerFormsWaiversPanel({
   availableStaffProfiles = [],
   availableStaffProfilesLoading = false,
   availableStaffProfilesError = '',
+  currentUserId = '',
   onCreateForm,
 }) {
   const [expandedFormId, setExpandedFormId] = useState(null);
+  const [openSection, setOpenSection] = useState('template-library');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [showCustomTemplateForm, setShowCustomTemplateForm] = useState(false);
   const [customTemplateTitle, setCustomTemplateTitle] = useState('');
@@ -12427,7 +12434,10 @@ function OwnerFormsWaiversPanel({
   const getSignedIdsForForm = (form) =>
     new Set(
       signatureRows
-        .filter((signature) => signature.formId === form.id)
+        .filter(
+          (signature) =>
+            (signature.formId || signature.form_id) === form.id
+        )
         .map((signature) => signature.parentId || signature.parent_profile_id)
         .filter(Boolean)
     );
@@ -12435,11 +12445,12 @@ function OwnerFormsWaiversPanel({
   const ownerFormCards = formRows.map((form) => {
     const recipients = getFormRecipients(form);
     const signedIds = getSignedIdsForForm(form);
-    const signaturesForForm = signatureRows.filter((signature) => signature.formId === form.id);
+    const signaturesForForm = signatureRows.filter(
+      (signature) => (signature.formId || signature.form_id) === form.id
+    );
     const signedRecordCount = signaturesForForm.length;
     const sentCount = recipients.length;
     const pendingFormCount = Math.max(0, sentCount - signedRecordCount);
-    const audienceLabel = formatDocumentAudienceLabel(form.audience_type || 'all_parents');
 
     return {
       form,
@@ -12449,13 +12460,676 @@ function OwnerFormsWaiversPanel({
       signedRecordCount,
       sentCount,
       pendingFormCount,
-      audienceLabel,
     };
   });
 
   const totalSignedCount = ownerFormCards.reduce((sum, item) => sum + item.signedRecordCount, 0);
   const totalPendingCount = ownerFormCards.reduce((sum, item) => sum + item.pendingFormCount, 0);
-  const totalSentCount = ownerFormCards.reduce((sum, item) => sum + item.sentCount, 0);
+  const staffDocumentForms = formRows.filter((form) => {
+    const audienceType = form.audience_type || 'all_parents';
+    return audienceType === 'all_staff' || audienceType === 'specific_staff';
+  });
+  const parentDocumentForms = formRows.filter((form) => {
+    const audienceType = form.audience_type || 'all_parents';
+    return audienceType === 'all_parents' || audienceType === 'specific_parent';
+  });
+  const ownerSections = [
+    {
+      key: 'template-library',
+      title: 'Templates',
+      summary: 'Parent and staff templates, plus custom forms',
+      count: templateRows.length,
+    },
+    {
+      key: 'sent-forms',
+      title: 'Sent Forms',
+      summary: 'All forms_documents records',
+      count: formRows.length,
+    },
+  ];
+
+  const toggleSection = (sectionKey) => {
+    setOpenSection((current) => (current === sectionKey ? null : sectionKey));
+  };
+
+  const renderSectionContent = (sectionKey) => {
+    if (sectionKey === 'template-library') {
+      return (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setShowCustomTemplateForm((current) => !current);
+              setSelectedTemplateId('');
+              setFormError('');
+            }}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && styles.pressedButton,
+              { marginTop: 12 },
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>
+              {showCustomTemplateForm ? 'Hide Custom Template' : 'Create Custom Template'}
+            </Text>
+          </Pressable>
+
+          {showCustomTemplateForm ? (
+            <View style={[styles.ownerAccordionCard, { marginTop: 14 }]}>
+              <Text style={styles.ownerAccordionTitle}>Create Custom Template</Text>
+              <Text style={styles.ownerAccordionSummary}>
+                Build your own electronic form or policy and send it to parents or staff.
+              </Text>
+
+              {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
+
+              <Text style={styles.ownerStudentFormLabel}>Template Title</Text>
+              <TextInput
+                placeholder="Template Title"
+                placeholderTextColor={COLORS.muted}
+                value={customTemplateTitle}
+                onChangeText={setCustomTemplateTitle}
+                style={styles.ownerTitleInput}
+              />
+
+              <View style={styles.ownerChipGroup}>
+                <Text style={styles.ownerChipGroupLabel}>Category</Text>
+                <View style={styles.ownerFilterPillRow}>
+                  {['Parent Form', 'Staff Form', 'Camp Form', 'Waiver', 'Policy'].map((category) => {
+                    const isActive = customTemplateCategory === category;
+                    return (
+                      <Pressable
+                        key={category}
+                        accessibilityRole="button"
+                        onPress={() => handleCustomTemplateCategoryChange(category)}
+                        style={({ pressed }) => [
+                          styles.ownerFilterPill,
+                          isActive && styles.ownerFilterPillActive,
+                          pressed && styles.pressedButton,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.ownerFilterPillText,
+                            isActive && styles.ownerFilterPillTextActive,
+                          ]}
+                        >
+                          {category}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <Text style={styles.ownerStudentFormLabel}>Description / Form Text</Text>
+              <TextInput
+                placeholder="Description / Form Text"
+                placeholderTextColor={COLORS.muted}
+                value={customTemplateDescription}
+                onChangeText={setCustomTemplateDescription}
+                multiline
+                style={styles.ownerMessageInput}
+              />
+
+              <View style={styles.ownerChipGroup}>
+                <Text style={styles.ownerChipGroupLabel}>Required</Text>
+                <View style={styles.ownerFilterPillRow}>
+                  {[
+                    { label: 'Yes', value: true },
+                    { label: 'No', value: false },
+                  ].map((option) => {
+                    const isActive = customTemplateRequired === option.value;
+                    return (
+                      <Pressable
+                        key={option.label}
+                        accessibilityRole="button"
+                        onPress={() => setCustomTemplateRequired(option.value)}
+                        style={({ pressed }) => [
+                          styles.ownerFilterPill,
+                          isActive && styles.ownerFilterPillActive,
+                          pressed && styles.pressedButton,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.ownerFilterPillText,
+                            isActive && styles.ownerFilterPillTextActive,
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.ownerChipGroup}>
+                <Text style={styles.ownerChipGroupLabel}>Send To</Text>
+                <View style={styles.ownerFilterPillRow}>
+                  {customAudienceOptions.map((option) => {
+                    const isActive = draftAudienceType === option.value;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        accessibilityRole="button"
+                        onPress={() => {
+                          setDraftAudienceType(option.value);
+                          if (option.value === 'all_parents' || option.value === 'all_staff') {
+                            setDraftRecipientProfileId('');
+                          }
+                          setFormError('');
+                        }}
+                        style={({ pressed }) => [
+                          styles.ownerFilterPill,
+                          isActive && styles.ownerFilterPillActive,
+                          pressed && styles.pressedButton,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.ownerFilterPillText,
+                            isActive && styles.ownerFilterPillTextActive,
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {(draftAudienceType === 'specific_parent' || draftAudienceType === 'specific_staff') ? (
+                <View style={styles.ownerChipGroup}>
+                  <Text style={styles.ownerChipGroupLabel}>
+                    {isCustomStaffTemplate ? 'Select Staff' : 'Select Parent'}
+                  </Text>
+                  {isCustomStaffTemplate ? (
+                    availableStaffProfilesError ? (
+                      <Text style={styles.errorText}>{availableStaffProfilesError}</Text>
+                    ) : availableStaffProfilesLoading ? (
+                      <Text style={styles.parentAttendanceStateText}>Loading active staff...</Text>
+                    ) : staffProfiles.length ? (
+                      <View style={styles.profileList}>
+                        {staffProfiles.map((staff) => {
+                          const isActive = draftRecipientProfileId === staff.id;
+                          return (
+                            <Pressable
+                              key={staff.id}
+                              accessibilityRole="button"
+                              onPress={() => {
+                                setDraftRecipientProfileId(staff.id);
+                                setFormError('');
+                              }}
+                              style={({ pressed }) => [
+                                styles.profileCardInner,
+                                isActive && styles.ownerFilterPillActive,
+                                pressed && styles.pressedTile,
+                                {
+                                  borderWidth: isActive ? 2 : 1,
+                                  borderColor: isActive ? COLORS.blue : COLORS.border,
+                                  backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
+                                },
+                              ]}
+                            >
+                              <Text style={styles.documentItemTitle}>
+                                {getProfileDisplayName(staff, 'Staff Member')}
+                              </Text>
+                              <Text style={styles.documentItemMeta}>{staff.email}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    ) : (
+                      <Text style={styles.parentAttendanceStateText}>No active staff found.</Text>
+                    )
+                  ) : availableParentProfilesError ? (
+                    <Text style={styles.errorText}>{availableParentProfilesError}</Text>
+                  ) : availableParentProfilesLoading ? (
+                    <Text style={styles.parentAttendanceStateText}>Loading active parents...</Text>
+                  ) : parentProfiles.length ? (
+                    <View style={styles.profileList}>
+                      {parentProfiles.map((parent) => {
+                        const isActive = draftRecipientProfileId === parent.id;
+                        return (
+                          <Pressable
+                            key={parent.id}
+                            accessibilityRole="button"
+                            onPress={() => {
+                              setDraftRecipientProfileId(parent.id);
+                              setFormError('');
+                            }}
+                            style={({ pressed }) => [
+                              styles.profileCardInner,
+                              isActive && styles.ownerFilterPillActive,
+                              pressed && styles.pressedTile,
+                              {
+                                borderWidth: isActive ? 2 : 1,
+                                borderColor: isActive ? COLORS.blue : COLORS.border,
+                                backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
+                              },
+                            ]}
+                          >
+                            <Text style={styles.documentItemTitle}>
+                              {getProfileDisplayName(parent, 'Parent')}
+                            </Text>
+                            <Text style={styles.documentItemMeta}>{parent.email}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <Text style={styles.parentAttendanceStateText}>No active parents found.</Text>
+                  )}
+                </View>
+              ) : null}
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={handleSaveCustomTemplate}
+                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}
+              >
+                <Text style={styles.primaryButtonText}>Save Template</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          <View style={[styles.ownerAccordionCard, { marginTop: 14 }]}>
+            <Text style={styles.ownerAccordionTitle}>Template Library</Text>
+            <Text style={styles.ownerAccordionSummary}>
+              Choose a built-in form or waiver and send it to parents or staff.
+            </Text>
+            {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
+
+            {DOCUMENT_TEMPLATE_LIBRARY.map((group) => (
+              <View key={group.groupTitle} style={{ marginTop: 14 }}>
+                <View style={styles.parentSectionHeaderRow}>
+                  <Text style={styles.parentSectionHeaderTitle}>{group.groupTitle}</Text>
+                  <Text style={styles.parentSectionHeaderSubtle}>{group.templates.length} templates</Text>
+                </View>
+                <View style={styles.profileList}>
+                  {group.templates.map((template) => {
+                    const templateId = `${group.audienceRole}:${template.title}`;
+                    const isActive = selectedTemplateId === templateId;
+                    return (
+                      <Pressable
+                        key={templateId}
+                        accessibilityRole="button"
+                        onPress={() =>
+                          handleTemplateSelect({
+                            id: templateId,
+                            title: template.title,
+                            description: template.description,
+                            category: group.category,
+                            audienceRole: group.audienceRole,
+                            groupTitle: group.groupTitle,
+                          })
+                        }
+                        style={({ pressed }) => [
+                          styles.profileCardInner,
+                          isActive && styles.ownerFilterPillActive,
+                          pressed && styles.pressedTile,
+                          {
+                            borderWidth: isActive ? 2 : 1,
+                            borderColor: isActive ? COLORS.blue : COLORS.border,
+                            backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
+                          },
+                        ]}
+                      >
+                        <View style={styles.documentItemHeaderRow}>
+                          <View style={styles.documentItemHeadingBlock}>
+                            <Text style={styles.documentItemTitle}>{template.title}</Text>
+                            <Text style={styles.documentItemMeta}>{group.groupTitle}</Text>
+                          </View>
+                          <DocumentStatusPill
+                            status={group.audienceRole === 'staff' ? 'Staff' : 'Parent'}
+                          />
+                        </View>
+                        <Text style={styles.documentItemMeta}>{template.description}</Text>
+                        <Text style={styles.documentItemMeta}>Tap to select this template</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+
+            {selectedTemplate ? (
+              <View style={[styles.ownerAccordionCard, { marginTop: 16 }]}>
+                <Text style={styles.ownerAccordionTitle}>Template Details</Text>
+                <View style={styles.ownerStaffMetaList}>
+                  <View style={styles.ownerStaffMetaRow}>
+                    <Text style={styles.ownerStaffMetaLabel}>Template Name</Text>
+                    <Text style={styles.ownerStaffMetaValue}>{selectedTemplate.title}</Text>
+                  </View>
+                  <View style={styles.ownerStaffMetaRow}>
+                    <Text style={styles.ownerStaffMetaLabel}>Description</Text>
+                    <Text style={styles.ownerStaffMetaValue}>{selectedTemplate.description}</Text>
+                  </View>
+                  <View style={styles.ownerStaffMetaRow}>
+                    <Text style={styles.ownerStaffMetaLabel}>Recipient Selection</Text>
+                    <Text style={styles.ownerStaffMetaValue}>
+                      {isStaffTemplate ? 'Staff Recipients' : 'Parent Recipients'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.ownerChipGroup}>
+                  <Text style={styles.ownerChipGroupLabel}>Send To</Text>
+                  <View style={styles.ownerFilterPillRow}>
+                    {sendToOptions.map((option) => {
+                      const isActive = draftAudienceType === option.value;
+                      return (
+                        <Pressable
+                          key={option.value}
+                          accessibilityRole="button"
+                          onPress={() => {
+                            setDraftAudienceType(option.value);
+                            if (option.value === 'all_parents' || option.value === 'all_staff') {
+                              setDraftRecipientProfileId('');
+                            }
+                            setFormError('');
+                          }}
+                          style={({ pressed }) => [
+                            styles.ownerFilterPill,
+                            isActive && styles.ownerFilterPillActive,
+                            pressed && styles.pressedButton,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.ownerFilterPillText,
+                              isActive && styles.ownerFilterPillTextActive,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {(draftAudienceType === 'specific_parent' || draftAudienceType === 'specific_staff') ? (
+                  <View style={styles.ownerChipGroup}>
+                    <Text style={styles.ownerChipGroupLabel}>
+                      {isStaffTemplate ? 'Select Staff' : 'Select Parent'}
+                    </Text>
+                    {isStaffTemplate ? (
+                      availableStaffProfilesError ? (
+                        <Text style={styles.errorText}>{availableStaffProfilesError}</Text>
+                      ) : availableStaffProfilesLoading ? (
+                        <Text style={styles.parentAttendanceStateText}>Loading active staff...</Text>
+                      ) : staffProfiles.length ? (
+                        <View style={styles.profileList}>
+                          {staffProfiles.map((staff) => {
+                            const isActive = draftRecipientProfileId === staff.id;
+                            return (
+                              <Pressable
+                                key={staff.id}
+                                accessibilityRole="button"
+                                onPress={() => {
+                                  setDraftRecipientProfileId(staff.id);
+                                  setFormError('');
+                                }}
+                                style={({ pressed }) => [
+                                  styles.profileCardInner,
+                                  isActive && styles.ownerFilterPillActive,
+                                  pressed && styles.pressedTile,
+                                  {
+                                    borderWidth: isActive ? 2 : 1,
+                                    borderColor: isActive ? COLORS.blue : COLORS.border,
+                                    backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
+                                  },
+                                ]}
+                              >
+                                <Text style={styles.documentItemTitle}>
+                                  {getProfileDisplayName(staff, 'Staff Member')}
+                                </Text>
+                                <Text style={styles.documentItemMeta}>{staff.email}</Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      ) : (
+                        <Text style={styles.parentAttendanceStateText}>No active staff found.</Text>
+                      )
+                    ) : availableParentProfilesError ? (
+                      <Text style={styles.errorText}>{availableParentProfilesError}</Text>
+                    ) : availableParentProfilesLoading ? (
+                      <Text style={styles.parentAttendanceStateText}>Loading active parents...</Text>
+                    ) : parentProfiles.length ? (
+                      <View style={styles.profileList}>
+                        {parentProfiles.map((parent) => {
+                          const isActive = draftRecipientProfileId === parent.id;
+                          return (
+                            <Pressable
+                              key={parent.id}
+                              accessibilityRole="button"
+                              onPress={() => {
+                                setDraftRecipientProfileId(parent.id);
+                                setFormError('');
+                              }}
+                              style={({ pressed }) => [
+                                styles.profileCardInner,
+                                isActive && styles.ownerFilterPillActive,
+                                pressed && styles.pressedTile,
+                                {
+                                  borderWidth: isActive ? 2 : 1,
+                                  borderColor: isActive ? COLORS.blue : COLORS.border,
+                                  backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
+                                },
+                              ]}
+                            >
+                              <Text style={styles.documentItemTitle}>
+                                {getProfileDisplayName(parent, 'Parent')}
+                              </Text>
+                              <Text style={styles.documentItemMeta}>{parent.email}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    ) : (
+                      <Text style={styles.parentAttendanceStateText}>No active parents found.</Text>
+                    )}
+                  </View>
+                ) : null}
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleSendTemplate}
+                  style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}
+                >
+                  <Text style={styles.primaryButtonText}>Send Form</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Text style={styles.parentAttendanceStateText}>
+                Select a template to send it to parents or staff.
+              </Text>
+            )}
+          </View>
+        </>
+      );
+    }
+
+    if (sectionKey === 'sent-forms') {
+      return (
+        <View style={styles.profileList}>
+          {formRows.length ? (
+            ownerFormCards.map((item) => {
+              const {
+                form,
+                recipients,
+                signedIds,
+                signaturesForForm,
+                signedRecordCount,
+                sentCount,
+                pendingFormCount,
+              } = item;
+              const isOpen = expandedFormId === form.id;
+              const signedRecipients = signaturesForForm.map((signature) => {
+                const matchedRecipient = recipients.find(
+                  (recipient) =>
+                    recipient.id === (signature.parentId || signature.parent_profile_id)
+                );
+                return {
+                  id: signature.id || `${form.id}-${signature.parent_profile_id}`,
+                  name: matchedRecipient
+                    ? getRecipientName(matchedRecipient, 'Signed User')
+                    : signature.typedName || signature.childName || 'Signed User',
+                  signedAt: signature.signedAt || signature.signed_at,
+                };
+              });
+              const pendingRecipients = recipients.filter((recipient) => !signedIds.has(recipient.id));
+
+              return (
+                <Pressable
+                  key={form.id}
+                  accessibilityRole="button"
+                  onPress={() =>
+                    setExpandedFormId((current) => (current === form.id ? null : form.id))
+                  }
+                  style={({ pressed }) => [styles.profileCardInner, pressed && styles.pressedTile]}
+                >
+                  <View style={styles.documentItemHeaderRow}>
+                    <View style={styles.documentItemHeadingBlock}>
+                      <Text style={styles.documentItemTitle}>{form.title}</Text>
+                      <Text style={styles.documentItemMeta}>
+                        {getDocumentDisplayType(form)}
+                      </Text>
+                    </View>
+                    <DocumentStatusPill status={form.status || 'Active'} />
+                  </View>
+
+                  <Text style={styles.documentItemMeta}>
+                    Audience: {formatDocumentAudienceLabel(form.audience_type || 'all_parents')}
+                  </Text>
+                  <Text style={styles.documentItemMeta}>
+                    {form.required ? 'Required' : 'Optional'}
+                  </Text>
+                  <Text style={styles.documentItemMeta}>
+                    Sent {form.createdAt || form.uploadedAt || form.created_at
+                      ? formatDate(form.createdAt || form.uploadedAt || form.created_at)
+                      : '—'}
+                  </Text>
+                  <View style={styles.documentItemHeaderRow}>
+                    <Text style={styles.documentItemMeta}>Sent: {sentCount}</Text>
+                    <Text style={styles.documentItemMeta}>Signed: {signedRecordCount}</Text>
+                    <Text style={styles.documentItemMeta}>Pending: {pendingFormCount}</Text>
+                    <Text style={styles.ownerAccordionChevron}>{isOpen ? '⌃' : '⌄'}</Text>
+                  </View>
+                  <Text style={styles.documentItemMeta}>
+                    {isOpen ? 'Hide Details' : 'View Details'}
+                  </Text>
+
+                  {isOpen ? (
+                    <View style={styles.ownerStaffMetaList}>
+                      <Text style={styles.ownerAccordionSummary}>{form.description}</Text>
+                      <View style={styles.ownerStaffMetaRow}>
+                        <Text style={styles.ownerStaffMetaLabel}>Signed Users</Text>
+                        <Text style={styles.ownerStaffMetaValue}>
+                          {signedRecipients.length
+                            ? signedRecipients
+                                .map((recipient) => {
+                                  const signedDate = recipient.signedAt;
+                                  const formattedSignedDate = signedDate
+                                    ? formatDateTime(signedDate)
+                                    : 'Unknown date';
+                                  return `${recipient.name} · ${formattedSignedDate}`;
+                                })
+                                .join(' | ')
+                            : 'No signatures yet.'}
+                        </Text>
+                      </View>
+                      <View style={styles.ownerStaffMetaRow}>
+                        <Text style={styles.ownerStaffMetaLabel}>Pending Users</Text>
+                        <Text style={styles.ownerStaffMetaValue}>
+                          {pendingRecipients.length > 0
+                            ? pendingRecipients
+                                .map((recipient) => getRecipientName(recipient, 'Pending User'))
+                                .join(' | ')
+                            : 'All recipients signed.'}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+                </Pressable>
+              );
+            })
+          ) : (
+            <Text style={styles.parentAttendanceStateText}>No forms yet.</Text>
+          )}
+        </View>
+      );
+    }
+
+    if (sectionKey === 'staff-documents') {
+      return (
+        <View style={styles.profileList}>
+          {staffDocumentForms.length ? (
+            staffDocumentForms.map((form) => (
+              <View key={form.id} style={styles.profileCardInner}>
+                <View style={styles.documentItemHeaderRow}>
+                  <View style={styles.documentItemHeadingBlock}>
+                    <Text style={styles.documentItemTitle}>{form.title}</Text>
+                    <Text style={styles.documentItemMeta}>{getDocumentDisplayType(form)}</Text>
+                  </View>
+                  <DocumentStatusPill status={form.status || 'Active'} />
+                </View>
+                <Text style={styles.documentItemMeta}>
+                  Audience: {formatDocumentAudienceLabel(form.audience_type || 'all_staff')}
+                </Text>
+                <Text style={styles.documentItemMeta}>
+                  {form.required ? 'Required' : 'Optional'}
+                </Text>
+                <Text style={styles.documentItemMeta}>
+                  Sent {form.createdAt || form.uploadedAt || form.created_at ? formatDate(form.createdAt || form.uploadedAt || form.created_at) : '—'}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.parentAttendanceStateText}>No staff documents yet.</Text>
+          )}
+        </View>
+      );
+    }
+
+    if (sectionKey === 'parent-documents') {
+      return (
+        <View style={styles.profileList}>
+          {parentDocumentForms.length ? (
+            parentDocumentForms.map((form) => (
+              <View key={form.id} style={styles.profileCardInner}>
+                <View style={styles.documentItemHeaderRow}>
+                  <View style={styles.documentItemHeadingBlock}>
+                    <Text style={styles.documentItemTitle}>{form.title}</Text>
+                    <Text style={styles.documentItemMeta}>{getDocumentDisplayType(form)}</Text>
+                  </View>
+                  <DocumentStatusPill status={form.status || 'Active'} />
+                </View>
+                <Text style={styles.documentItemMeta}>
+                  Audience: {formatDocumentAudienceLabel(form.audience_type || 'all_parents')}
+                </Text>
+                <Text style={styles.documentItemMeta}>
+                  {form.required ? 'Required' : 'Optional'}
+                </Text>
+                <Text style={styles.documentItemMeta}>
+                  Sent {form.createdAt || form.uploadedAt || form.created_at ? formatDate(form.createdAt || form.uploadedAt || form.created_at) : '—'}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.parentAttendanceStateText}>No parent documents yet.</Text>
+          )}
+        </View>
+      );
+    }
+
+    return null;
+  };
 
   const handleTemplateSelect = (template) => {
     setSelectedTemplateId(template.id);
@@ -12464,6 +13138,7 @@ function OwnerFormsWaiversPanel({
     setFormError('');
     setExpandedFormId(null);
     setShowCustomTemplateForm(false);
+    setOpenSection('template-library');
   };
 
   const handleCustomTemplateCategoryChange = (category) => {
@@ -12471,6 +13146,7 @@ function OwnerFormsWaiversPanel({
     setDraftAudienceType(category === 'Staff Form' || category === 'Policy' ? 'all_staff' : 'all_parents');
     setDraftRecipientProfileId('');
     setFormError('');
+    setOpenSection('template-library');
   };
 
   const handleSaveCustomTemplate = () => {
@@ -12575,561 +13251,67 @@ function OwnerFormsWaiversPanel({
 
       <View style={[styles.ownerSectionDetailsGrid, { marginTop: 12 }]}>
         <SummaryTile
-          accent="green"
-          badge="S"
-          title="Signed"
-          value={String(totalSignedCount)}
-          note="Acknowledged forms"
-          fill="Forms"
+          accent="blue"
+          badge="F"
+          title="Total Forms"
+          value={String(formRows.length)}
+          note="Active and draft documents"
+          fill="Library"
         />
         <SummaryTile
           accent="orange"
           badge="P"
-          title="Pending"
+          title="Pending Signatures"
           value={String(totalPendingCount)}
           note="Awaiting signatures"
-          fill="Review"
+          fill="Reminders"
         />
         <SummaryTile
-          accent="blue"
-          badge="T"
-          title="Sent"
-          value={String(totalSentCount)}
-          note="Total recipient sends"
-          fill="Tracks"
+          accent="green"
+          badge="C"
+          title="Completed Signatures"
+          value={String(totalSignedCount)}
+          note="Signed documents"
+          fill="Done"
+        />
+        <SummaryTile
+          accent="purple"
+          badge="S"
+          title="Staff Documents"
+          value={String(staffDocumentForms.length)}
+          note="Staff-only forms"
+          fill="Team"
         />
       </View>
 
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => {
-          setShowCustomTemplateForm((current) => !current);
-          setSelectedTemplateId('');
-          setFormError('');
-        }}
-        style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton, { marginTop: 14 }]}
-      >
-        <Text style={styles.primaryButtonText}>
-          {showCustomTemplateForm ? 'Hide Custom Template' : 'Create Custom Template'}
-        </Text>
-      </Pressable>
-
-      {showCustomTemplateForm ? (
-        <View style={[styles.ownerAccordionCard, { marginTop: 14 }]}>
-          <Text style={styles.ownerAccordionTitle}>Create Custom Template</Text>
-          <Text style={styles.ownerAccordionSummary}>
-            Build your own electronic form or policy and send it to parents or staff.
-          </Text>
-
-          {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
-
-          <Text style={styles.ownerStudentFormLabel}>Template Title</Text>
-          <TextInput
-            placeholder="Template Title"
-            placeholderTextColor={COLORS.muted}
-            value={customTemplateTitle}
-            onChangeText={setCustomTemplateTitle}
-            style={styles.ownerTitleInput}
-          />
-
-          <View style={styles.ownerChipGroup}>
-            <Text style={styles.ownerChipGroupLabel}>Category</Text>
-            <View style={styles.ownerFilterPillRow}>
-              {['Parent Form', 'Staff Form', 'Camp Form', 'Waiver', 'Policy'].map((category) => {
-                const isActive = customTemplateCategory === category;
-                return (
-                  <Pressable
-                    key={category}
-                    accessibilityRole="button"
-                    onPress={() => handleCustomTemplateCategoryChange(category)}
-                    style={({ pressed }) => [
-                      styles.ownerFilterPill,
-                      isActive && styles.ownerFilterPillActive,
-                      pressed && styles.pressedButton,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.ownerFilterPillText,
-                        isActive && styles.ownerFilterPillTextActive,
-                      ]}
-                    >
-                      {category}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          <Text style={styles.ownerStudentFormLabel}>Description / Form Text</Text>
-          <TextInput
-            placeholder="Description / Form Text"
-            placeholderTextColor={COLORS.muted}
-            value={customTemplateDescription}
-            onChangeText={setCustomTemplateDescription}
-            multiline
-            style={styles.ownerMessageInput}
-          />
-
-          <View style={styles.ownerChipGroup}>
-            <Text style={styles.ownerChipGroupLabel}>Required</Text>
-            <View style={styles.ownerFilterPillRow}>
-              {[
-                { label: 'Yes', value: true },
-                { label: 'No', value: false },
-              ].map((option) => {
-                const isActive = customTemplateRequired === option.value;
-                return (
-                  <Pressable
-                    key={option.label}
-                    accessibilityRole="button"
-                    onPress={() => setCustomTemplateRequired(option.value)}
-                    style={({ pressed }) => [
-                      styles.ownerFilterPill,
-                      isActive && styles.ownerFilterPillActive,
-                      pressed && styles.pressedButton,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.ownerFilterPillText,
-                        isActive && styles.ownerFilterPillTextActive,
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          <View style={styles.ownerChipGroup}>
-            <Text style={styles.ownerChipGroupLabel}>Send To</Text>
-            <View style={styles.ownerFilterPillRow}>
-              {customAudienceOptions.map((option) => {
-                const isActive = draftAudienceType === option.value;
-                return (
-                  <Pressable
-                    key={option.value}
-                    accessibilityRole="button"
-                    onPress={() => {
-                      setDraftAudienceType(option.value);
-                      if (option.value === 'all_parents' || option.value === 'all_staff') {
-                        setDraftRecipientProfileId('');
-                      }
-                      setFormError('');
-                    }}
-                    style={({ pressed }) => [
-                      styles.ownerFilterPill,
-                      isActive && styles.ownerFilterPillActive,
-                      pressed && styles.pressedButton,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.ownerFilterPillText,
-                        isActive && styles.ownerFilterPillTextActive,
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {(draftAudienceType === 'specific_parent' || draftAudienceType === 'specific_staff') ? (
-            <View style={styles.ownerChipGroup}>
-              <Text style={styles.ownerChipGroupLabel}>
-                {isCustomStaffTemplate ? 'Select Staff' : 'Select Parent'}
-              </Text>
-              {isCustomStaffTemplate ? (
-                availableStaffProfilesError ? (
-                  <Text style={styles.errorText}>{availableStaffProfilesError}</Text>
-                ) : availableStaffProfilesLoading ? (
-                  <Text style={styles.parentAttendanceStateText}>Loading active staff...</Text>
-                ) : staffProfiles.length ? (
-                  <View style={styles.profileList}>
-                    {staffProfiles.map((staff) => {
-                      const isActive = draftRecipientProfileId === staff.id;
-                      return (
-                        <Pressable
-                          key={staff.id}
-                          accessibilityRole="button"
-                          onPress={() => setDraftRecipientProfileId(staff.id)}
-                          style={({ pressed }) => [
-                            styles.profileCardInner,
-                            isActive && styles.ownerFilterPillActive,
-                            pressed && styles.pressedTile,
-                            {
-                              borderWidth: isActive ? 2 : 1,
-                              borderColor: isActive ? COLORS.blue : COLORS.border,
-                              backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
-                            },
-                          ]}
-                        >
-                          <Text style={styles.documentItemTitle}>
-                            {getProfileDisplayName(staff, 'Staff Member')}
-                          </Text>
-                          <Text style={styles.documentItemMeta}>{staff.email}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                ) : (
-                  <Text style={styles.parentAttendanceStateText}>No active staff found.</Text>
-                )
-              ) : availableParentProfilesError ? (
-                <Text style={styles.errorText}>{availableParentProfilesError}</Text>
-              ) : availableParentProfilesLoading ? (
-                <Text style={styles.parentAttendanceStateText}>Loading active parents...</Text>
-              ) : parentProfiles.length ? (
-                <View style={styles.profileList}>
-                  {parentProfiles.map((parent) => {
-                    const isActive = draftRecipientProfileId === parent.id;
-                    return (
-                      <Pressable
-                        key={parent.id}
-                        accessibilityRole="button"
-                        onPress={() => setDraftRecipientProfileId(parent.id)}
-                        style={({ pressed }) => [
-                          styles.profileCardInner,
-                          isActive && styles.ownerFilterPillActive,
-                          pressed && styles.pressedTile,
-                          {
-                            borderWidth: isActive ? 2 : 1,
-                            borderColor: isActive ? COLORS.blue : COLORS.border,
-                            backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
-                          },
-                        ]}
-                      >
-                        <Text style={styles.documentItemTitle}>
-                          {getProfileDisplayName(parent, 'Parent')}
-                        </Text>
-                        <Text style={styles.documentItemMeta}>{parent.email}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ) : (
-                <Text style={styles.parentAttendanceStateText}>No active parents found.</Text>
-              )}
-            </View>
-          ) : null}
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={handleSaveCustomTemplate}
-            style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}
-          >
-            <Text style={styles.primaryButtonText}>Save Template</Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      <View style={styles.ownerAccordionCard}>
-        <Text style={styles.ownerAccordionTitle}>Template Library</Text>
-        <Text style={styles.ownerAccordionSummary}>
-          Choose a built-in form or waiver and send it to parents or staff.
-        </Text>
-        {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
-
-        {DOCUMENT_TEMPLATE_LIBRARY.map((group) => (
-          <View key={group.groupTitle} style={{ marginTop: 14 }}>
-            <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>{group.groupTitle}</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>{group.templates.length} templates</Text>
-            </View>
-            <View style={styles.profileList}>
-              {group.templates.map((template) => {
-                const templateId = `${group.audienceRole}:${template.title}`;
-                const isActive = selectedTemplateId === templateId;
-                return (
-                  <Pressable
-                    key={templateId}
-                    accessibilityRole="button"
-                    onPress={() =>
-                      handleTemplateSelect({
-                        id: templateId,
-                        title: template.title,
-                        description: template.description,
-                        category: group.category,
-                        audienceRole: group.audienceRole,
-                        groupTitle: group.groupTitle,
-                      })
-                    }
-                    style={({ pressed }) => [
-                      styles.profileCardInner,
-                      isActive && styles.ownerFilterPillActive,
-                      pressed && styles.pressedTile,
-                      {
-                        borderWidth: isActive ? 2 : 1,
-                        borderColor: isActive ? COLORS.blue : COLORS.border,
-                        backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
-                      },
-                    ]}
-                  >
-                    <View style={styles.documentItemHeaderRow}>
-                      <View style={styles.documentItemHeadingBlock}>
-                        <Text style={styles.documentItemTitle}>{template.title}</Text>
-                        <Text style={styles.documentItemMeta}>{group.groupTitle}</Text>
-                      </View>
-                      <DocumentStatusPill status={group.audienceRole === 'staff' ? 'Staff' : 'Parent'} />
-                    </View>
-                    <Text style={styles.documentItemMeta}>{template.description}</Text>
-                    <Text style={styles.documentItemMeta}>Tap to select this template</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        ))}
-
-        {selectedTemplate ? (
-          <View style={[styles.ownerAccordionCard, { marginTop: 16 }]}>
-            <Text style={styles.ownerAccordionTitle}>Template Details</Text>
-            <View style={styles.ownerStaffMetaList}>
-              <View style={styles.ownerStaffMetaRow}>
-                <Text style={styles.ownerStaffMetaLabel}>Template Name</Text>
-                <Text style={styles.ownerStaffMetaValue}>{selectedTemplate.title}</Text>
-              </View>
-              <View style={styles.ownerStaffMetaRow}>
-                <Text style={styles.ownerStaffMetaLabel}>Description</Text>
-                <Text style={styles.ownerStaffMetaValue}>{selectedTemplate.description}</Text>
-              </View>
-              <View style={styles.ownerStaffMetaRow}>
-                <Text style={styles.ownerStaffMetaLabel}>Recipient Selection</Text>
-                <Text style={styles.ownerStaffMetaValue}>
-                  {isStaffTemplate ? 'Staff Recipients' : 'Parent Recipients'}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.ownerChipGroup}>
-              <Text style={styles.ownerChipGroupLabel}>Send To</Text>
-              <View style={styles.ownerFilterPillRow}>
-                {sendToOptions.map((option) => {
-                  const isActive = draftAudienceType === option.value;
-                  return (
-                    <Pressable
-                      key={option.value}
-                      accessibilityRole="button"
-                      onPress={() => {
-                        setDraftAudienceType(option.value);
-                        if (option.value === 'all_parents' || option.value === 'all_staff') {
-                          setDraftRecipientProfileId('');
-                        }
-                        setFormError('');
-                      }}
-                      style={({ pressed }) => [
-                        styles.ownerFilterPill,
-                        isActive && styles.ownerFilterPillActive,
-                        pressed && styles.pressedButton,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.ownerFilterPillText,
-                          isActive && styles.ownerFilterPillTextActive,
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {(draftAudienceType === 'specific_parent' || draftAudienceType === 'specific_staff') ? (
-              <View style={styles.ownerChipGroup}>
-                <Text style={styles.ownerChipGroupLabel}>
-                  {isStaffTemplate ? 'Select Staff' : 'Select Parent'}
-                </Text>
-                {isStaffTemplate ? (
-                  availableStaffProfilesError ? (
-                    <Text style={styles.errorText}>{availableStaffProfilesError}</Text>
-                  ) : availableStaffProfilesLoading ? (
-                    <Text style={styles.parentAttendanceStateText}>Loading active staff...</Text>
-                  ) : staffProfiles.length ? (
-                    <View style={styles.profileList}>
-                      {staffProfiles.map((staff) => {
-                        const isActive = draftRecipientProfileId === staff.id;
-                        return (
-                          <Pressable
-                            key={staff.id}
-                            accessibilityRole="button"
-                            onPress={() => {
-                              setDraftRecipientProfileId(staff.id);
-                              setFormError('');
-                            }}
-                            style={({ pressed }) => [
-                              styles.profileCardInner,
-                              isActive && styles.ownerFilterPillActive,
-                              pressed && styles.pressedTile,
-                              {
-                                borderWidth: isActive ? 2 : 1,
-                                borderColor: isActive ? COLORS.blue : COLORS.border,
-                                backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
-                              },
-                            ]}
-                          >
-                            <Text style={styles.documentItemTitle}>
-                              {getProfileDisplayName(staff, 'Staff Member')}
-                            </Text>
-                            <Text style={styles.documentItemMeta}>{staff.email}</Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  ) : (
-                    <Text style={styles.parentAttendanceStateText}>No active staff found.</Text>
-                  )
-                ) : availableParentProfilesError ? (
-                  <Text style={styles.errorText}>{availableParentProfilesError}</Text>
-                ) : availableParentProfilesLoading ? (
-                  <Text style={styles.parentAttendanceStateText}>Loading active parents...</Text>
-                ) : parentProfiles.length ? (
-                  <View style={styles.profileList}>
-                    {parentProfiles.map((parent) => {
-                      const isActive = draftRecipientProfileId === parent.id;
-                      return (
-                        <Pressable
-                          key={parent.id}
-                          accessibilityRole="button"
-                          onPress={() => {
-                            setDraftRecipientProfileId(parent.id);
-                            setFormError('');
-                          }}
-                          style={({ pressed }) => [
-                            styles.profileCardInner,
-                            isActive && styles.ownerFilterPillActive,
-                            pressed && styles.pressedTile,
-                            {
-                              borderWidth: isActive ? 2 : 1,
-                              borderColor: isActive ? COLORS.blue : COLORS.border,
-                              backgroundColor: isActive ? '#EEF4FF' : COLORS.white,
-                            },
-                          ]}
-                        >
-                          <Text style={styles.documentItemTitle}>
-                            {getProfileDisplayName(parent, 'Parent')}
-                          </Text>
-                          <Text style={styles.documentItemMeta}>{parent.email}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                ) : (
-                  <Text style={styles.parentAttendanceStateText}>No active parents found.</Text>
-                )}
-              </View>
-            ) : null}
-
-            <Pressable
-              accessibilityRole="button"
-              onPress={handleSendTemplate}
-              style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}
-            >
-              <Text style={styles.primaryButtonText}>Send Form</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <Text style={styles.parentAttendanceStateText}>
-            Select a template to send it to parents or staff.
-          </Text>
-        )}
-      </View>
-
-      <View style={styles.profileList}>
-        {ownerFormCards.length ? (
-          ownerFormCards.map((item) => {
-            const { form, recipients, signedIds, signaturesForForm, signedRecordCount, sentCount, pendingFormCount, audienceLabel } = item;
-            const isOpen = expandedFormId === form.id;
-            return (
+      <View style={{ marginTop: 14 }}>
+        {ownerSections.map((section) => {
+          const isOpen = openSection === section.key;
+          return (
+            <View key={section.key} style={[styles.ownerAccordionCard, { marginTop: 12 }]}>
               <Pressable
-                key={form.id}
                 accessibilityRole="button"
-                onPress={() =>
-                  setExpandedFormId((current) => (current === form.id ? null : form.id))
-                }
-                style={({ pressed }) => [styles.profileCardInner, pressed && styles.pressedTile]}
+                onPress={() => toggleSection(section.key)}
+                style={({ pressed }) => [pressed && styles.pressedTile]}
               >
                 <View style={styles.documentItemHeaderRow}>
                   <View style={styles.documentItemHeadingBlock}>
-                    <Text style={styles.documentItemTitle}>{form.title}</Text>
-                    <Text style={styles.documentItemMeta}>{getDocumentDisplayType(form)}</Text>
+                    <Text style={styles.ownerAccordionTitle}>{section.title}</Text>
+                    <Text style={styles.ownerAccordionSummary}>{section.summary}</Text>
                   </View>
-
-                  <DocumentStatusPill status={form.status || 'Active'} />
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.documentItemMeta}>
+                      {section.count} item{section.count === 1 ? '' : 's'}
+                    </Text>
+                    <Text style={styles.ownerAccordionChevron}>{isOpen ? '⌃' : '⌄'}</Text>
+                  </View>
                 </View>
-
-                <Text style={styles.documentItemMeta}>
-                  Created {formatDate(form.createdAt || form.uploadedAt)}
-                </Text>
-                <Text style={styles.documentItemMeta}>Sent To: {audienceLabel}</Text>
-
-                <View style={styles.documentItemHeaderRow}>
-                <Text style={styles.documentItemMeta}>Sent Count: {sentCount}</Text>
-                <Text style={styles.documentItemMeta}>Signed: {signedRecordCount}</Text>
-                <Text style={styles.documentItemMeta}>Pending: {pendingFormCount}</Text>
-                <Text style={styles.ownerAccordionChevron}>{isOpen ? '⌃' : '⌄'}</Text>
-              </View>
-
-                {isOpen ? (
-                  <View style={styles.ownerStaffMetaList}>
-                    <Text style={styles.ownerAccordionSummary}>{form.description}</Text>
-                    <View style={styles.ownerStaffMetaRow}>
-                      <Text style={styles.ownerStaffMetaLabel}>Required</Text>
-                      <Text style={styles.ownerStaffMetaValue}>
-                        {form.required ? 'Required' : 'Optional'}
-                      </Text>
-                    </View>
-                    <View style={styles.ownerStaffMetaRow}>
-                      <Text style={styles.ownerStaffMetaLabel}>Signed Users</Text>
-                      <Text style={styles.ownerStaffMetaValue}>
-                        {signaturesForForm.length
-                          ? signaturesForForm
-                              .map((signature) => {
-                                const matchedRecipient = recipients.find(
-                                  (recipient) =>
-                                    recipient.id ===
-                                    (signature.parentId || signature.parent_profile_id)
-                                );
-                                const signedName = matchedRecipient
-                                  ? getRecipientName(matchedRecipient, 'Signed User')
-                                  : signature.typedName || signature.childName || 'Signed User';
-                                const signedDate = signature.signedAt
-                                  ? formatDate(signature.signedAt)
-                                  : 'Unknown date';
-                                return `${signedName} · ${signedDate}`;
-                              })
-                              .join(' | ')
-                          : 'No signatures yet.'}
-                      </Text>
-                    </View>
-                    <View style={styles.ownerStaffMetaRow}>
-                      <Text style={styles.ownerStaffMetaLabel}>Pending Users</Text>
-                      <Text style={styles.ownerStaffMetaValue}>
-                        {pendingFormCount > 0
-                          ? recipients
-                              .filter((recipient) => !signedIds.has(recipient.id))
-                              .map((recipient) => getRecipientName(recipient, 'Pending User'))
-                              .join(' | ')
-                          : 'All recipients signed.'}
-                      </Text>
-                    </View>
-                  </View>
-                ) : null}
               </Pressable>
-            );
-          })
-        ) : (
-          <Text style={styles.parentAttendanceStateText}>No forms yet.</Text>
-        )}
+
+              {isOpen ? <View style={{ marginTop: 14 }}>{renderSectionContent(section.key)}</View> : null}
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -13168,7 +13350,9 @@ function ParentFormsWaiversPanel({
 
   const getSignatureForForm = (formId) =>
     (Array.isArray(signatures) ? signatures : []).find(
-      (signature) => signature.formId === formId && signature.parentId === currentUserId
+      (signature) =>
+        (signature.formId || signature.form_id) === formId &&
+        (signature.parentId || signature.parent_profile_id) === currentUserId
     ) || null;
 
   const handleSign = (form) => {
@@ -13414,7 +13598,9 @@ function StaffFormsWaiversPanel({ forms, signatures, currentUserId, onSignForm }
   const signatureRows = Array.isArray(signatures) ? signatures : [];
   const getSignatureForForm = (formId) =>
     signatureRows.find(
-      (signature) => signature.formId === formId && signature.parentId === currentUserId
+      (signature) =>
+        (signature.formId || signature.form_id) === formId &&
+        (signature.parentId || signature.parent_profile_id) === currentUserId
     ) || null;
 
   const handleSign = (form) => {
@@ -13675,7 +13861,7 @@ function DocumentCenterScreen({
 
           {sections.length ? (
             sections.map((section) => (
-              <View key={section.title} style={styles.profileCard}>
+              <View key={section.id || section.title} style={styles.profileCard}>
                 <View style={styles.parentSectionHeaderRow}>
                   <Text style={styles.parentSectionHeaderTitle}>{section.title}</Text>
                   <Text style={styles.parentSectionHeaderSubtle}>
@@ -13686,7 +13872,7 @@ function DocumentCenterScreen({
                 <View style={styles.profileList}>
                   {(Array.isArray(section.documents) ? section.documents : []).map((document) => (
                     <DocumentItemCard
-                      key={document.title}
+                      key={document.id || `${document.title}-${document.category || 'doc'}`}
                       title={document.title}
                       category={document.category}
                       status={document.status}
@@ -16381,7 +16567,7 @@ export default function App() {
       const { data: signaturesData, error: signaturesError } = await supabase
         .from('form_signatures')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('signed_at', { ascending: false });
 
       if (signaturesError) {
         console.log('Document center signatures load error', signaturesError);
@@ -16397,9 +16583,10 @@ export default function App() {
           childId: signature.child_id || signature.childId || '',
           typedName: signature.typed_name || signature.typedName || '',
           acknowledged: Boolean(signature.acknowledged),
-          signedAt: signature.signed_at || signature.created_at || signature.signedAt || null,
+          signedAt: signature.signed_at || signature.signedAt || null,
         }))
       );
+      console.log('Loaded form signatures', Array.isArray(signaturesData) ? signaturesData : []);
     } catch (loadError) {
       console.log('Document center load error', loadError);
       setDocumentForms([]);
@@ -18009,29 +18196,73 @@ export default function App() {
         return;
       }
 
-      const existingSignature = documentSignatures.find(
-        (entry) => entry.formId === formId && entry.parentId === session.user.id
-      );
+      const existingSignature =
+        documentSignatures.find(
+          (entry) => entry.formId === formId && entry.parentId === session.user.id
+        ) ||
+        (await (async () => {
+          const { data, error } = await supabase
+            .from('form_signatures')
+            .select('id, form_id, parent_profile_id, signed_at, typed_name, acknowledged')
+            .eq('form_id', formId)
+            .eq('parent_profile_id', session.user.id)
+            .limit(1)
+            .maybeSingle();
+
+          if (error) {
+            console.log('Existing signature lookup error', error);
+            return null;
+          }
+
+          return data
+            ? {
+                id: data.id,
+                formId: data.form_id || data.formId,
+                parentId: data.parent_profile_id || data.parentId,
+                childId: '',
+                typedName: data.typed_name || data.typedName || '',
+                acknowledged: Boolean(data.acknowledged),
+                signedAt: data.signed_at || data.signedAt || null,
+              }
+            : null;
+        })());
 
       if (existingSignature) {
-        Alert.alert('Form already signed.');
+        Alert.alert('You already signed this form.');
         return;
       }
 
       try {
-        const { error } = await supabase.from('form_signatures').insert({
+        const { data, error } = await supabase.from('form_signatures').insert({
           form_id: formId,
           parent_profile_id: session.user.id,
           typed_name: typedName,
           acknowledged: true,
-        });
+        }).select('id, form_id, parent_profile_id, signed_at, typed_name, acknowledged').single();
 
         if (error) {
           throw new Error(error.message || 'Could not sign form.');
         }
 
+        if (data) {
+          setDocumentSignatures((current) => [
+            {
+              id: data.id,
+              formId: data.form_id || data.formId,
+              parentId: data.parent_profile_id || data.parentId,
+              childId: '',
+              typedName: data.typed_name || data.typedName || '',
+              acknowledged: Boolean(data.acknowledged),
+              signedAt: data.signed_at || data.signedAt || null,
+            },
+            ...current.filter(
+              (entry) => !(entry.formId === formId && entry.parentId === session.user.id)
+            ),
+          ]);
+        }
+
         await loadDocumentCenterData();
-        Alert.alert('Form signed.');
+        Alert.alert('Form signed');
       } catch (signError) {
         Alert.alert('Could not sign form.', signError?.message || 'Try again.');
       }
