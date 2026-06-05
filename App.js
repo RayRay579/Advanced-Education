@@ -1197,11 +1197,21 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
       }
 
       const sessions = Array.isArray(sessionsData) ? sessionsData : [];
-      const totalMinutes = sessions.reduce((sum, session) => sum + Number(session.total_minutes || 0), 0);
+      const unbilledSessions = sessions.filter((session) => !session.invoice_id);
+      const billedSessions = sessions.filter((session) => session.invoice_id);
+      const totalMinutes = unbilledSessions.reduce((sum, session) => sum + Number(session.total_minutes || 0), 0);
 
-      if (!sessions.length || totalMinutes <= 0) {
+      if (!unbilledSessions.length || totalMinutes <= 0) {
         setBaPreview(null);
-        setFormError('No Before & After Care time found for this child and billing period.');
+        const message = sessions.length
+          ? 'These Before & After Care sessions have already been billed.'
+          : 'No Before & After Care time found for this child and billing period.';
+        setFormError(message);
+        Alert.alert(
+          sessions.length
+            ? 'These Before & After Care sessions have already been billed.'
+            : 'No Before & After Care time found for this child and billing period.'
+        );
         return null;
       }
 
@@ -1209,11 +1219,13 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
       const hourlyRate = Number(rate);
       const amount = Number((totalHours * hourlyRate).toFixed(2));
       const preview = {
-        sessionCount: sessions.length,
+        sessionCount: unbilledSessions.length,
+        billedSessionCount: billedSessions.length,
         totalMinutes,
         totalHours,
         hourlyRate,
         amount,
+        sessionIds: unbilledSessions.map((session) => session.id).filter(Boolean),
       };
 
       setBaPreview(preview);
@@ -1583,6 +1595,21 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
         if (lineInsertError) {
           console.log('Create line item error message', lineInsertError.message);
           throw lineInsertError;
+        }
+
+        if (isBaGeneration && resolvedBaPreview?.sessionIds?.length) {
+          const { data: sessionLinkData, error: sessionLinkError } = await supabase
+            .from('before_after_care_sessions')
+            .update({ invoice_id: invoiceData.id })
+            .in('id', resolvedBaPreview.sessionIds)
+            .select();
+
+          console.log('B&A session link result', sessionLinkData, sessionLinkError);
+
+          if (sessionLinkError) {
+            console.log('B&A session link error message', sessionLinkError.message);
+            throw sessionLinkError;
+          }
         }
 
         Alert.alert('Invoice created.');
@@ -1992,6 +2019,10 @@ function OwnerBillingScreen({ onBack, onLogout, currentUserId }) {
                         <View style={styles.billingDetailRow}>
                           <Text style={styles.billingDetailLabel}>Sessions Included</Text>
                           <Text style={styles.billingDetailValue}>{baPreview.sessionCount}</Text>
+                        </View>
+                        <View style={styles.billingDetailRow}>
+                          <Text style={styles.billingDetailLabel}>Already Billed</Text>
+                          <Text style={styles.billingDetailValue}>{baPreview.billedSessionCount || 0}</Text>
                         </View>
                         <View style={styles.billingDetailRow}>
                           <Text style={styles.billingDetailLabel}>Total Minutes</Text>
