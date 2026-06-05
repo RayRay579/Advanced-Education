@@ -1007,12 +1007,58 @@ function StaffHomeScreen({
   onOpenNotes,
   onOpenHours,
   staffStatus,
-  messages,
-  loading,
-  error,
-  expandedMessageId,
-  onToggleMessage,
+  staffTimeEntries,
+  staffTimeEntriesLoading,
+  staffTimeEntriesError,
+  currentStaffDisplayName,
 }) {
+  const todayWorkedMinutes = getStaffTodayMinutes(staffTimeEntries);
+  const weekWorkedMinutes = getStaffWeekMinutes(staffTimeEntries);
+  const currentShiftLabel = getStaffCurrentShiftLabel(staffTimeEntries);
+
+  const staffWorkspaceCards = [
+    {
+      accent: 'green',
+      title: 'Staff Time Clock',
+      value: staffStatus,
+      note: staffTimeEntriesLoading
+        ? 'Loading current shift...'
+        : currentShiftLabel === 'Not clocked in'
+          ? 'Clock in and out for today'
+          : currentShiftLabel,
+    },
+    {
+      accent: 'orange',
+      title: 'Before & After Care Attendance',
+      value: 'School-year workflow',
+      note: 'Check-in, bus, and pickup management',
+    },
+    {
+      accent: 'blue',
+      title: 'Summer Camp Group Check-In',
+      value: 'Blue Group',
+      note: 'Group check-in and headcount confirmation',
+    },
+    {
+      accent: 'purple',
+      title: 'Daily Notes',
+      value: 'Add notes',
+      note: 'Add notes for parents',
+    },
+    {
+      accent: 'blue',
+      title: 'Messages',
+      value: 'View updates',
+      note: 'View staff updates and center announcements',
+    },
+    {
+      accent: 'blue',
+      title: 'My Hours',
+      value: formatDuration(weekWorkedMinutes),
+      note: todayWorkedMinutes ? `Today worked ${formatDuration(todayWorkedMinutes)}` : 'No time entries yet',
+    },
+  ];
+
   return (
     <View style={styles.parentHomePage}>
       <ScrollView
@@ -1026,7 +1072,7 @@ function StaffHomeScreen({
           <View style={styles.staffHeroMain}>
             <View style={styles.staffHeroTextBlock}>
               <Text style={styles.parentHeroKicker}>Advanced Education</Text>
-              <Text style={styles.parentHeroGreeting}>Hi, Ms. Sarah</Text>
+              <Text style={styles.parentHeroGreeting}>Hi, {currentStaffDisplayName}</Text>
               <Text style={styles.staffHeroSubheading}>Staff Workspace</Text>
               <View style={styles.staffStatusPill}>
                 <Text style={styles.staffStatusPillText}>{staffStatus}</Text>
@@ -1040,16 +1086,17 @@ function StaffHomeScreen({
         </View>
 
         <View style={styles.parentHomeContent}>
+          {staffTimeEntriesError ? <Text style={styles.errorText}>{staffTimeEntriesError}</Text> : null}
           <View style={styles.staffButtonStack}>
-            {STAFF_WORKSPACE_CARDS.map((card) => (
+            {staffWorkspaceCards.map((card) => (
               <ActionButtonCard
                 key={card.title}
                 accent={card.accent}
                 title={card.title}
-                value={card.title === 'Clock In / Out' ? staffStatus : card.value}
+                value={card.value}
                 note={card.note}
                 onPress={() =>
-                  card.title === 'Clock In / Out'
+                  card.title === 'Staff Time Clock'
                     ? onOpenClock()
                     : card.title === 'Before & After Care Attendance'
                       ? onOpenBeforeAfter()
@@ -1061,21 +1108,11 @@ function StaffHomeScreen({
                           ? onOpenNotes()
                           : card.title === 'My Hours'
                             ? onOpenHours()
-                        : onShowComingSoon(card.title)
+                  : onShowComingSoon(card.title)
                 }
               />
             ))}
           </View>
-
-          <RecipientMessagesSection
-            title="Messages"
-            subtitle="Recent updates sent to this account."
-            messages={messages}
-            loading={loading}
-            error={error}
-            expandedMessageId={expandedMessageId}
-            onToggleMessage={onToggleMessage}
-          />
 
           <Pressable
             accessibilityRole="button"
@@ -1095,7 +1132,13 @@ function StaffHomeScreen({
 }
 
 /*
-function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
+function StaffDailyNotesScreen({
+  onBack,
+  onLogout,
+  savedNotes,
+  onSaveNote,
+  currentStaffDisplayName,
+}) {
   const [selectedChildId, setSelectedChildId] = useState(STAFF_DAILY_NOTE_CHILDREN[0]?.id ?? null);
   const [selectedQuickNotes, setSelectedQuickNotes] = useState([]);
   const [customNote, setCustomNote] = useState('');
@@ -1208,7 +1251,7 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
           <View style={styles.staffHeroMain}>
             <View style={styles.staffHeroTextBlock}>
               <Text style={styles.parentHeroKicker}>Advanced Education</Text>
-              <Text style={styles.parentHeroGreeting}>Staff: Ms. Sarah</Text>
+              <Text style={styles.parentHeroGreeting}>{currentStaffDisplayName}</Text>
               <Text style={styles.staffHeroSubheading}>Parent note writer</Text>
             </View>
 
@@ -1377,7 +1420,7 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
               <View style={styles.staffDailyNotesPreviewBlock}>
                 <Text style={styles.staffDailyNotesPreviewLabel}>Staff / time</Text>
                 <Text style={styles.staffDailyNotesPreviewValue}>
-                  {STAFF_MEMBER.name} · {STAFF_CLOCK_CURRENT_TIME}
+                  Current staff account
                 </Text>
               </View>
               <View style={styles.staffDailyNotesPreviewBlock}>
@@ -1623,7 +1666,7 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
           <View style={styles.staffHeroMain}>
             <View style={styles.staffHeroTextBlock}>
               <Text style={styles.parentHeroKicker}>Advanced Education</Text>
-              <Text style={styles.parentHeroGreeting}>Staff: Ms. Sarah</Text>
+              <Text style={styles.parentHeroGreeting}>Current Staff</Text>
               <Text style={styles.staffHeroSubheading}>Parent note writer</Text>
             </View>
 
@@ -1775,7 +1818,7 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
               <View style={styles.staffDailyNotesPreviewBlock}>
                 <Text style={styles.staffDailyNotesPreviewLabel}>Staff / time</Text>
                 <Text style={styles.staffDailyNotesPreviewValue}>
-                  {STAFF_MEMBER.name} · {STAFF_CLOCK_CURRENT_TIME}
+                  Current staff account
                 </Text>
               </View>
               <View style={styles.staffDailyNotesPreviewBlock}>
@@ -1867,7 +1910,27 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
   );
 }
 
-function StaffMyHoursScreen({ onBack, onLogout }) {
+function StaffMyHoursScreen({
+  onBack,
+  onLogout,
+  staffTimeEntries = [],
+  loading,
+  error,
+}) {
+  const [openEntryId, setOpenEntryId] = useState(null);
+  const sortedEntries = [...staffTimeEntries].sort(
+    (a, b) => new Date(b?.created_at || b?.clock_in || 0) - new Date(a?.created_at || a?.clock_in || 0)
+  );
+  const todayWorkedMinutes = getStaffTodayMinutes(sortedEntries);
+  const weekWorkedMinutes = getStaffWeekMinutes(sortedEntries);
+
+  const getReviewLabel = (entry) => {
+    if (!entry) return 'Pending Review';
+    if (entry.review_status === 'approved') return 'Approved';
+    if (entry.review_status === 'rejected') return 'Not Approved';
+    return 'Pending Review';
+  };
+
   return (
     <View style={styles.parentHomePage}>
       <ScrollView
@@ -1896,8 +1959,8 @@ function StaffMyHoursScreen({ onBack, onLogout }) {
           <View style={styles.staffHeroMain}>
             <View style={styles.staffHeroTextBlock}>
               <Text style={styles.parentHeroKicker}>Advanced Education</Text>
-              <Text style={styles.parentHeroGreeting}>Staff: Ms. Sarah</Text>
-              <Text style={styles.staffHeroSubheading}>Hours overview</Text>
+              <Text style={styles.parentHeroGreeting}>My Hours</Text>
+              <Text style={styles.staffHeroSubheading}>View your time entries and owner review status</Text>
             </View>
 
             <View style={styles.staffAvatarPlaceholder}>
@@ -1910,63 +1973,119 @@ function StaffMyHoursScreen({ onBack, onLogout }) {
           <View style={styles.profileCard}>
             <View style={styles.parentSectionHeaderRow}>
               <Text style={styles.parentSectionHeaderTitle}>This Week</Text>
-              <View style={styles.staffHoursPendingPill}>
-                <Text style={styles.staffHoursPendingPillText}>Pending Owner Review</Text>
-              </View>
-            </View>
-
-            <View style={styles.staffHoursWeekList}>
-              {STAFF_HOURS_THIS_WEEK.map((item) => (
-                <View key={item.day} style={styles.staffHoursWeekRow}>
-                  <Text style={styles.staffHoursWeekDay}>{item.day}</Text>
-                  <Text style={styles.staffHoursWeekValue}>{item.hours}</Text>
-                </View>
-              ))}
+              <Text style={styles.parentSectionHeaderSubtle}>{formatDuration(weekWorkedMinutes)}</Text>
             </View>
 
             <View style={styles.staffHoursTotalBlock}>
               <Text style={styles.staffHoursTotalLabel}>Weekly Total</Text>
-              <Text style={styles.staffHoursTotalValue}>32.0 Hours</Text>
+              <Text style={styles.staffHoursTotalValue}>{formatDuration(weekWorkedMinutes)}</Text>
+              <Text style={styles.staffHoursApprovedLabel}>
+                Today Worked: {formatDuration(todayWorkedMinutes)}
+              </Text>
             </View>
           </View>
 
-          {STAFF_HOURS_APPROVED_WEEKS.map((week) => (
-            <View key={week.title} style={styles.profileCard}>
-              <View style={styles.parentSectionHeaderRow}>
-                <Text style={styles.parentSectionHeaderTitle}>{week.title}</Text>
-                <View style={styles.staffHoursApprovedPill}>
-                  <Text style={styles.staffHoursApprovedPillText}>{week.status}</Text>
-                </View>
-              </View>
-
-              <View style={styles.staffHoursApprovedList}>
-                <View style={styles.staffHoursApprovedRow}>
-                  <Text style={styles.staffHoursApprovedLabel}>Total Hours</Text>
-                  <Text style={styles.staffHoursApprovedValue}>{week.total}</Text>
-                </View>
-                <View style={styles.staffHoursApprovedRow}>
-                  <Text style={styles.staffHoursApprovedLabel}>Approval Date</Text>
-                  <Text style={styles.staffHoursApprovedValue}>{week.date}</Text>
-                </View>
-              </View>
-            </View>
-          ))}
-
           <View style={styles.profileCard}>
             <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Clock Activity</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>Recent entries</Text>
+              <Text style={styles.parentSectionHeaderTitle}>Time Entries</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                {sortedEntries.length ? `${sortedEntries.length} entries` : 'No time entries yet.'}
+              </Text>
             </View>
 
-            <View style={styles.staffHoursActivityList}>
-              {STAFF_HOURS_CLOCK_ACTIVITY.map((entry) => (
-                <View key={`${entry.label}-${entry.time}`} style={styles.staffHoursActivityRow}>
-                  <View style={styles.staffHoursActivityDot} />
-                  <Text style={styles.staffHoursActivityLabel}>{entry.label}</Text>
-                  <Text style={styles.staffHoursActivityTime}>{entry.time}</Text>
-                </View>
-              ))}
-            </View>
+            {loading ? (
+              <Text style={styles.parentAttendanceStateText}>Loading time entries...</Text>
+            ) : error ? (
+              <Text style={styles.errorText}>{error}</Text>
+            ) : sortedEntries.length ? (
+              <View style={styles.profileList}>
+                {sortedEntries.map((entry) => {
+                  const isOpen = openEntryId === entry.id;
+                  const reviewLabel = getReviewLabel(entry);
+
+                  return (
+                    <Pressable
+                      key={entry.id}
+                      accessibilityRole="button"
+                      onPress={() =>
+                        setOpenEntryId((current) => (current === entry.id ? null : entry.id))
+                      }
+                      style={({ pressed }) => [
+                        styles.ownerAccordionCard,
+                        pressed && styles.pressedTile,
+                        { marginBottom: 10 },
+                      ]}
+                    >
+                      <View style={styles.ownerAccordionHeader}>
+                        <View style={styles.ownerAccordionHeadingBlock}>
+                          <Text style={styles.ownerAccordionTitle}>
+                            {formatDate(entry.clock_in || entry.created_at)}
+                          </Text>
+                          <Text style={styles.ownerAccordionSummary}>
+                            Total Worked: {formatDuration(Number(entry.total_minutes || 0))}
+                          </Text>
+                        </View>
+                        <View style={styles.staffHoursApprovedPill}>
+                          <Text style={styles.staffHoursApprovedPillText}>{reviewLabel}</Text>
+                        </View>
+                        <Text style={styles.ownerAccordionChevron}>{isOpen ? '⌃' : '⌄'}</Text>
+                      </View>
+
+                      {isOpen ? (
+                        <View style={styles.ownerAccordionContent}>
+                          <View style={styles.staffHoursApprovedList}>
+                            <View style={styles.staffHoursApprovedRow}>
+                              <Text style={styles.staffHoursApprovedLabel}>Clock In</Text>
+                              <Text style={styles.staffHoursApprovedValue}>
+                                {formatTime(entry.clock_in)}
+                              </Text>
+                            </View>
+                            <View style={styles.staffHoursApprovedRow}>
+                              <Text style={styles.staffHoursApprovedLabel}>Clock Out</Text>
+                              <Text style={styles.staffHoursApprovedValue}>
+                                {entry.clock_out ? formatTime(entry.clock_out) : 'Still clocked in'}
+                              </Text>
+                            </View>
+                            <View style={styles.staffHoursApprovedRow}>
+                              <Text style={styles.staffHoursApprovedLabel}>Total Worked</Text>
+                              <Text style={styles.staffHoursApprovedValue}>
+                                {formatDuration(Number(entry.total_minutes || 0))}
+                              </Text>
+                            </View>
+                            <View style={styles.staffHoursApprovedRow}>
+                              <Text style={styles.staffHoursApprovedLabel}>Status</Text>
+                              <Text style={styles.staffHoursApprovedValue}>
+                                {entry.status === 'clocked_in' ? 'Clocked In' : 'Clocked Out'}
+                              </Text>
+                            </View>
+                            <View style={styles.staffHoursApprovedRow}>
+                              <Text style={styles.staffHoursApprovedLabel}>Review Status</Text>
+                              <Text style={styles.staffHoursApprovedValue}>{reviewLabel}</Text>
+                            </View>
+                            {entry.review_status === 'approved' && entry.reviewed_at ? (
+                              <View style={styles.staffHoursApprovedRow}>
+                                <Text style={styles.staffHoursApprovedLabel}>Approved On</Text>
+                                <Text style={styles.staffHoursApprovedValue}>
+                                  {formatDateTime(entry.reviewed_at)}
+                                </Text>
+                              </View>
+                            ) : null}
+                            {entry.review_status === 'rejected' && entry.review_note ? (
+                              <View style={styles.staffHoursApprovedRow}>
+                                <Text style={styles.staffHoursApprovedLabel}>Reason</Text>
+                                <Text style={styles.staffHoursApprovedValue}>{entry.review_note}</Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        </View>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={styles.parentAttendanceStateText}>No time entries yet.</Text>
+            )}
           </View>
 
           <View style={styles.profileCard}>
@@ -3961,7 +4080,7 @@ function OwnerStudentsScreen({
                     <View style={styles.actionCardBody}>
                       <Text style={styles.actionTitle}>{label}</Text>
                       <Text style={styles.actionNote}>
-                        {label === 'Add Student' ? 'Create a new student record' : 'Coming Soon'}
+                        {label === 'Add Student' ? 'Create a new student record' : ''}
                       </Text>
                     </View>
                     <Text style={styles.chevron}>›</Text>
@@ -3988,65 +4107,46 @@ function OwnerStudentsScreen({
   );
 }
 
-function OwnerStaffScreen({ onBack, onLogout, onShowComingSoon }) {
+function OwnerStaffScreen({
+  onBack,
+  onLogout,
+  onShowComingSoon,
+  staffRows,
+  loading,
+  error,
+  reviewActionId,
+  onApproveEntry,
+  onRejectEntry,
+}) {
   const staffAccent = OWNER_MODULE_COLORS.Staff;
+  const [openStaffId, setOpenStaffId] = useState(null);
+  const [rejectingEntryId, setRejectingEntryId] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
 
-  const staffSummaryCards = [
-    { title: 'Total Staff', value: '12', accent: 'green' },
-    { title: 'Clocked In', value: '7', accent: 'green' },
-    { title: 'Clocked Out', value: '5', accent: 'green' },
-    { title: 'Hours Pending Review', value: '3', accent: 'green' },
-  ];
-
-  const staffMembers = [
+  const summaryCards = [
     {
-      id: 'ms-sarah',
-      name: 'Ms. Sarah',
-      role: 'Counselor',
-      status: 'Clocked In',
-      today: '7:30 AM - 4:00 PM',
-      hours: '32.0',
-      review: 'Pending',
-      badge: 'Shift On',
-      badgeTone: 'green',
+      title: 'Total Staff',
+      value: String((staffRows || []).length),
+      accent: 'green',
     },
     {
-      id: 'mr-james',
-      name: 'Mr. James',
-      role: 'Bus / After Care',
-      status: 'Clocked In',
-      today: '8:00 AM - 5:00 PM',
-      hours: '30.5',
-      review: 'Approved',
-      badge: 'Shift On',
-      badgeTone: 'blue',
+      title: 'Clocked In',
+      value: String((staffRows || []).filter((row) => row.currentStatus === 'Clocked In').length),
+      accent: 'green',
     },
     {
-      id: 'ms-kelly',
-      name: 'Ms. Kelly',
-      role: 'Camp Counselor',
-      status: 'Clocked Out',
-      today: '7:00 AM - 3:00 PM',
-      hours: '28.0',
-      review: 'Pending',
-      badge: 'Shift Off',
-      badgeTone: 'orange',
+      title: 'Clocked Out',
+      value: String((staffRows || []).filter((row) => row.currentStatus === 'Clocked Out').length),
+      accent: 'orange',
+    },
+    {
+      title: 'Hours Pending Review',
+      value: String(
+        (staffRows || []).reduce((total, row) => total + Number(row.pendingCount || 0), 0)
+      ),
+      accent: 'blue',
     },
   ];
-
-  const badgeToneStyles = {
-    blue: styles.ownerStaffBadgeBlue,
-    green: styles.ownerStaffBadgeGreen,
-    orange: styles.ownerStaffBadgeOrange,
-    red: styles.ownerStaffBadgeRed,
-    purple: styles.ownerStaffBadgePurple,
-  };
-
-  const reviewToneStyles = {
-    blue: styles.ownerStaffReviewBlue,
-    green: styles.ownerStaffReviewGreen,
-    orange: styles.ownerStaffReviewOrange,
-  };
 
   return (
     <View style={styles.page}>
@@ -4092,7 +4192,7 @@ function OwnerStaffScreen({ onBack, onLogout, onShowComingSoon }) {
           <View style={styles.ownerAccordionCard}>
             <Text style={styles.ownerAccordionTitle}>Staff Summary</Text>
             <View style={[styles.ownerSectionDetailsGrid, { marginTop: 14 }]}>
-              {staffSummaryCards.map((card) => (
+              {summaryCards.map((card) => (
                 <SummaryTile
                   key={card.title}
                   accent={card.accent}
@@ -4107,75 +4207,251 @@ function OwnerStaffScreen({ onBack, onLogout, onShowComingSoon }) {
           </View>
 
           <View style={styles.ownerAccordionCard}>
-            <Text style={styles.ownerAccordionTitle}>Staff List</Text>
+            <View style={styles.parentSectionHeaderRow}>
+              <Text style={styles.ownerAccordionTitle}>Staff List</Text>
+              <Text style={styles.parentSectionHeaderSubtle}>
+                {loading ? 'Loading staff hours...' : `${(staffRows || []).length} staff`}
+              </Text>
+            </View>
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
             <View style={styles.ownerStaffList}>
-              {staffMembers.map((member) => (
-                <View key={member.id} style={styles.ownerStaffCard}>
-                  <View style={styles.ownerStudentTopRow}>
-                    <View style={styles.ownerStudentMainBlock}>
-                      <Text style={styles.ownerStudentName}>{member.name}</Text>
-                      <Text style={styles.ownerStudentParent}>Role: {member.role}</Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.ownerStaffBadge,
-                        badgeToneStyles[member.badgeTone] || styles.ownerStaffBadgeGreen,
-                      ]}
-                    >
-                      <Text style={styles.ownerStaffBadgeText}>{member.badge}</Text>
-                    </View>
-                  </View>
+              {(staffRows || []).length ? (
+                (staffRows || []).map((member) => {
+                  const isOpen = openStaffId === member.id;
+                  const pendingEntries = (member.entries || []).filter(
+                    (entry) => entry.review_status === 'pending'
+                  );
+                  const recentEntries = (member.entries || []).slice(0, 5);
+                  const currentStatusTone =
+                    member.currentStatus === 'Clocked In'
+                      ? styles.ownerStaffStatusPillGreen
+                      : member.currentStatus === 'Clocked Out'
+                        ? styles.ownerStaffStatusPillOrange
+                        : styles.ownerStaffStatusPillOrange;
 
-                  <View style={styles.ownerStaffMetaList}>
-                    <View style={styles.ownerStaffMetaRow}>
-                      <Text style={styles.ownerStaffMetaLabel}>Status</Text>
-                      <View
-                        style={[
-                          styles.ownerStaffStatusPill,
-                          member.status === 'Clocked In'
-                            ? styles.ownerStaffStatusPillGreen
-                            : styles.ownerStaffStatusPillOrange,
+                  return (
+                    <View key={member.id} style={styles.ownerStaffCard}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() =>
+                          setOpenStaffId((current) => (current === member.id ? null : member.id))
+                        }
+                        style={({ pressed }) => [
+                          styles.ownerStudentTopRow,
+                          pressed && styles.pressedTile,
                         ]}
                       >
-                        <Text style={styles.ownerStaffStatusPillText}>{member.status}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.ownerStaffMetaRow}>
-                      <Text style={styles.ownerStaffMetaLabel}>Today</Text>
-                      <Text style={styles.ownerStaffMetaValue}>{member.today}</Text>
-                    </View>
-                    <View style={styles.ownerStaffMetaRow}>
-                      <Text style={styles.ownerStaffMetaLabel}>Hours This Week</Text>
-                      <Text style={styles.ownerStaffMetaValue}>{member.hours}</Text>
-                    </View>
-                    <View style={styles.ownerStaffMetaRow}>
-                      <Text style={styles.ownerStaffMetaLabel}>Review Status</Text>
-                      <View
-                        style={[
-                          styles.ownerStaffReviewPill,
-                          member.review === 'Approved'
-                            ? reviewToneStyles.green
-                            : reviewToneStyles.orange,
-                        ]}
-                      >
-                        <Text style={styles.ownerStaffReviewPillText}>{member.review}</Text>
-                      </View>
-                    </View>
-                  </View>
+                        <View style={styles.ownerStudentMainBlock}>
+                          <Text style={styles.ownerStudentName}>{member.displayName}</Text>
+                          <Text style={styles.ownerStudentParent}>Role: {member.role || 'Staff'}</Text>
+                        </View>
+                        <View style={[styles.ownerStaffStatusPill, currentStatusTone]}>
+                          <Text style={styles.ownerStaffStatusPillText}>{member.currentStatus}</Text>
+                        </View>
+                        <Text style={styles.ownerAccordionChevron}>{isOpen ? '⌃' : '⌄'}</Text>
+                      </Pressable>
 
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => onShowComingSoon('View Staff Profile')}
-                    style={({ pressed }) => [
-                      styles.ownerStaffProfileButton,
-                      { backgroundColor: staffAccent },
-                      pressed && styles.pressedButton,
-                    ]}
-                  >
-                    <Text style={styles.ownerStaffProfileButtonText}>View Staff Profile</Text>
-                  </Pressable>
-                </View>
-              ))}
+                      <View style={styles.ownerStaffMetaList}>
+                        <View style={styles.ownerStaffMetaRow}>
+                          <Text style={styles.ownerStaffMetaLabel}>Today Worked</Text>
+                          <Text style={styles.ownerStaffMetaValue}>
+                            {formatDuration(Number(member.todayWorkedMinutes || 0))}
+                          </Text>
+                        </View>
+                        <View style={styles.ownerStaffMetaRow}>
+                          <Text style={styles.ownerStaffMetaLabel}>This Week</Text>
+                          <Text style={styles.ownerStaffMetaValue}>
+                            {formatDuration(Number(member.weekWorkedMinutes || 0))}
+                          </Text>
+                        </View>
+                        <View style={styles.ownerStaffMetaRow}>
+                          <Text style={styles.ownerStaffMetaLabel}>Pending Review</Text>
+                          <Text style={styles.ownerStaffMetaValue}>{pendingEntries.length}</Text>
+                        </View>
+                        <View style={styles.ownerStaffMetaRow}>
+                          <Text style={styles.ownerStaffMetaLabel}>Last Clock In</Text>
+                          <Text style={styles.ownerStaffMetaValue}>
+                            {member.lastClockIn || 'No entries yet'}
+                          </Text>
+                        </View>
+                        <View style={styles.ownerStaffMetaRow}>
+                          <Text style={styles.ownerStaffMetaLabel}>Last Clock Out</Text>
+                          <Text style={styles.ownerStaffMetaValue}>
+                            {member.lastClockOut || 'No entries yet'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.ownerStaffProfileButton}>
+                        <Text style={styles.ownerStaffProfileButtonText}>
+                          {isOpen ? 'Hide Recent Time Entries' : 'View Recent Time Entries'}
+                        </Text>
+                      </View>
+
+                      {isOpen ? (
+                        <View style={[styles.ownerStaffMetaList, { marginTop: 12 }]}>
+                          <Text style={styles.ownerAccordionTitle}>Recent Time Entries</Text>
+                          {recentEntries.length ? (
+                            recentEntries.map((entry) => {
+                              const reviewLabel =
+                                entry.review_status === 'approved'
+                                  ? 'Approved'
+                                  : entry.review_status === 'rejected'
+                                    ? 'Not Approved'
+                                    : 'Pending Review';
+
+                              return (
+                                <View key={entry.id} style={styles.profileCardInner}>
+                                  <View style={styles.ownerStaffMetaRow}>
+                                    <Text style={styles.ownerStaffMetaLabel}>
+                                      {formatDate(entry.clock_in || entry.created_at)}
+                                    </Text>
+                                    <Text style={styles.ownerStaffMetaValue}>
+                                      {formatDuration(Number(entry.total_minutes || 0))}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.ownerStaffMetaRow}>
+                                    <Text style={styles.ownerStaffMetaLabel}>Clock In</Text>
+                                    <Text style={styles.ownerStaffMetaValue}>
+                                      {formatTime(entry.clock_in)}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.ownerStaffMetaRow}>
+                                    <Text style={styles.ownerStaffMetaLabel}>Clock Out</Text>
+                                    <Text style={styles.ownerStaffMetaValue}>
+                                      {entry.clock_out ? formatTime(entry.clock_out) : 'Still clocked in'}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.ownerStaffMetaRow}>
+                                    <Text style={styles.ownerStaffMetaLabel}>Review Status</Text>
+                                    <View
+                                      style={[
+                                        styles.ownerStaffReviewPill,
+                                        entry.review_status === 'approved'
+                                          ? styles.ownerStaffReviewGreen
+                                          : entry.review_status === 'rejected'
+                                            ? styles.ownerStaffReviewOrange
+                                            : styles.ownerStaffReviewBlue,
+                                      ]}
+                                    >
+                                      <Text style={styles.ownerStaffReviewPillText}>{reviewLabel}</Text>
+                                    </View>
+                                  </View>
+
+                                  {entry.review_status === 'approved' && entry.reviewed_at ? (
+                                    <View style={styles.ownerStaffMetaRow}>
+                                      <Text style={styles.ownerStaffMetaLabel}>Approved On</Text>
+                                      <Text style={styles.ownerStaffMetaValue}>
+                                        {formatDateTime(entry.reviewed_at)}
+                                      </Text>
+                                    </View>
+                                  ) : null}
+
+                                  {entry.review_status === 'rejected' && entry.review_note ? (
+                                    <View style={styles.ownerStaffMetaRow}>
+                                      <Text style={styles.ownerStaffMetaLabel}>Reason</Text>
+                                      <Text style={styles.ownerStaffMetaValue}>{entry.review_note}</Text>
+                                    </View>
+                                  ) : null}
+
+                                  {entry.review_status === 'pending' ? (
+                                    <View style={styles.ownerActionButtonStack}>
+                                      <Pressable
+                                        accessibilityRole="button"
+                                        disabled={reviewActionId === entry.id}
+                                        onPress={() => onApproveEntry(entry.id)}
+                                        style={({ pressed }) => [
+                                          styles.ownerStaffProfileButton,
+                                          { backgroundColor: staffAccent },
+                                          pressed && styles.pressedButton,
+                                          reviewActionId === entry.id && styles.disabledButton,
+                                        ]}
+                                      >
+                                        <Text style={styles.ownerStaffProfileButtonText}>
+                                          {reviewActionId === entry.id ? 'Saving...' : 'Approve'}
+                                        </Text>
+                                      </Pressable>
+
+                                      {rejectingEntryId === entry.id ? (
+                                        <View style={styles.profileCardInner}>
+                                          <TextInput
+                                            placeholder="Reason not approved"
+                                            placeholderTextColor={COLORS.muted}
+                                            value={rejectReason}
+                                            onChangeText={setRejectReason}
+                                            style={styles.ownerMessageInput}
+                                            multiline
+                                          />
+                                          <View style={styles.ownerActionButtonStack}>
+                                            <Pressable
+                                              accessibilityRole="button"
+                                              onPress={() => {
+                                                onRejectEntry(entry.id, rejectReason);
+                                                setRejectingEntryId(null);
+                                                setRejectReason('');
+                                              }}
+                                              style={({ pressed }) => [
+                                                styles.ownerStaffProfileButton,
+                                                { backgroundColor: COLORS.warning },
+                                                pressed && styles.pressedButton,
+                                              ]}
+                                            >
+                                              <Text style={styles.ownerStaffProfileButtonText}>
+                                                Reject
+                                              </Text>
+                                            </Pressable>
+                                            <Pressable
+                                              accessibilityRole="button"
+                                              onPress={() => {
+                                                setRejectingEntryId(null);
+                                                setRejectReason('');
+                                              }}
+                                              style={({ pressed }) => [
+                                                styles.ownerStaffProfileButton,
+                                                { backgroundColor: COLORS.muted },
+                                                pressed && styles.pressedButton,
+                                              ]}
+                                            >
+                                              <Text style={styles.ownerStaffProfileButtonText}>
+                                                Cancel
+                                              </Text>
+                                            </Pressable>
+                                          </View>
+                                        </View>
+                                      ) : (
+                                        <Pressable
+                                          accessibilityRole="button"
+                                          onPress={() => setRejectingEntryId(entry.id)}
+                                          style={({ pressed }) => [
+                                            styles.ownerStaffProfileButton,
+                                            { backgroundColor: COLORS.charcoal },
+                                            pressed && styles.pressedButton,
+                                          ]}
+                                        >
+                                          <Text style={styles.ownerStaffProfileButtonText}>
+                                            Reject
+                                          </Text>
+                                        </Pressable>
+                                      )}
+                                    </View>
+                                  ) : null}
+                                </View>
+                              );
+                            })
+                          ) : (
+                            <Text style={styles.parentAttendanceStateText}>No time entries yet.</Text>
+                          )}
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })
+              ) : loading ? (
+                <Text style={styles.parentAttendanceStateText}>Loading staff hours...</Text>
+              ) : (
+                <Text style={styles.parentAttendanceStateText}>No time entries yet.</Text>
+              )}
             </View>
           </View>
 
@@ -4196,7 +4472,7 @@ function OwnerStaffScreen({ onBack, onLogout, onShowComingSoon }) {
                     <View style={[styles.actionAccent, { backgroundColor: staffAccent }]} />
                     <View style={styles.actionCardBody}>
                       <Text style={styles.actionTitle}>{label}</Text>
-                      <Text style={styles.actionNote}>Coming Soon</Text>
+                      <Text style={styles.actionNote}> </Text>
                     </View>
                     <Text style={styles.chevron}>›</Text>
                   </Pressable>
@@ -4229,8 +4505,20 @@ function StaffClockInOutScreen({
   onToggleStaffStatus,
   lastClockInTime,
   lastClockOutTime,
+  staffTimeEntries,
+  staffTimeEntriesError,
+  currentStaffDisplayName,
 }) {
-  const isCheckedOut = staffStatus === 'Checked Out';
+  const isCheckedOut = staffStatus !== 'Clocked In';
+  const todayWorkedMinutes = getStaffTodayMinutes(staffTimeEntries);
+  const currentShiftLabel = getStaffCurrentShiftLabel(staffTimeEntries);
+  const latestEntry = [...(staffTimeEntries || [])].sort(
+    (a, b) => new Date(b?.created_at || b?.clock_in || 0) - new Date(a?.created_at || a?.clock_in || 0)
+  )[0];
+  const currentShiftDetail =
+    latestEntry?.status === 'clocked_in'
+      ? `Clocked in at ${formatTime(latestEntry.clock_in)}`
+      : currentShiftLabel;
 
   return (
     <View style={styles.parentHomePage}>
@@ -4254,13 +4542,13 @@ function StaffClockInOutScreen({
               <Text style={styles.childProfileBackButtonText}>Back</Text>
             </Pressable>
 
-            <Text style={styles.childProfileHeaderLabel}>Clock In / Out</Text>
+            <Text style={styles.childProfileHeaderLabel}>Staff Time Clock</Text>
           </View>
 
           <View style={styles.staffHeroMain}>
             <View style={styles.staffHeroTextBlock}>
               <Text style={styles.parentHeroKicker}>Advanced Education</Text>
-              <Text style={styles.parentHeroGreeting}>Staff: Ms. Sarah</Text>
+              <Text style={styles.parentHeroGreeting}>{currentStaffDisplayName}</Text>
               <Text style={styles.staffHeroSubheading}>Time clock</Text>
               <View style={styles.staffClockStatusPill}>
                 <Text style={styles.staffClockStatusPillText}>{staffStatus}</Text>
@@ -4274,6 +4562,7 @@ function StaffClockInOutScreen({
         </View>
 
         <View style={styles.parentHomeContent}>
+          {staffTimeEntriesError ? <Text style={styles.errorText}>{staffTimeEntriesError}</Text> : null}
           <View style={styles.profileCard}>
             <View style={styles.parentSectionHeaderRow}>
               <Text style={styles.parentSectionHeaderTitle}>Current Status</Text>
@@ -4288,27 +4577,14 @@ function StaffClockInOutScreen({
                 <Text style={styles.staffClockDetailValue}>{staffStatus}</Text>
               </View>
               <View style={styles.staffClockDetailRow}>
-                <Text style={styles.staffClockDetailLabel}>Today&apos;s shift</Text>
-                <Text style={styles.staffClockDetailValue}>{STAFF_MEMBER.shift}</Text>
+                <Text style={styles.staffClockDetailLabel}>Current shift</Text>
+                <Text style={styles.staffClockDetailValue}>{currentShiftDetail}</Text>
               </View>
               <View style={styles.staffClockDetailRow}>
-                <Text style={styles.staffClockDetailLabel}>Current mock time</Text>
-                <Text style={styles.staffClockDetailValue}>{STAFF_CLOCK_CURRENT_TIME}</Text>
+                <Text style={styles.staffClockDetailLabel}>Today worked</Text>
+                <Text style={styles.staffClockDetailValue}>{formatDuration(todayWorkedMinutes)}</Text>
               </View>
             </View>
-          </View>
-
-          <View style={styles.profileCard}>
-            <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Location Check</Text>
-              <View style={styles.staffClockLocationPill}>
-                <Text style={styles.staffClockLocationPillText}>{STAFF_CLOCK_LOCATION_STATUS}</Text>
-              </View>
-            </View>
-
-            <Text style={styles.staffClockLocationNote}>
-              Clock in is only available at Advanced Education.
-            </Text>
           </View>
 
           <View style={styles.profileCard}>
@@ -4345,20 +4621,6 @@ function StaffClockInOutScreen({
                   {lastClockOutTime || 'Not logged yet'}
                 </Text>
               </View>
-            </View>
-          </View>
-
-          <View style={styles.profileCard}>
-            <View style={styles.parentSectionHeaderRow}>
-              <Text style={styles.parentSectionHeaderTitle}>Owner Review</Text>
-              <Text style={styles.parentSectionHeaderSubtle}>Pending</Text>
-            </View>
-
-            <Text style={styles.billingNote}>
-              Your hours are tracked for owner review.
-            </Text>
-            <View style={styles.staffClockOwnerPill}>
-              <Text style={styles.staffClockOwnerPillText}>Approval Status: Pending</Text>
             </View>
           </View>
 
@@ -4508,7 +4770,7 @@ function StaffBeforeAfterAttendanceScreen({
           <View style={styles.staffHeroMain}>
             <View style={styles.staffHeroTextBlock}>
               <Text style={styles.parentHeroKicker}>Advanced Education</Text>
-              <Text style={styles.parentHeroGreeting}>Staff: Ms. Sarah</Text>
+              <Text style={styles.parentHeroGreeting}>Current Staff</Text>
               <Text style={styles.staffHeroSubheading}>School-year attendance</Text>
             </View>
 
@@ -4771,7 +5033,7 @@ function StaffSummerCampGroupCheckInScreen({
           <View style={styles.staffHeroMain}>
             <View style={styles.staffHeroTextBlock}>
               <Text style={styles.parentHeroKicker}>Advanced Education</Text>
-              <Text style={styles.parentHeroGreeting}>Staff: Ms. Sarah</Text>
+              <Text style={styles.parentHeroGreeting}>Current Staff</Text>
               <Text style={styles.staffHeroSubheading}>Summer camp workflow</Text>
             </View>
 
@@ -8030,80 +8292,89 @@ function getCampGroupCanonicalName(value) {
   return '';
 }
 
-const STAFF_MEMBER = {
-  name: 'Ms. Sarah',
-  status: 'Checked Out',
-  shift: '7:30 AM - 4:00 PM',
+const getStaffDisplayName = (profile) =>
+  [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim() ||
+  profile?.email ||
+  'Staff Member';
+
+const getDateKey = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().split('T')[0];
 };
 
-const STAFF_WORKSPACE_CARDS = [
-  {
-    accent: 'green',
-    title: 'Clock In / Out',
-    value: STAFF_MEMBER.status,
-    note: `${STAFF_MEMBER.shift} · Location required for clock in`,
-  },
-  {
-    accent: 'orange',
-    title: 'Before & After Care Attendance',
-    value: 'School-year workflow',
-    note: 'Check-in, bus, and pickup management',
-  },
-  {
-    accent: 'blue',
-    title: 'Summer Camp Group Check-In',
-    value: 'Blue Group',
-    note: 'Group check-in and headcount confirmation',
-  },
-  {
-    accent: 'purple',
-    title: 'Daily Notes',
-    value: '3 notes today',
-    note: 'Add notes for parents',
-  },
-  {
-    accent: 'blue',
-    title: 'Messages',
-    value: 'View updates',
-    note: 'View staff updates and center announcements',
-  },
-  {
-    accent: 'blue',
-    title: 'My Hours',
-    value: '28.5 hours this week',
-    note: 'Pending owner review',
-  },
-];
+const getWeekKey = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const day = date.getDay();
+  const diff = (day + 6) % 7;
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - diff);
+  return start.toISOString().split('T')[0];
+};
 
-const STAFF_HOURS_THIS_WEEK = [
-  { day: 'Monday', hours: '8.0 hrs' },
-  { day: 'Tuesday', hours: '8.5 hrs' },
-  { day: 'Wednesday', hours: '7.5 hrs' },
-  { day: 'Thursday', hours: '8.0 hrs' },
-  { day: 'Friday', hours: '0.0 hrs' },
-];
+const getEntryTimestamp = (entry) =>
+  entry?.clock_in || entry?.clock_out || entry?.created_at || null;
 
-const STAFF_HOURS_APPROVED_WEEKS = [
-  {
-    title: 'Last Week',
-    total: '38.5',
-    status: 'Approved',
-    date: 'May 24',
-  },
-  {
-    title: 'Previous Week',
-    total: '36.0',
-    status: 'Approved',
-    date: 'May 17',
-  },
-];
+const getStaffEntryDateKey = (entry) => {
+  const timestamp = getEntryTimestamp(entry);
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().split('T')[0];
+};
 
-const STAFF_HOURS_CLOCK_ACTIVITY = [
-  { label: 'Clock In', time: '7:30 AM' },
-  { label: 'Lunch Out', time: '12:00 PM' },
-  { label: 'Lunch In', time: '12:30 PM' },
-  { label: 'Clock Out', time: '4:00 PM' },
-];
+const getStaffEntryWeekKey = (entry) => {
+  const timestamp = getEntryTimestamp(entry);
+  if (!timestamp) return '';
+  return getWeekKey(timestamp);
+};
+
+const getStaffCurrentStatusLabel = (entries = []) => {
+  const latest = [...entries].sort(
+    (a, b) => new Date(b?.created_at || b?.clock_in || 0) - new Date(a?.created_at || a?.clock_in || 0)
+  )[0];
+
+  if (!latest) return 'No Entries';
+  return latest.status === 'clocked_in' ? 'Clocked In' : 'Clocked Out';
+};
+
+const getStaffTodayMinutes = (entries = []) => {
+  const todayKey = getDateKey(new Date());
+  return entries.reduce((total, entry) => {
+    if (getStaffEntryDateKey(entry) !== todayKey) return total;
+    return total + Number(entry?.total_minutes || 0);
+  }, 0);
+};
+
+const getStaffWeekMinutes = (entries = []) => {
+  const weekKey = getWeekKey(new Date());
+  return entries.reduce((total, entry) => {
+    if (getStaffEntryWeekKey(entry) !== weekKey) return total;
+    return total + Number(entry?.total_minutes || 0);
+  }, 0);
+};
+
+const getStaffLastClockIn = (entries = []) =>
+  [...entries].find((entry) => entry?.clock_in)?.clock_in || '';
+
+const getStaffLastClockOut = (entries = []) =>
+  [...entries].find((entry) => entry?.clock_out)?.clock_out || '';
+
+const getStaffCurrentShiftLabel = (entries = []) => {
+  const latest = [...entries].sort(
+    (a, b) => new Date(b?.created_at || b?.clock_in || 0) - new Date(a?.created_at || a?.clock_in || 0)
+  )[0];
+
+  if (!latest || latest.status !== 'clocked_in') {
+    return 'Not clocked in';
+  }
+
+  return `Clocked in at ${formatTime(latest.clock_in)}`;
+};
 
 const STAFF_DAILY_NOTE_CHIPS = [
   'Great day',
@@ -8115,9 +8386,6 @@ const STAFF_DAILY_NOTE_CHIPS = [
   'Rested quietly',
   'Played well with group',
 ];
-
-const STAFF_CLOCK_CURRENT_TIME = '7:24 AM';
-const STAFF_CLOCK_LOCATION_STATUS = 'At Work Location';
 
 const STAFF_CAMP_GROUP_NAMES = [
   'Yellow Group',
@@ -8598,9 +8866,9 @@ function ActionButtonCard({
       <View style={[styles.actionAccent, accentStyles[accent] || styles.actionAccentBlue]} />
       <View style={styles.actionCardBody}>
         <Text style={styles.actionTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.actionSubtitle}>{subtitle}</Text> : null}
+        {subtitle && subtitle !== 'Coming Soon' ? <Text style={styles.actionSubtitle}>{subtitle}</Text> : null}
         {value ? <Text style={styles.actionValue}>{value}</Text> : null}
-        {note ? <Text style={styles.actionNote}>{note}</Text> : null}
+        {note && note !== 'Coming Soon' ? <Text style={styles.actionNote}>{note}</Text> : null}
       </View>
       <Text style={styles.chevron}>›</Text>
     </Pressable>
@@ -8617,7 +8885,9 @@ function OwnerNavCard({ accentColor, title, subtitle, onPress }) {
       <View style={styles.ownerNavContent}>
         <View style={[styles.ownerNavAccent, { backgroundColor: accentColor }]} />
         <Text style={styles.ownerNavTitle}>{title}</Text>
-        <Text style={styles.ownerNavSubtitle}>{subtitle}</Text>
+        {subtitle && subtitle !== 'Coming Soon' ? (
+          <Text style={styles.ownerNavSubtitle}>{subtitle}</Text>
+        ) : null}
       </View>
       <Text style={styles.ownerNavChevron}>›</Text>
     </Pressable>
@@ -9902,7 +10172,10 @@ export default function App() {
   const [activationError, setActivationError] = useState('');
   const [pendingInvite, setPendingInvite] = useState(null);
   const [activationStep, setActivationStep] = useState('verify');
-  const [staffStatus, setStaffStatus] = useState(STAFF_MEMBER.status);
+  const [staffStatus, setStaffStatus] = useState('Loading...');
+  const [staffTimeEntries, setStaffTimeEntries] = useState([]);
+  const [staffTimeEntriesLoading, setStaffTimeEntriesLoading] = useState(true);
+  const [staffTimeEntriesError, setStaffTimeEntriesError] = useState('');
   const [lastClockInTime, setLastClockInTime] = useState('');
   const [lastClockOutTime, setLastClockOutTime] = useState('');
   const [staffBeforeAfterChildren, setStaffBeforeAfterChildren] = useState(() =>
@@ -9961,6 +10234,10 @@ export default function App() {
   const [ownerDailyNotesPendingLoading, setOwnerDailyNotesPendingLoading] = useState(true);
   const [ownerDailyNotesPendingError, setOwnerDailyNotesPendingError] = useState('');
   const [ownerDailyNotesReviewActionId, setOwnerDailyNotesReviewActionId] = useState('');
+  const [ownerStaffRows, setOwnerStaffRows] = useState([]);
+  const [ownerStaffLoading, setOwnerStaffLoading] = useState(true);
+  const [ownerStaffError, setOwnerStaffError] = useState('');
+  const [ownerStaffReviewActionId, setOwnerStaffReviewActionId] = useState('');
   const [ownerBeforeAfterCounts, setOwnerBeforeAfterCounts] = useState({
     droppedOff: 0,
     onBus: 0,
@@ -11598,6 +11875,30 @@ export default function App() {
     loadRecipientMessages,
   ]);
 
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (
+      screen === 'staff-home' ||
+      screen === 'staff-clock-in-out' ||
+      screen === 'staff-hours'
+    ) {
+      loadCurrentStaffTimeEntries();
+    }
+  }, [authLoading, loadCurrentStaffTimeEntries, screen]);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (screen === 'owner-staff') {
+      loadOwnerStaffData();
+    }
+  }, [authLoading, loadOwnerStaffData, screen]);
+
   async function handleSupabaseLogin(loginEmail, password) {
     const { data, error } = await supabase.auth.signInWithPassword({
       email: loginEmail,
@@ -11694,7 +11995,10 @@ export default function App() {
     setOwnerDailyNotesPendingError('');
     setOwnerDailyNotesPending([]);
     setOwnerDailyNotesReviewActionId('');
-    setStaffStatus(STAFF_MEMBER.status);
+    setStaffStatus('Loading...');
+    setStaffTimeEntries([]);
+    setStaffTimeEntriesLoading(true);
+    setStaffTimeEntriesError('');
     setLastClockInTime('');
     setLastClockOutTime('');
     setStaffBeforeAfterChildren(createStaffBeforeAfterChildren());
@@ -11716,6 +12020,10 @@ export default function App() {
     setStaffSummerCampOwnerStatus({});
     setOwnerSummerCampSummary(OWNER_SUMMER_CAMP_INITIAL_SUMMARY);
     setStaffDailyNotesSavedEntries([]);
+    setOwnerStaffRows([]);
+    setOwnerStaffLoading(true);
+    setOwnerStaffError('');
+    setOwnerStaffReviewActionId('');
   };
 
   const openActivateAccountScreen = () => {
@@ -11857,16 +12165,254 @@ export default function App() {
     setPendingInvite(null);
   };
 
-  const toggleStaffStatus = () => {
-    if (staffStatus === 'Checked Out') {
-      setStaffStatus('Checked In');
-      setLastClockInTime(STAFF_CLOCK_CURRENT_TIME);
+  const loadCurrentStaffTimeEntries = useCallback(async () => {
+    const currentUserId = session?.user?.id;
+
+    if (!currentUserId) {
+      setStaffTimeEntries([]);
+      setStaffTimeEntriesLoading(false);
+      setStaffTimeEntriesError('');
+      setStaffStatus('No Entries');
+      setLastClockInTime('');
+      setLastClockOutTime('');
       return;
     }
 
-    setStaffStatus('Checked Out');
-    setLastClockOutTime(STAFF_CLOCK_CURRENT_TIME);
+    setStaffTimeEntriesLoading(true);
+    setStaffTimeEntriesError('');
+
+    try {
+      const { data, error } = await supabase
+        .from('staff_time_entries')
+        .select('*')
+        .eq('staff_profile_id', currentUserId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      const entries = Array.isArray(data) ? data : [];
+      setStaffTimeEntries(entries);
+
+      setStaffStatus(getStaffCurrentStatusLabel(entries));
+      setLastClockInTime(getStaffLastClockIn(entries) ? formatTime(getStaffLastClockIn(entries)) : '');
+      setLastClockOutTime(
+        getStaffLastClockOut(entries) ? formatTime(getStaffLastClockOut(entries)) : ''
+      );
+    } catch (loadError) {
+      console.log('Staff time load error', loadError);
+      setStaffTimeEntriesError('Could not load staff time entries.');
+    } finally {
+      setStaffTimeEntriesLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const toggleStaffStatus = async () => {
+    const currentUserId = session?.user?.id;
+    if (!currentUserId) {
+      return;
+    }
+
+    const { data: latestEntries, error: latestError } = await supabase
+      .from('staff_time_entries')
+      .select('*')
+      .eq('staff_profile_id', currentUserId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (latestError) {
+      console.log('Staff clock latest load error', latestError);
+      setStaffTimeEntriesError('Could not update your time clock.');
+      return;
+    }
+
+    const latest = Array.isArray(latestEntries) ? latestEntries[0] : null;
+    const now = new Date().toISOString();
+
+    if (latest?.status === 'clocked_in') {
+      const { error: updateError } = await supabase
+        .from('staff_time_entries')
+        .update({
+          clock_out: now,
+          total_minutes: Math.max(
+            0,
+            Math.round((new Date(now).getTime() - new Date(latest.clock_in).getTime()) / 60000)
+          ),
+          status: 'clocked_out',
+        })
+        .eq('id', latest.id);
+
+      if (updateError) {
+        console.log('Staff clock out error', updateError);
+        setStaffTimeEntriesError('Could not clock out. Please try again.');
+        return;
+      }
+
+      await loadCurrentStaffTimeEntries();
+      return;
+    }
+
+    const { error: insertError } = await supabase.from('staff_time_entries').insert({
+      staff_profile_id: currentUserId,
+      clock_in: now,
+      status: 'clocked_in',
+      review_status: 'pending',
+    });
+
+    if (insertError) {
+      console.log('Staff clock in error', insertError);
+      setStaffTimeEntriesError('Could not clock in. Please try again.');
+      return;
+    }
+
+    await loadCurrentStaffTimeEntries();
   };
+
+  const loadOwnerStaffData = useCallback(async () => {
+    setOwnerStaffLoading(true);
+    setOwnerStaffError('');
+
+    try {
+      const { data: staffProfiles, error: staffError } = await supabase
+        .from('profiles')
+        .select('id, email, first_name, last_name, role')
+        .eq('role', 'staff');
+
+      if (staffError) {
+        throw staffError;
+      }
+
+      const profiles = Array.isArray(staffProfiles) ? staffProfiles : [];
+      const staffIds = profiles.map((profile) => profile.id).filter(Boolean);
+
+      let staffEntries = [];
+      if (staffIds.length) {
+        const { data: entriesData, error: entriesError } = await supabase
+          .from('staff_time_entries')
+          .select('*')
+          .in('staff_profile_id', staffIds)
+          .order('created_at', { ascending: false });
+
+        if (entriesError) {
+          throw entriesError;
+        }
+
+        staffEntries = Array.isArray(entriesData) ? entriesData : [];
+      }
+
+      const todayKey = getDateKey(new Date());
+      const weekKey = getWeekKey(new Date());
+
+      const rows = profiles.map((profile) => {
+        const profileEntries = staffEntries.filter((entry) => entry.staff_profile_id === profile.id);
+        const latestEntry = profileEntries[0] || null;
+        const latestClockIn = profileEntries.find((entry) => entry?.clock_in)?.clock_in || '';
+        const latestClockOut = profileEntries.find((entry) => entry?.clock_out)?.clock_out || '';
+        const todayWorkedMinutes = profileEntries.reduce(
+          (total, entry) => (getStaffEntryDateKey(entry) === todayKey ? total + Number(entry.total_minutes || 0) : total),
+          0
+        );
+        const weekWorkedMinutes = profileEntries.reduce(
+          (total, entry) => (getStaffEntryWeekKey(entry) === weekKey ? total + Number(entry.total_minutes || 0) : total),
+          0
+        );
+
+        return {
+          ...profile,
+          displayName: getStaffDisplayName(profile),
+          entries: profileEntries,
+          latestEntry,
+          currentStatus: latestEntry
+            ? latestEntry.status === 'clocked_in'
+              ? 'Clocked In'
+              : 'Clocked Out'
+            : 'No Entries',
+          todayWorkedMinutes,
+          weekWorkedMinutes,
+          lastClockIn: latestClockIn ? formatTime(latestClockIn) : '',
+          lastClockOut: latestClockOut ? formatTime(latestClockOut) : '',
+          pendingCount: profileEntries.filter((entry) => entry.review_status === 'pending').length,
+        };
+      });
+
+      setOwnerStaffRows(rows);
+    } catch (loadError) {
+      console.log('Owner staff load error', loadError);
+      setOwnerStaffError('Could not load staff hours.');
+      setOwnerStaffRows([]);
+    } finally {
+      setOwnerStaffLoading(false);
+    }
+  }, []);
+
+  const approveStaffTimeEntry = useCallback(
+    async (entryId) => {
+      const now = new Date().toISOString();
+      setOwnerStaffReviewActionId(entryId);
+
+      try {
+        const { error } = await supabase
+          .from('staff_time_entries')
+          .update({
+            review_status: 'approved',
+            reviewed_by: session?.user?.id || null,
+            reviewed_at: now,
+            review_note: null,
+          })
+          .eq('id', entryId);
+
+        if (error) {
+          throw error;
+        }
+
+        await loadOwnerStaffData();
+      } catch (approveError) {
+        console.log('Owner staff approve error', approveError);
+        setOwnerStaffError('Could not approve hours. Please try again.');
+      } finally {
+        setOwnerStaffReviewActionId('');
+      }
+    },
+    [loadOwnerStaffData, session?.user?.id]
+  );
+
+  const rejectStaffTimeEntry = useCallback(
+    async (entryId, reason) => {
+      const trimmedReason = reason.trim();
+      if (!trimmedReason) {
+        setOwnerStaffError('Please provide a reason.');
+        return;
+      }
+
+      const now = new Date().toISOString();
+      setOwnerStaffReviewActionId(entryId);
+
+      try {
+        const { error } = await supabase
+          .from('staff_time_entries')
+          .update({
+            review_status: 'rejected',
+            reviewed_by: session?.user?.id || null,
+            reviewed_at: now,
+            review_note: trimmedReason,
+          })
+          .eq('id', entryId);
+
+        if (error) {
+          throw error;
+        }
+
+        await loadOwnerStaffData();
+      } catch (rejectError) {
+        console.log('Owner staff reject error', rejectError);
+        setOwnerStaffError('Could not reject hours. Please try again.');
+      } finally {
+        setOwnerStaffReviewActionId('');
+      }
+    },
+    [loadOwnerStaffData, session?.user?.id]
+  );
 
   const openBeforeAfterPickup = (childId) => {
     const child = staffBeforeAfterChildren.find((entry) => entry.id === childId);
@@ -13073,11 +13619,10 @@ export default function App() {
           onOpenNotes={() => setScreen('staff-daily-notes')}
           onOpenHours={() => setScreen('staff-hours')}
           staffStatus={staffStatus}
-          messages={recipientMessages}
-          loading={recipientMessagesLoading}
-          error={recipientMessagesError}
-          expandedMessageId={recipientMessagesExpandedId}
-          onToggleMessage={handleToggleRecipientMessage}
+          staffTimeEntries={staffTimeEntries}
+          staffTimeEntriesLoading={staffTimeEntriesLoading}
+          staffTimeEntriesError={staffTimeEntriesError}
+          currentStaffDisplayName={session?.user?.email || 'Staff Member'}
         />
       ) : screen === 'staff-messages' ? (
         <NotificationsScreen
@@ -13101,6 +13646,9 @@ export default function App() {
           onToggleStaffStatus={toggleStaffStatus}
           lastClockInTime={lastClockInTime}
           lastClockOutTime={lastClockOutTime}
+          staffTimeEntries={staffTimeEntries}
+          staffTimeEntriesError={staffTimeEntriesError}
+          currentStaffDisplayName={session?.user?.email || 'Staff Member'}
         />
       ) : screen === 'staff-before-after-attendance' ? (
         <StaffBeforeAfterAttendanceScreen
@@ -13166,6 +13714,9 @@ export default function App() {
         <StaffMyHoursScreen
           onBack={() => setScreen('staff-home')}
           onLogout={handleLogout}
+          staffTimeEntries={staffTimeEntries}
+          loading={staffTimeEntriesLoading}
+          error={staffTimeEntriesError}
         />
       ) : screen === 'staff-daily-notes' ? (
         <StaffDailyNotesScreen
@@ -13173,6 +13724,7 @@ export default function App() {
           onLogout={handleLogout}
           savedNotes={staffDailyNotesSavedEntries}
           onSaveNote={saveStaffDailyNote}
+          currentStaffDisplayName={session?.user?.email || 'Staff Member'}
         />
       ) : screen === 'owner-students' ? (
         <OwnerStudentsScreen
@@ -13236,6 +13788,12 @@ export default function App() {
           onBack={() => setScreen('owner-home')}
           onLogout={handleLogout}
           onShowComingSoon={showComingSoon}
+          staffRows={ownerStaffRows}
+          loading={ownerStaffLoading}
+          error={ownerStaffError}
+          reviewActionId={ownerStaffReviewActionId}
+          onApproveEntry={approveStaffTimeEntry}
+          onRejectEntry={rejectStaffTimeEntry}
         />
       ) : screen === 'owner-summer-camp-check-in' ? (
         <OwnerSummerCampCheckInScreen
