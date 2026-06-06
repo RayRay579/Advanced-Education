@@ -227,6 +227,10 @@ function getChildDisplayName(child) {
   return [child.first_name, child.last_name].filter(Boolean).join(' ').trim() || 'Child not set';
 }
 
+function getEnrollmentLabel(enrolled) {
+  return enrolled ? 'Yes' : 'No';
+}
+
 function formatAudienceLabel(audienceType) {
   if (audienceType === 'all_parents') {
     return 'All Parents';
@@ -2891,7 +2895,9 @@ function StaffDailyNotesScreen({ onBack, onLogout, savedNotes, onSaveNote }) {
 
       const { data, error } = await supabase
         .from('children')
-        .select('id, first_name, last_name, room, status, profile_accent_color')
+      .select(
+        'id, first_name, last_name, room, summer_camp_enrolled, before_after_care_enrolled, status, profile_accent_color'
+      )
         .eq('status', 'active');
 
       if (!isMounted) {
@@ -3483,6 +3489,9 @@ function OwnerDashboardScreen({
   ownerBeforeAfterCounts,
   ownerBeforeAfterCountsLoading,
   ownerBeforeAfterCountsError,
+  ownerSummerCampChildren,
+  ownerDashboardStats,
+  ownerDashboardActivityFeed,
 }) {
   const [openSection, setOpenSection] = useState(null);
 
@@ -3491,7 +3500,7 @@ function OwnerDashboardScreen({
       accent: 'blue',
       badge: 'S',
       title: 'Students Present',
-      value: '42',
+      value: String(ownerDashboardStats.studentsPresent),
       note: 'On campus now',
       fill: 'Live',
     },
@@ -3499,7 +3508,7 @@ function OwnerDashboardScreen({
       accent: 'green',
       badge: 'C',
       title: 'Checked Out',
-      value: '15',
+      value: String(ownerDashboardStats.checkedOut),
       note: 'Left for the day',
       fill: 'Today',
     },
@@ -3507,7 +3516,7 @@ function OwnerDashboardScreen({
       accent: 'orange',
       badge: 'P',
       title: 'Pending Pickups',
-      value: '3',
+      value: String(ownerDashboardStats.pendingPickups),
       note: 'Awaiting release',
       fill: 'Watch',
     },
@@ -3515,7 +3524,7 @@ function OwnerDashboardScreen({
       accent: 'purple',
       badge: 'T',
       title: 'Staff Clocked In',
-      value: '7',
+      value: String(ownerDashboardStats.staffClockedIn),
       note: 'On shift now',
       fill: 'Shift',
     },
@@ -3596,12 +3605,21 @@ function OwnerDashboardScreen({
     };
   });
 
+  const totalCampers = Array.isArray(ownerSummerCampChildren) ? ownerSummerCampChildren.length : 0;
+  const checkedInCampers = Array.isArray(ownerSummerCampChildren)
+    ? ownerSummerCampChildren.filter((child) => child.checkInStatus === 'Checked In').length
+    : 0;
+  const pendingCampers = Math.max(totalCampers - checkedInCampers, 0);
+  const discrepancyCampGroups = campCards.filter((card) => card.status === 'Discrepancy').length;
+  const showCampCommandStats =
+    totalCampers > 0 || checkedInCampers > 0 || pendingCampers > 0 || discrepancyCampGroups > 0;
+
   const staffNotesCards = [
     {
       accent: 'green',
       badge: 'N',
       title: 'Daily Notes Submitted',
-      value: '15',
+      value: String(ownerDashboardStats.dailyNotesSubmitted),
       note: 'Ready for parent sync',
       fill: 'Today',
     },
@@ -3609,7 +3627,7 @@ function OwnerDashboardScreen({
       accent: 'orange',
       badge: 'R',
       title: 'Pending Owner Review',
-      value: '4',
+      value: String(ownerPendingDailyNotesCount),
       note: 'Needs approval',
       fill: 'Queue',
     },
@@ -3617,7 +3635,7 @@ function OwnerDashboardScreen({
       accent: 'purple',
       badge: 'H',
       title: 'Staff Hours Pending Review',
-      value: '3',
+      value: String(ownerDashboardStats.staffHoursPending),
       note: 'Check timecards',
       fill: 'Hours',
     },
@@ -3625,37 +3643,9 @@ function OwnerDashboardScreen({
       accent: 'blue',
       badge: 'M',
       title: 'Unread Parent Messages',
-      value: '4',
+      value: String(ownerDashboardStats.unreadMessages),
       note: 'New replies waiting',
       fill: 'Inbox',
-    },
-  ];
-
-  const activityFeed = [
-    {
-      time: '9:15 AM',
-      text: 'Blue Group headcount submitted by Ms. Sarah',
-      color: COLORS.blue,
-    },
-    {
-      time: '8:12 AM',
-      text: 'Mia Carter checked in for Before & After Care',
-      color: COLORS.success,
-    },
-    {
-      time: '7:30 AM',
-      text: 'Ms. Sarah clocked in',
-      color: COLORS.warning,
-    },
-    {
-      time: '2:45 PM',
-      text: 'Daily note added for Emma Davis',
-      color: '#7C4DFF',
-    },
-    {
-      time: '4:35 PM',
-      text: 'Pickup window opened for Mia Carter',
-      color: COLORS.danger,
     },
   ];
 
@@ -3664,6 +3654,61 @@ function OwnerDashboardScreen({
     : ownerPendingDailyNotesCount > 0
       ? `${ownerPendingDailyNotesCount} pending note${ownerPendingDailyNotesCount === 1 ? '' : 's'}`
       : 'No pending notes';
+
+  const quickActionDescriptions = {
+    Students: 'Manage enrolled children',
+    Staff: 'Manage employees and hours',
+    Parents: 'Manage parent accounts',
+    Billing: 'Review balances and invoices',
+    Messages: 'Center-wide communication',
+    'Camp Events': 'Manage camp schedules',
+    'Invite Codes': 'Create parent and staff access',
+    Reports: 'Attendance and program reports',
+  };
+
+  const handleQuickActionPress = (moduleName) => {
+    if (moduleName === 'Students') {
+      onOpenStudents();
+      return;
+    }
+
+    if (moduleName === 'Staff') {
+      onOpenStaff();
+      return;
+    }
+
+    if (moduleName === 'Parents') {
+      onOpenParents();
+      return;
+    }
+
+    if (moduleName === 'Messages') {
+      onOpenMessages();
+      return;
+    }
+
+    if (moduleName === 'Billing') {
+      onOpenBilling();
+      return;
+    }
+
+    if (moduleName === 'Camp Events') {
+      onOpenCampEvents();
+      return;
+    }
+
+    if (moduleName === 'Invite Codes') {
+      onOpenInviteCodes();
+      return;
+    }
+
+    if (moduleName === 'Reports') {
+      onOpenReports();
+      return;
+    }
+
+    onShowComingSoon(moduleName);
+  };
 
   const ownerSections = [
     {
@@ -3817,13 +3862,17 @@ function OwnerDashboardScreen({
       summary: 'Latest center events by time',
       details: (
         <View style={styles.ownerSectionList}>
-          {activityFeed.map((item) => (
-            <View key={`${item.time}-${item.text}`} style={styles.ownerActivityRow}>
-              <Text style={styles.ownerActivityTime}>{item.time}</Text>
-              <View style={[styles.ownerActivityDot, { backgroundColor: item.color }]} />
-              <Text style={styles.ownerActivityText}>{item.text}</Text>
-            </View>
-          ))}
+          {ownerDashboardActivityFeed.length ? (
+            ownerDashboardActivityFeed.map((item) => (
+              <View key={item.id} style={styles.ownerActivityRow}>
+                <Text style={styles.ownerActivityTime}>{item.time}</Text>
+                <View style={[styles.ownerActivityDot, { backgroundColor: item.color }]} />
+                <Text style={styles.ownerActivityText}>{item.text}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.ownerStudentsStateText}>No recent activity yet.</Text>
+          )}
         </View>
       ),
     },
@@ -3898,6 +3947,10 @@ function OwnerDashboardScreen({
     },
   ];
 
+  const visibleOwnerSections = ownerSections.filter(
+    (section) => section.key !== 'owner-camp-check-in' && section.key !== 'quick-actions'
+  );
+
   return (
     <View style={styles.page}>
       <View style={styles.hero}>
@@ -3918,7 +3971,59 @@ function OwnerDashboardScreen({
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.contentStack}>
-          {ownerSections.map((section) => {
+          <View style={styles.ownerCommandCenterCard}>
+            <View style={styles.ownerCommandCenterHeader}>
+              <Text style={styles.ownerCommandCenterTitle}>Summer Camp Command Center</Text>
+              <Text style={styles.ownerCommandCenterSubtitle}>Check campers in and out</Text>
+            </View>
+
+            {showCampCommandStats ? (
+              <View style={styles.ownerCommandCenterStatsRow}>
+                {[
+                  { label: 'Checked In', value: checkedInCampers },
+                  { label: 'Pending', value: pendingCampers },
+                  { label: 'Discrepancies', value: discrepancyCampGroups },
+                ].map((item) => (
+                  <View key={item.label} style={styles.ownerCommandCenterStatCard}>
+                    <Text style={styles.ownerCommandCenterStatLabel}>{item.label}</Text>
+                    <Text style={styles.ownerCommandCenterStatValue}>{item.value}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={onOpenSummerCampCheckIn}
+              style={({ pressed }) => [
+                styles.ownerCommandCenterButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.ownerCommandCenterButtonText}>Open Summer Camp Check-In</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.ownerAccordionCard}>
+            <View style={styles.ownerAccordionHeadingBlock}>
+              <Text style={styles.ownerAccordionTitle}>Owner Quick Actions</Text>
+              <Text style={styles.ownerAccordionSummary}>8 mission-control shortcuts</Text>
+            </View>
+
+            <View style={[styles.ownerQuickActionsList, styles.ownerQuickActionsVisibleList]}>
+              {OWNER_MODULES.map((moduleName) => (
+                <OwnerNavCard
+                  key={moduleName}
+                  accentColor={OWNER_MODULE_COLORS[moduleName]}
+                  title={moduleName}
+                  subtitle={quickActionDescriptions[moduleName]}
+                  onPress={() => handleQuickActionPress(moduleName)}
+                />
+              ))}
+            </View>
+          </View>
+
+          {visibleOwnerSections.map((section) => {
             const isOpen = openSection === section.key;
 
             return (
@@ -4135,23 +4240,19 @@ function OwnerStudentsScreen({
   const [linkParentError, setLinkParentError] = useState('');
   const [isLinkingParent, setIsLinkingParent] = useState(false);
   const [manageOpenStudentId, setManageOpenStudentId] = useState(null);
+  const [showStudentDetailsModal, setShowStudentDetailsModal] = useState(false);
+  const [selectedStudentForDetails, setSelectedStudentForDetails] = useState(null);
   const [showStudentForm, setShowStudentForm] = useState(false);
   const [isSavingStudent, setIsSavingStudent] = useState(false);
-  const [attendanceSavingStudentId, setAttendanceSavingStudentId] = useState(null);
-  const [attendanceSavingType, setAttendanceSavingType] = useState('');
   const [isArchivingStudentId, setIsArchivingStudentId] = useState(null);
-  const [showDailyNoteModal, setShowDailyNoteModal] = useState(false);
-  const [selectedStudentForDailyNote, setSelectedStudentForDailyNote] = useState(null);
-  const [selectedDailyNoteChips, setSelectedDailyNoteChips] = useState([]);
-  const [dailyNoteCustomNote, setDailyNoteCustomNote] = useState('');
-  const [dailyNoteError, setDailyNoteError] = useState('');
-  const [isSavingDailyNote, setIsSavingDailyNote] = useState(false);
   const [createStudentError, setCreateStudentError] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [createStudentForm, setCreateStudentForm] = useState({
     firstName: '',
     lastName: '',
     room: '',
+    summerCampEnrolled: false,
+    beforeAfterCareEnrolled: false,
     status: 'active',
   });
   const studentAccent = OWNER_MODULE_COLORS.Students;
@@ -4168,22 +4269,15 @@ function OwnerStudentsScreen({
     { label: 'Active Students', value: 'active' },
     { label: 'Archived Students', value: 'archived' },
   ];
-  const dailyNoteChips = [
-    'Great day',
-    'Participated in activity',
-    'Ate snack',
-    'Needs extra clothes',
-    'Bring water bottle tomorrow',
-    'Rested quietly',
-  ];
-
   const loadStudents = useCallback(async () => {
     setStudentsLoading(true);
     setStudentsError('');
 
     const { data, error } = await supabase
       .from('children')
-      .select('id, first_name, last_name, room, status, profile_accent_color');
+      .select(
+        'id, first_name, last_name, room, summer_camp_enrolled, before_after_care_enrolled, status, profile_accent_color'
+      );
 
     if (error) {
       setStudentsError(error.message || 'Could not load students.');
@@ -4285,11 +4379,30 @@ function OwnerStudentsScreen({
     },
   ];
 
+  const activeStudentRows = Array.isArray(studentRows)
+    ? studentRows.filter((student) => (student.status || '').trim().toLowerCase() !== 'inactive')
+    : [];
+  const archivedStudentRows = Array.isArray(studentRows)
+    ? studentRows.filter((student) => (student.status || '').trim().toLowerCase() === 'inactive')
+    : [];
+  const summerCampStudentRows = activeStudentRows.filter((student) => Boolean(student.summer_camp_enrolled));
+  const beforeAfterCareStudentRows = activeStudentRows.filter((student) =>
+    Boolean(student.before_after_care_enrolled)
+  );
+  const bothProgramStudentRows = activeStudentRows.filter(
+    (student) => Boolean(student.summer_camp_enrolled) && Boolean(student.before_after_care_enrolled)
+  );
+
   const summaryCards = [
-    { title: 'Total Students', value: '42', accent: 'blue' },
-    { title: 'Before & After Care', value: '24', accent: 'blue' },
-    { title: 'Summer Camp', value: '31', accent: 'blue' },
-    { title: 'Both Programs', value: '13', accent: 'blue' },
+    { title: 'Active Students', value: String(activeStudentRows.length), accent: 'blue' },
+    { title: 'Summer Camp', value: String(summerCampStudentRows.length), accent: 'blue' },
+    {
+      title: 'Before & After Care',
+      value: String(beforeAfterCareStudentRows.length),
+      accent: 'blue',
+    },
+    { title: 'Both Programs', value: String(bothProgramStudentRows.length), accent: 'blue' },
+    { title: 'Archived Students', value: String(archivedStudentRows.length), accent: 'blue' },
   ];
 
   const realStudents = studentRows.map((student, index) => {
@@ -4299,16 +4412,18 @@ function OwnerStudentsScreen({
     const room = student.room?.trim() || 'Room not set';
     const status = student.status?.trim() || 'Unknown';
 
-    return {
-      id: student.id ?? `${name}-${room}-${index}`,
-      first_name: student.first_name || '',
-      last_name: student.last_name || '',
-      isRealStudent: true,
-      name,
-      room,
-      status,
-      accentColor: student.profile_accent_color || studentAccent,
-    };
+        return {
+          id: student.id ?? `${name}-${room}-${index}`,
+          first_name: student.first_name || '',
+          last_name: student.last_name || '',
+          isRealStudent: true,
+          name,
+          room,
+          summer_camp_enrolled: Boolean(student.summer_camp_enrolled),
+          before_after_care_enrolled: Boolean(student.before_after_care_enrolled),
+          status,
+          accentColor: student.profile_accent_color || studentAccent,
+        };
   });
 
   const linkedParentsByStudentId = childParentLinkRows.reduce((acc, linkRow) => {
@@ -4389,6 +4504,8 @@ function OwnerStudentsScreen({
       firstName: '',
       lastName: '',
       room: '',
+      summerCampEnrolled: false,
+      beforeAfterCareEnrolled: false,
       status: 'active',
     });
     setShowStudentForm(true);
@@ -4402,6 +4519,8 @@ function OwnerStudentsScreen({
       firstName: student.first_name?.trim() || '',
       lastName: student.last_name?.trim() || '',
       room: student.room?.trim() || '',
+      summerCampEnrolled: Boolean(student.summer_camp_enrolled),
+      beforeAfterCareEnrolled: Boolean(student.before_after_care_enrolled),
       status: student.status?.trim() || 'active',
     });
     setShowStudentForm(true);
@@ -4416,6 +4535,8 @@ function OwnerStudentsScreen({
       firstName: '',
       lastName: '',
       room: '',
+      summerCampEnrolled: false,
+      beforeAfterCareEnrolled: false,
       status: 'active',
     });
   };
@@ -4459,6 +4580,8 @@ function OwnerStudentsScreen({
     const lastName = createStudentForm.lastName.trim();
     const room = createStudentForm.room.trim();
     const status = createStudentForm.status.trim();
+    const summerCampEnrolled = Boolean(createStudentForm.summerCampEnrolled);
+    const beforeAfterCareEnrolled = Boolean(createStudentForm.beforeAfterCareEnrolled);
 
     if (!firstName || !lastName || !room || !status) {
       setCreateStudentError('Please fill in all fields.');
@@ -4477,6 +4600,8 @@ function OwnerStudentsScreen({
           first_name: firstName,
           last_name: lastName,
           room,
+          summer_camp_enrolled: summerCampEnrolled,
+          before_after_care_enrolled: beforeAfterCareEnrolled,
           status,
         })
         .eq('id', selectedStudent.id));
@@ -4485,6 +4610,8 @@ function OwnerStudentsScreen({
         first_name: firstName,
         last_name: lastName,
         room,
+        summer_camp_enrolled: summerCampEnrolled,
+        before_after_care_enrolled: beforeAfterCareEnrolled,
         status,
       }));
     }
@@ -4505,6 +4632,8 @@ function OwnerStudentsScreen({
       firstName: '',
       lastName: '',
       room: '',
+      summerCampEnrolled: false,
+      beforeAfterCareEnrolled: false,
       status: 'active',
     });
   };
@@ -4521,123 +4650,19 @@ function OwnerStudentsScreen({
     setManageOpenStudentId((current) => (current === studentId ? null : studentId));
   };
 
-  const handleViewStudentDetails = () => {
-    Alert.alert('Owner student profile coming next.');
-  };
-
-  const handleOpenDailyNote = (student) => {
-    if (!student?.id) {
+  const handleOpenStudentDetails = (student) => {
+    if (!student) {
       return;
     }
 
-    setDailyNoteError('');
-    setSelectedStudentForDailyNote(student);
-    setSelectedDailyNoteChips([]);
-    setDailyNoteCustomNote('');
-    setShowDailyNoteModal(true);
+    setSelectedStudentForDetails(student);
+    setShowStudentDetailsModal(true);
     setManageOpenStudentId(null);
   };
 
-  const handleCloseDailyNoteModal = () => {
-    setDailyNoteError('');
-    setSelectedStudentForDailyNote(null);
-    setSelectedDailyNoteChips([]);
-    setDailyNoteCustomNote('');
-    setIsSavingDailyNote(false);
-    setShowDailyNoteModal(false);
-  };
-
-  const toggleDailyNoteChip = (chip) => {
-    setSelectedDailyNoteChips((current) =>
-      current.includes(chip) ? current.filter((item) => item !== chip) : [...current, chip]
-    );
-  };
-
-  const handleSaveDailyNote = async () => {
-    if (!selectedStudentForDailyNote?.id) {
-      return;
-    }
-
-    const trimmedCustomNote = dailyNoteCustomNote.trim();
-
-    if (!selectedDailyNoteChips.length && !trimmedCustomNote) {
-      setDailyNoteError('Please add a quick note or custom note.');
-      return;
-    }
-
-    setIsSavingDailyNote(true);
-    setDailyNoteError('');
-
-    const { error } = await supabase.from('daily_notes').insert({
-      child_id: selectedStudentForDailyNote.id,
-      date: new Date().toISOString().split('T')[0],
-      quick_notes: selectedDailyNoteChips,
-      custom_note: trimmedCustomNote,
-      visibility: 'both',
-      review_status: 'approved',
-    });
-
-    if (error) {
-      setDailyNoteError(error.message || 'Could not save daily note.');
-      setIsSavingDailyNote(false);
-      return;
-    }
-
-    Alert.alert('Daily note saved.');
-    handleCloseDailyNoteModal();
-  };
-
-  const handleRecordAttendance = async (student, eventType) => {
-    if (!student?.id) {
-      return;
-    }
-
-    setManageOpenStudentId(null);
-    setAttendanceSavingStudentId(student.id);
-    setAttendanceSavingType(eventType);
-
-    const { data: latestEvents, error: latestEventError } = await supabase
-      .from('attendance_events')
-      .select('event_type, event_time')
-      .eq('child_id', student.id)
-      .order('event_time', { ascending: false })
-      .limit(1);
-
-    if (latestEventError) {
-      Alert.alert('Could not save attendance.');
-      setAttendanceSavingStudentId(null);
-      setAttendanceSavingType('');
-      return;
-    }
-
-    const latestEvent = Array.isArray(latestEvents) && latestEvents.length ? latestEvents[0] : null;
-
-    if (latestEvent?.event_type === eventType) {
-      Alert.alert(
-        eventType === 'check_in'
-          ? 'Student is already checked in.'
-          : 'Student is already checked out.'
-      );
-      setAttendanceSavingStudentId(null);
-      setAttendanceSavingType('');
-      return;
-    }
-
-    const { error } = await supabase.from('attendance_events').insert({
-      child_id: student.id,
-      event_type: eventType,
-      event_time: new Date().toISOString(),
-    });
-
-    setAttendanceSavingStudentId(null);
-    setAttendanceSavingType('');
-
-    if (error) {
-      Alert.alert('Could not save attendance.');
-      return;
-    }
-
-    Alert.alert(eventType === 'check_in' ? 'Checked in' : 'Checked out');
+  const handleCloseStudentDetails = () => {
+    setShowStudentDetailsModal(false);
+    setSelectedStudentForDetails(null);
   };
 
   const handleCloseLinkParentModal = () => {
@@ -4853,6 +4878,69 @@ function OwnerStudentsScreen({
                 style={styles.ownerSearchInput}
               />
 
+              <Text style={styles.ownerStudentFormLabel}>Program Enrollment</Text>
+              <View style={styles.ownerEnrollmentToggleGrid}>
+                {[
+                  {
+                    key: 'summerCampEnrolled',
+                    label: 'Summer Camp',
+                    helper: 'Used for summer camp eligibility',
+                  },
+                  {
+                    key: 'beforeAfterCareEnrolled',
+                    label: 'Before & After Care',
+                    helper: 'Used for Before & After Care eligibility',
+                  },
+                ].map((program) => {
+                  const isActive = Boolean(createStudentForm[program.key]);
+
+                  return (
+                    <Pressable
+                      key={program.key}
+                      accessibilityRole="button"
+                      onPress={() =>
+                        setCreateStudentForm((current) => ({
+                          ...current,
+                          [program.key]: !current[program.key],
+                        }))
+                      }
+                      style={({ pressed }) => [
+                        styles.ownerEnrollmentToggle,
+                        isActive && styles.ownerEnrollmentToggleActive,
+                        pressed && styles.pressedButton,
+                      ]}
+                    >
+                      <View style={styles.ownerEnrollmentToggleCopy}>
+                        <Text
+                          style={[
+                            styles.ownerEnrollmentToggleLabel,
+                            isActive && styles.ownerEnrollmentToggleLabelActive,
+                          ]}
+                        >
+                          {program.label}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.ownerEnrollmentToggleHelper,
+                            isActive && styles.ownerEnrollmentToggleHelperActive,
+                          ]}
+                        >
+                          {program.helper}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.ownerEnrollmentToggleState,
+                          isActive && styles.ownerEnrollmentToggleStateActive,
+                        ]}
+                      >
+                        {isActive ? 'On' : 'Off'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
               <Text style={styles.ownerStudentFormLabel}>Status</Text>
               <View style={styles.ownerFilterPillRow}>
                 {['active', 'inactive'].map((statusOption) => {
@@ -5015,77 +5103,16 @@ function OwnerStudentsScreen({
                         </View>
 
                         <View style={styles.studentActionRow}>
-                          {student.status?.trim().toLowerCase() !== 'inactive' ? (
-                            <>
-                              <Pressable
-                                accessibilityRole="button"
-                                disabled={
-                                  attendanceSavingStudentId === student.id &&
-                                  attendanceSavingType === 'check_in'
-                                }
-                                onPress={() => handleRecordAttendance(student, 'check_in')}
-                                style={({ pressed }) => [
-                                  styles.studentActionPill,
-                                  styles.studentActionPillGreen,
-                                  pressed && styles.pressedButton,
-                                  attendanceSavingStudentId === student.id &&
-                                    attendanceSavingType === 'check_in' &&
-                                    { opacity: 0.75 },
-                                ]}
-                              >
-                                <Text style={styles.ownerStudentProfileButtonText}>
-                                  {attendanceSavingStudentId === student.id &&
-                                  attendanceSavingType === 'check_in'
-                                    ? 'Checking In...'
-                                    : 'Check In'}
-                                </Text>
-                              </Pressable>
-                              <Pressable
-                                accessibilityRole="button"
-                                disabled={
-                                  attendanceSavingStudentId === student.id &&
-                                  attendanceSavingType === 'check_out'
-                                }
-                                onPress={() => handleRecordAttendance(student, 'check_out')}
-                                style={({ pressed }) => [
-                                  styles.studentActionPill,
-                                  styles.studentActionPillNavy,
-                                  pressed && styles.pressedButton,
-                                  attendanceSavingStudentId === student.id &&
-                                    attendanceSavingType === 'check_out' &&
-                                    { opacity: 0.75 },
-                                ]}
-                              >
-                                <Text style={styles.ownerStudentProfileButtonText}>
-                                  {attendanceSavingStudentId === student.id &&
-                                  attendanceSavingType === 'check_out'
-                                    ? 'Checking Out...'
-                                    : 'Check Out'}
-                                </Text>
-                              </Pressable>
-                            </>
-                          ) : null}
                           <Pressable
                             accessibilityRole="button"
-                            onPress={() => handleViewStudentDetails()}
+                            onPress={() => handleOpenStudentDetails(student)}
                             style={({ pressed }) => [
                               styles.studentActionPill,
                               styles.studentActionPillBlue,
                               pressed && styles.pressedButton,
                             ]}
-                            >
-                              <Text style={styles.ownerStudentProfileButtonText}>View Details</Text>
-                            </Pressable>
-                          <Pressable
-                            accessibilityRole="button"
-                            onPress={() => handleOpenDailyNote(student)}
-                            style={({ pressed }) => [
-                              styles.studentActionPill,
-                              styles.studentActionPillPurple,
-                              pressed && styles.pressedButton,
-                            ]}
                           >
-                            <Text style={styles.ownerStudentProfileButtonText}>Daily Note</Text>
+                            <Text style={styles.ownerStudentProfileButtonText}>View Details</Text>
                           </Pressable>
                           <Pressable
                             accessibilityRole="button"
@@ -5188,7 +5215,7 @@ function OwnerStudentsScreen({
                         <View style={styles.studentActionRow}>
                           <Pressable
                             accessibilityRole="button"
-                            onPress={() => handleViewStudentDetails()}
+                            onPress={() => handleOpenStudentDetails(student)}
                             style={({ pressed }) => [
                               styles.studentActionPill,
                               styles.studentActionPillBlue,
@@ -5323,89 +5350,101 @@ function OwnerStudentsScreen({
 
           <Modal
             animationType="fade"
-            onRequestClose={handleCloseDailyNoteModal}
+            onRequestClose={handleCloseStudentDetails}
             transparent
-            visible={showDailyNoteModal}
+            visible={showStudentDetailsModal}
           >
             <View style={styles.ownerLinkParentModalOverlay}>
               <View style={styles.ownerLinkParentModalCard}>
-                <Text style={styles.ownerLinkParentModalTitle}>Daily Note</Text>
+                <Text style={styles.ownerLinkParentModalTitle}>Student Details</Text>
                 <Text style={styles.ownerLinkParentModalSubtitle}>
-                  {selectedStudentForDailyNote ? selectedStudentForDailyNote.name : ''}
+                  {selectedStudentForDetails ? selectedStudentForDetails.name : ''}
                 </Text>
 
-                <Text style={styles.ownerStudentFormLabel}>Quick Notes</Text>
-                <View style={styles.staffDailyNotesChipWrap}>
-                  {dailyNoteChips.map((chip) => {
-                    const isActive = selectedDailyNoteChips.includes(chip);
-
-                    return (
-                      <Pressable
-                        key={chip}
-                        accessibilityRole="button"
-                        onPress={() => toggleDailyNoteChip(chip)}
-                        style={({ pressed }) => [
-                          styles.staffDailyNotesChip,
-                          isActive && styles.staffDailyNotesChipActive,
-                          pressed && styles.pressedButton,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.staffDailyNotesChipText,
-                            isActive && styles.staffDailyNotesChipTextActive,
-                          ]}
-                        >
-                          {chip}
+                <View style={styles.ownerLinkParentModalList}>
+                  <View style={styles.ownerLinkedParentsBlock}>
+                    <Text style={styles.ownerLinkedParentsLabel}>Student</Text>
+                    <Text style={styles.ownerLinkedParentsValue}>
+                      {selectedStudentForDetails?.name || 'Not available'}
+                    </Text>
+                  </View>
+                  <View style={styles.ownerLinkedParentsBlock}>
+                    <Text style={styles.ownerLinkedParentsLabel}>Room</Text>
+                    <Text style={styles.ownerLinkedParentsValue}>
+                      {selectedStudentForDetails?.room || 'Room not set'}
+                    </Text>
+                  </View>
+                  <View style={styles.ownerLinkedParentsBlock}>
+                    <Text style={styles.ownerLinkedParentsLabel}>Status</Text>
+                    <Text style={styles.ownerLinkedParentsValue}>
+                      {selectedStudentForDetails?.status || 'Status not set'}
+                    </Text>
+                  </View>
+                  <View style={styles.ownerLinkedParentsBlock}>
+                    <Text style={styles.ownerLinkedParentsLabel}>Program Enrollment</Text>
+                    <Text style={styles.ownerLinkedParentsValue}>
+                      Summer Camp: {selectedStudentForDetails?.summer_camp_enrolled ? 'Yes' : 'No'}
+                    </Text>
+                    <Text style={styles.ownerLinkedParentsValue}>
+                      Before & After Care:{' '}
+                      {selectedStudentForDetails?.before_after_care_enrolled ? 'Yes' : 'No'}
+                    </Text>
+                  </View>
+                  <View style={styles.ownerLinkedParentsBlock}>
+                    <Text style={styles.ownerLinkedParentsLabel}>Linked Parent Emails</Text>
+                    {linkedParentsByStudentId[selectedStudentForDetails?.id]?.length ? (
+                      linkedParentsByStudentId[selectedStudentForDetails.id].map((parent) => (
+                        <Text key={parent.id} style={styles.ownerLinkedParentsValue}>
+                          {parent.email}
                         </Text>
-                      </Pressable>
-                    );
-                  })}
+                      ))
+                    ) : (
+                      <Text style={styles.ownerLinkedParentsValue}>Not available</Text>
+                    )}
+                  </View>
+                  <View style={styles.ownerLinkedParentsBlock}>
+                    <Text style={styles.ownerLinkedParentsLabel}>Authorized Pickups</Text>
+                    {authorizedPickupsByStudentId[selectedStudentForDetails?.id]?.length ? (
+                      authorizedPickupsByStudentId[selectedStudentForDetails.id].map((pickup) => (
+                        <Text key={pickup.id} style={styles.ownerLinkedParentsValue}>
+                          {pickup.full_name}
+                        </Text>
+                      ))
+                    ) : (
+                      <Text style={styles.ownerLinkedParentsValue}>Not available</Text>
+                    )}
+                  </View>
+                  <View style={styles.ownerLinkedParentsBlock}>
+                    <Text style={styles.ownerLinkedParentsLabel}>Emergency Contacts</Text>
+                    {Array.isArray(selectedStudentForDetails?.emergency_contacts)
+                      ? selectedStudentForDetails.emergency_contacts.map((contact, index) => (
+                          <Text key={`${contact}-${index}`} style={styles.ownerLinkedParentsValue}>
+                            {contact}
+                          </Text>
+                        ))
+                      : Array.isArray(selectedStudentForDetails?.emergencyContacts)
+                        ? selectedStudentForDetails.emergencyContacts.map((contact, index) => (
+                            <Text key={`${contact}-${index}`} style={styles.ownerLinkedParentsValue}>
+                              {contact}
+                            </Text>
+                          ))
+                        : (
+                            <Text style={styles.ownerLinkedParentsValue}>Not available</Text>
+                          )}
+                  </View>
                 </View>
-
-                <Text style={styles.ownerStudentFormLabel}>Custom Note</Text>
-                <TextInput
-                  multiline
-                  onChangeText={setDailyNoteCustomNote}
-                  placeholder="Write a note for the parent..."
-                  placeholderTextColor={COLORS.muted}
-                  style={[styles.ownerSearchInput, styles.ownerDailyNoteInput]}
-                  textAlignVertical="top"
-                  value={dailyNoteCustomNote}
-                />
-
-                {dailyNoteError ? (
-                  <Text style={[styles.errorText, { marginTop: 12 }]}>{dailyNoteError}</Text>
-                ) : null}
 
                 <View style={styles.ownerLinkParentModalButtonRow}>
                   <Pressable
                     accessibilityRole="button"
-                    disabled={isSavingDailyNote}
-                    onPress={handleCloseDailyNoteModal}
-                    style={({ pressed }) => [
-                      styles.secondaryButton,
-                      { flex: 1, marginTop: 0 },
-                      pressed && styles.pressedButton,
-                    ]}
-                  >
-                    <Text style={styles.secondaryButtonText}>Cancel</Text>
-                  </Pressable>
-
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={isSavingDailyNote}
-                    onPress={handleSaveDailyNote}
+                    onPress={handleCloseStudentDetails}
                     style={({ pressed }) => [
                       styles.primaryButton,
                       { flex: 1, marginTop: 0 },
                       pressed && styles.pressedButton,
-                      isSavingDailyNote && { opacity: 0.75 },
                     ]}
                   >
-                    <Text style={styles.primaryButtonText}>
-                      {isSavingDailyNote ? 'Saving...' : 'Save Daily Note'}
-                    </Text>
+                    <Text style={styles.primaryButtonText}>Close</Text>
                   </Pressable>
                 </View>
               </View>
@@ -9279,7 +9318,7 @@ function OwnerReportsScreen({ onBack, onLogout }) {
   );
 }
 
-function OwnerSummerCampCheckInScreen({
+function OwnerSummerCampCheckInScreenLegacy({
   onBack,
   onLogout,
   ownerSummerCampChildren,
@@ -9571,6 +9610,359 @@ function OwnerSummerCampCheckInScreen({
                 );
               })}
             </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              styles.logoutButton,
+              pressed && styles.pressedButton,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Logout</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+void OwnerSummerCampCheckInScreenLegacy;
+
+function OwnerSummerCampCheckInScreen({
+  onBack,
+  onLogout,
+  ownerSummerCampChildren,
+  ownerSummerCampSummary,
+  ownerSummerCampGroups,
+  loading,
+  error,
+  savingChildId,
+  selectedGroupByChildId,
+  groupPickerChildId,
+  onToggleGroupPicker,
+  onSelectGroupForChild,
+  onCheckInChild,
+  successMessage,
+}) {
+  const totalAccent = OWNER_MODULE_COLORS['Camp Events'];
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [groupTotalsOpen, setGroupTotalsOpen] = useState(false);
+  const waitingChildren = ownerSummerCampChildren.filter(
+    (child) => child.checkInStatus !== 'Checked In'
+  );
+  const recentlyCheckedInChildren = [...ownerSummerCampChildren]
+    .filter((child) => child.checkInStatus === 'Checked In' && child.checkInTime)
+    .sort((a, b) => new Date(b.checkInTime || 0) - new Date(a.checkInTime || 0))
+    .slice(0, 10);
+  const campSummaryItems = [
+    { label: 'Pending', value: waitingChildren.length },
+    { label: 'Complete', value: ownerSummerCampSummary.total || 0 },
+    { label: 'Discrepancies', value: 0 },
+  ];
+  const campSummaryCards = [
+    {
+      accent: 'blue',
+      badge: 'T',
+      title: 'Total Checked In',
+      value: String(ownerSummerCampSummary.total || 0),
+      note: 'Owner access only',
+      fill: 'Live',
+    },
+    {
+      accent: 'yellow',
+      badge: 'Y',
+      title: 'Yellow Group',
+      value: String(ownerSummerCampSummary['Yellow Group'] || 0),
+      note: 'Owner checked in',
+      fill: 'Camp',
+    },
+    {
+      accent: 'orange',
+      badge: 'O',
+      title: 'Orange Group',
+      value: String(ownerSummerCampSummary['Orange Group'] || 0),
+      note: 'Owner checked in',
+      fill: 'Camp',
+    },
+    {
+      accent: 'green',
+      badge: 'G',
+      title: 'Green Group',
+      value: String(ownerSummerCampSummary['Green Group'] || 0),
+      note: 'Owner checked in',
+      fill: 'Camp',
+    },
+    {
+      accent: 'blue',
+      badge: 'B',
+      title: 'Blue Group',
+      value: String(ownerSummerCampSummary['Blue Group'] || 0),
+      note: 'Owner checked in',
+      fill: 'Camp',
+    },
+    {
+      accent: 'red',
+      badge: 'R',
+      title: 'Red Group',
+      value: String(ownerSummerCampSummary['Red Group'] || 0),
+      note: 'Owner checked in',
+      fill: 'Camp',
+    },
+    {
+      accent: 'pink',
+      badge: 'P',
+      title: 'Pink Group',
+      value: String(ownerSummerCampSummary['Pink Group'] || 0),
+      note: 'Owner checked in',
+      fill: 'Camp',
+    },
+    {
+      accent: 'purple',
+      badge: 'P',
+      title: 'Purple Group',
+      value: String(ownerSummerCampSummary['Purple Group'] || 0),
+      note: 'Owner checked in',
+      fill: 'Camp',
+    },
+  ];
+
+  return (
+    <View style={styles.parentHomePage}>
+      <ScrollView
+        stickyHeaderIndices={[0]}
+        style={styles.parentScrollArea}
+        contentContainerStyle={styles.parentHomeScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.ownerSummerCampHero}>
+          <View style={styles.childProfileHeaderRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onBack}
+              style={({ pressed }) => [
+                styles.childProfileBackButton,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <Text style={styles.childProfileBackButtonText}>Back</Text>
+            </Pressable>
+
+            <Text style={styles.childProfileHeaderLabel}>Summer Camp Check-In</Text>
+          </View>
+
+          <View style={styles.ownerSummerCampHeroMain}>
+            <View style={styles.ownerSummerCampHeroCopy}>
+              <Text style={styles.ownerDashboardEyebrow}>Advanced Education</Text>
+              <Text style={styles.shellHeroTitle}>Summer Camp Check-In</Text>
+              <Text style={styles.shellHeroSubtitle}>Owner check-in only</Text>
+              <View style={[styles.ownerAccessPill, { backgroundColor: totalAccent }]}>
+                <Text style={styles.ownerAccessPillText}>Owner Access</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.parentHomeContent}>
+          {loading ? <Text style={styles.sectionHelperText}>Loading camp check-ins...</Text> : null}
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {successMessage ? (
+            <View style={styles.ownerSummerCampSuccessBanner}>
+              <Text style={styles.ownerSummerCampSuccessBannerText}>{successMessage}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.profileCard}>
+            <View style={styles.ownerSummerCampSectionHeaderRow}>
+              <Text style={styles.ownerSummerCampSectionTitle}>Choose Child to Check In</Text>
+              <Text style={styles.ownerSummerCampSectionSubtle}>
+                {waitingChildren.length} campers waiting
+              </Text>
+            </View>
+
+            {waitingChildren.length === 0 && !loading ? (
+              <Text style={styles.ownerSummerCampEmptyState}>All campers are checked in.</Text>
+            ) : null}
+
+            <View style={styles.ownerSummerCampChildList}>
+              {waitingChildren.map((child) => {
+                const selectedGroupId = selectedGroupByChildId?.[child.id] || child.selectedGroupId;
+                const selectedGroup = ownerSummerCampGroups.find((group) => group.id === selectedGroupId);
+                const isPickerOpen = groupPickerChildId === child.id;
+                const groupLabel =
+                  child.assignedGroupName || selectedGroup?.name || child.groupName || 'Not assigned';
+
+                return (
+                  <View key={child.id} style={styles.ownerSummerCampWaitingCard}>
+                    <View style={styles.ownerSummerCampWaitingCardHeader}>
+                      <View style={styles.staffCampChildNameBlock}>
+                        <Text style={styles.staffCampChildName}>{child.name}</Text>
+                        <Text style={styles.ownerSummerCampWaitingGroupLabel}>{groupLabel}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.ownerSummerCampGroupPickerRow}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => onToggleGroupPicker(child.id)}
+                        style={({ pressed }) => [
+                          styles.ownerSummerCampGroupChangeButton,
+                          pressed && styles.pressedButton,
+                        ]}
+                      >
+                        <Text style={styles.ownerSummerCampGroupChangeButtonText}>
+                          {selectedGroup?.name ? 'Change Group' : 'Assign Group'}
+                        </Text>
+                      </Pressable>
+                    </View>
+
+                    {isPickerOpen ? (
+                      <View style={styles.ownerSummerCampGroupPickerOptions}>
+                        {ownerSummerCampGroups.map((group) => {
+                          const isSelected = selectedGroup?.id === group.id;
+
+                          return (
+                            <Pressable
+                              key={group.id}
+                              accessibilityRole="button"
+                              onPress={() => onSelectGroupForChild(child.id, group.id)}
+                              style={({ pressed }) => [
+                                styles.ownerSummerCampGroupOption,
+                                isSelected && styles.ownerSummerCampGroupOptionActive,
+                                pressed && styles.pressedButton,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.ownerSummerCampGroupOptionText,
+                                  isSelected && styles.ownerSummerCampGroupOptionTextActive,
+                                ]}
+                              >
+                                {group.name || getCampGroupDisplayName(group) || 'Unnamed Group'}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    ) : null}
+
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={savingChildId === child.id}
+                      onPress={() => onCheckInChild(child.id, child.name)}
+                      style={({ pressed }) => [
+                        styles.ownerSummerCampCheckInButton,
+                        pressed && savingChildId !== child.id && styles.pressedButton,
+                      ]}
+                    >
+                      <Text style={styles.ownerSummerCampCheckInButtonText}>
+                        {savingChildId === child.id ? 'Checking In...' : 'Check In'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.ownerSummerCampSectionHeaderRow}>
+              <Text style={styles.ownerSummerCampSectionTitle}>Recently Checked In</Text>
+              <Text style={styles.ownerSummerCampSectionSubtle}>
+                {recentlyCheckedInChildren.length} today
+              </Text>
+            </View>
+
+            {recentlyCheckedInChildren.length === 0 ? (
+              <Text style={styles.ownerSummerCampEmptyState}>No campers checked in yet.</Text>
+            ) : (
+              <View style={styles.ownerSummerCampRecentList}>
+                {recentlyCheckedInChildren.map((child) => {
+                  const groupLabel =
+                    child.assignedGroupName || child.groupName || 'No group assigned';
+
+                  return (
+                    <View key={child.id} style={styles.ownerSummerCampRecentRow}>
+                      <Text style={styles.ownerSummerCampRecentName}>✓ {child.name}</Text>
+                      <Text style={styles.ownerSummerCampRecentMeta}>
+                        {groupLabel} · {formatTime(child.checkInTime)}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.profileCard}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setSummaryOpen((current) => !current)}
+              style={({ pressed }) => [
+                styles.ownerSummerCampAccordionHeader,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <View style={styles.ownerSummerCampAccordionHeading}>
+                <Text style={styles.ownerSummerCampSectionTitle}>Camp Check-In Summary</Text>
+                <Text style={styles.ownerSummerCampSectionSubtle}>Live totals across the center</Text>
+              </View>
+              <Text style={styles.ownerAccordionChevron}>{summaryOpen ? '⌃' : '⌄'}</Text>
+            </Pressable>
+
+            {summaryOpen ? (
+              <View style={styles.ownerSummerCampAccordionContent}>
+                <View style={styles.staffCampSummaryRow}>
+                  {campSummaryItems.map((item) => (
+                    <View
+                      key={item.label}
+                      style={[styles.staffCampSummaryPill, styles.ownerSummerCampSummaryPill]}
+                    >
+                      <Text style={styles.staffCampSummaryLabel}>{item.label}</Text>
+                      <Text style={styles.staffCampSummaryValue}>{item.value}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </View>
+
+          <View style={styles.profileCard}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setGroupTotalsOpen((current) => !current)}
+              style={({ pressed }) => [
+                styles.ownerSummerCampAccordionHeader,
+                pressed && styles.pressedButton,
+              ]}
+            >
+              <View style={styles.ownerSummerCampAccordionHeading}>
+                <Text style={styles.ownerSummerCampSectionTitle}>Group Totals</Text>
+                <Text style={styles.ownerSummerCampSectionSubtle}>Checked-in campers by group</Text>
+              </View>
+              <Text style={styles.ownerAccordionChevron}>{groupTotalsOpen ? '⌃' : '⌄'}</Text>
+            </Pressable>
+
+            {groupTotalsOpen ? (
+              <View style={styles.ownerSummerCampAccordionContent}>
+                <View style={styles.ownerSectionDetailsGrid}>
+                  {campSummaryCards.map((card) => (
+                    <SummaryTile
+                      key={card.title}
+                      accent={card.accent}
+                      badge={card.badge}
+                      title={card.title}
+                      value={card.value}
+                      note={card.note}
+                      fill={card.fill}
+                    />
+                  ))}
+                </View>
+              </View>
+            ) : null}
           </View>
 
           <Pressable
@@ -11703,6 +12095,7 @@ export default function App() {
   const [ownerSummerCampLoading, setOwnerSummerCampLoading] = useState(true);
   const [ownerSummerCampError, setOwnerSummerCampError] = useState('');
   const [ownerSummerCampSavingChildId, setOwnerSummerCampSavingChildId] = useState('');
+  const [ownerSummerCampSuccessMessage, setOwnerSummerCampSuccessMessage] = useState('');
   const [ownerSummerCampGroupPickerChildId, setOwnerSummerCampGroupPickerChildId] = useState('');
   const [ownerSummerCampSelectedGroupByChildId, setOwnerSummerCampSelectedGroupByChildId] =
     useState({});
@@ -11749,6 +12142,16 @@ export default function App() {
   });
   const [ownerBeforeAfterCountsLoading, setOwnerBeforeAfterCountsLoading] = useState(true);
   const [ownerBeforeAfterCountsError, setOwnerBeforeAfterCountsError] = useState('');
+  const [ownerDashboardStats, setOwnerDashboardStats] = useState({
+    studentsPresent: 0,
+    checkedOut: 0,
+    pendingPickups: 0,
+    staffClockedIn: 0,
+    dailyNotesSubmitted: 0,
+    staffHoursPending: 0,
+    unreadMessages: 0,
+  });
+  const [ownerDashboardActivityFeed, setOwnerDashboardActivityFeed] = useState([]);
   const [ownerMessagesExpandedId, setOwnerMessagesExpandedId] = useState(null);
   const [authorizedPickupRows, setAuthorizedPickupRows] = useState([]);
   const [authorizedPickupRowsLoading, setAuthorizedPickupRowsLoading] = useState(true);
@@ -12354,6 +12757,250 @@ export default function App() {
     }
   }, [session?.user?.id]);
 
+  const loadOwnerDashboardData = useCallback(async () => {
+    if (!session?.user?.id) {
+      setOwnerDashboardStats({
+        studentsPresent: 0,
+        checkedOut: 0,
+        pendingPickups: 0,
+        staffClockedIn: 0,
+        dailyNotesSubmitted: 0,
+        staffHoursPending: 0,
+        unreadMessages: 0,
+      });
+      setOwnerDashboardActivityFeed([]);
+      return;
+    }
+
+    try {
+      const today = new Date();
+      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError || !profile || profile.role !== 'owner') {
+        setOwnerDashboardStats({
+          studentsPresent: 0,
+          checkedOut: 0,
+          pendingPickups: 0,
+          staffClockedIn: 0,
+          dailyNotesSubmitted: 0,
+          staffHoursPending: 0,
+          unreadMessages: 0,
+        });
+        setOwnerDashboardActivityFeed([]);
+        return;
+      }
+
+      const [
+        attendanceResult,
+        childResult,
+        staffProfilesResult,
+        staffEntriesResult,
+        notesResult,
+        unreadMessagesResult,
+        messagesResult,
+      ] = await Promise.all([
+        supabase.from('attendance_events').select('*'),
+        supabase.from('children').select('id, first_name, last_name'),
+        supabase.from('profiles').select('id, first_name, last_name, email, role').eq('role', 'staff'),
+        supabase.from('staff_time_entries').select('*').order('created_at', { ascending: false }),
+        supabase
+          .from('daily_notes')
+          .select('id, child_id, created_at, review_status')
+          .order('created_at', { ascending: false }),
+        supabase.from('message_recipients').select('id, read_at'),
+        supabase.from('messages').select('id, title, created_at').order('created_at', { ascending: false }),
+      ]);
+
+      if (attendanceResult.error) throw attendanceResult.error;
+      if (childResult.error) throw childResult.error;
+      if (staffProfilesResult.error) throw staffProfilesResult.error;
+      if (staffEntriesResult.error) throw staffEntriesResult.error;
+      if (notesResult.error) throw notesResult.error;
+      if (unreadMessagesResult.error) throw unreadMessagesResult.error;
+      if (messagesResult.error) throw messagesResult.error;
+
+      const attendanceRows = Array.isArray(attendanceResult.data) ? attendanceResult.data : [];
+      const childRows = Array.isArray(childResult.data) ? childResult.data : [];
+      const staffProfiles = Array.isArray(staffProfilesResult.data) ? staffProfilesResult.data : [];
+      const staffEntries = Array.isArray(staffEntriesResult.data) ? staffEntriesResult.data : [];
+      const dailyNotesRows = Array.isArray(notesResult.data) ? notesResult.data : [];
+      const unreadMessageRows = Array.isArray(unreadMessagesResult.data)
+        ? unreadMessagesResult.data
+        : [];
+      const messageRows = Array.isArray(messagesResult.data) ? messagesResult.data : [];
+
+      const childMap = new Map(
+        childRows.map((child) => [
+          child.id,
+          `${child.first_name || ''} ${child.last_name || ''}`.trim() || 'Unnamed Student',
+        ])
+      );
+      const staffMap = new Map(
+        staffProfiles.map((staff) => [
+          staff.id,
+          getStaffDisplayName(staff) || staff.email || 'Staff member',
+        ])
+      );
+
+      const attendanceToday = attendanceRows.filter((event) => {
+        const eventTime = new Date(
+          event.checked_in_at || event.checked_out_at || event.created_at || 0
+        );
+        return eventTime >= startOfToday;
+      });
+
+      const latestAttendanceByChildId = attendanceToday.reduce((acc, event) => {
+        const childId = event.child_id;
+        const eventTime = new Date(
+          event.checked_in_at || event.checked_out_at || event.created_at || 0
+        ).getTime();
+
+        if (!childId || Number.isNaN(eventTime)) {
+          return acc;
+        }
+
+        if (!acc[childId] || eventTime > acc[childId].eventTime) {
+          acc[childId] = { row: event, eventTime };
+        }
+
+        return acc;
+      }, {});
+
+      const attendanceStateRows = Object.values(latestAttendanceByChildId).map((item) => item.row);
+      const studentsPresent = attendanceStateRows.filter((event) =>
+        String(event.event_type || event.status || '').toLowerCase().includes('check_in')
+      ).length;
+      const checkedOut = attendanceStateRows.filter((event) =>
+        String(event.event_type || event.status || '').toLowerCase().includes('check_out')
+      ).length;
+      const pendingPickups = attendanceStateRows.filter((event) =>
+        String(event.event_type || event.status || '').toLowerCase().includes('pending')
+      ).length;
+
+      const latestStaffEntryByProfileId = staffEntries.reduce((acc, entry) => {
+        const staffId = entry.staff_profile_id;
+        const entryTime = new Date(entry.created_at || entry.clock_in || 0).getTime();
+
+        if (!staffId || Number.isNaN(entryTime)) {
+          return acc;
+        }
+
+        if (!acc[staffId] || entryTime > acc[staffId].entryTime) {
+          acc[staffId] = { row: entry, entryTime };
+        }
+
+        return acc;
+      }, {});
+
+      const staffClockedIn = Object.values(latestStaffEntryByProfileId).filter(
+        (item) => item.row?.status === 'clocked_in'
+      ).length;
+      const staffHoursPending = staffEntries.filter(
+        (entry) => entry.review_status === 'pending'
+      ).length;
+
+      const dailyNotesToday = dailyNotesRows.filter((note) => {
+        const createdAt = new Date(note.created_at || 0);
+        return createdAt >= startOfToday;
+      });
+      const dailyNotesSubmitted = dailyNotesToday.length;
+      const unreadMessages = unreadMessageRows.filter((row) => !row.read_at).length;
+
+      const attendanceActivity = attendanceToday.map((event) => {
+        const eventTimestamp = event.checked_in_at || event.checked_out_at || event.created_at;
+        const eventType = String(event.event_type || event.status || '').toLowerCase();
+        const childName = childMap.get(event.child_id) || 'A child';
+        const text = eventType.includes('check_out')
+          ? `${childName} checked out.`
+          : `${childName} checked in.`;
+
+        return {
+          id: `attendance-${event.id}`,
+          timeValue: new Date(eventTimestamp || 0).getTime(),
+          time: formatTime(eventTimestamp),
+          text,
+          color: eventType.includes('check_out') ? COLORS.warning : COLORS.success,
+        };
+      });
+
+      const dailyNotesActivity = dailyNotesToday.map((note) => ({
+        id: `daily-note-${note.id}`,
+        timeValue: new Date(note.created_at || 0).getTime(),
+        time: formatTime(note.created_at),
+        text: `${childMap.get(note.child_id) || 'A child'} daily note submitted.`,
+        color: '#7C4DFF',
+      }));
+
+      const staffActivity = staffEntries
+        .filter((entry) => {
+          const createdAt = new Date(entry.created_at || entry.clock_in || 0);
+          return createdAt >= startOfToday;
+        })
+        .map((entry) => ({
+          id: `staff-entry-${entry.id}`,
+          timeValue: new Date(entry.created_at || entry.clock_in || 0).getTime(),
+          time: formatTime(entry.clock_in || entry.clock_out || entry.created_at),
+          text: `${
+            staffMap.get(entry.staff_profile_id) || 'Staff member'
+          } ${entry.status === 'clocked_in' ? 'clocked in.' : 'clocked out.'}`,
+          color: entry.status === 'clocked_in' ? COLORS.blue : COLORS.warning,
+        }));
+
+      const messageActivity = messageRows
+        .filter((message) => {
+          const createdAt = new Date(message.created_at || 0);
+          return createdAt >= startOfToday;
+        })
+        .map((message) => ({
+          id: `message-${message.id}`,
+          timeValue: new Date(message.created_at || 0).getTime(),
+          time: formatTime(message.created_at),
+          text: message.title ? `Message sent: ${message.title}` : 'Message sent.',
+          color: COLORS.blue,
+        }));
+
+      const nextActivityFeed = [
+        ...attendanceActivity,
+        ...dailyNotesActivity,
+        ...staffActivity,
+        ...messageActivity,
+      ]
+        .filter((item) => Number.isFinite(item.timeValue))
+        .sort((a, b) => b.timeValue - a.timeValue)
+        .slice(0, 5)
+        .map(({ id, time, text, color }) => ({ id, time, text, color }));
+
+      setOwnerDashboardStats({
+        studentsPresent,
+        checkedOut,
+        pendingPickups,
+        staffClockedIn,
+        dailyNotesSubmitted,
+        staffHoursPending,
+        unreadMessages,
+      });
+      setOwnerDashboardActivityFeed(nextActivityFeed);
+    } catch (loadError) {
+      console.log('Owner dashboard data load error', loadError);
+      setOwnerDashboardStats({
+        studentsPresent: 0,
+        checkedOut: 0,
+        pendingPickups: 0,
+        staffClockedIn: 0,
+        dailyNotesSubmitted: 0,
+        staffHoursPending: 0,
+        unreadMessages: 0,
+      });
+      setOwnerDashboardActivityFeed([]);
+    }
+  }, [session?.user?.id]);
+
   const loadOwnerSummerCampData = useCallback(async () => {
     if (!session?.user?.id) {
       setOwnerSummerCampChildren([]);
@@ -12391,7 +13038,9 @@ export default function App() {
       const [childrenResponse, groupsResponse, sessionsResponse] = await Promise.all([
         supabase
           .from('children')
-          .select('id, first_name, last_name, room, profile_accent_color, status')
+          .select(
+            'id, first_name, last_name, room, summer_camp_enrolled, before_after_care_enrolled, profile_accent_color, status'
+          )
           .eq('status', 'active'),
         supabase.from('camp_groups').select('*'),
         supabase
@@ -12814,7 +13463,9 @@ export default function App() {
       const today = new Date().toISOString().split('T')[0];
       const { data: childRows, error: childError } = await supabase
         .from('children')
-        .select('id, first_name, last_name, room, status, profile_accent_color')
+        .select(
+          'id, first_name, last_name, room, summer_camp_enrolled, before_after_care_enrolled, status, profile_accent_color'
+        )
         .eq('status', 'active')
         .order('first_name', { ascending: true });
 
@@ -13357,6 +14008,7 @@ export default function App() {
     loadRecipientMessages();
     loadAuthorizedPickupRows();
     loadOwnerBeforeAfterCounts();
+    loadOwnerDashboardData();
     loadOwnerSummerCampData();
     loadStaffSummerCampData();
     loadStaffBeforeAfterData();
@@ -13369,6 +14021,7 @@ export default function App() {
     loadChildProfilePickups,
     loadOwnerDailyNotesReview,
     loadOwnerBeforeAfterCounts,
+    loadOwnerDashboardData,
     loadOwnerSummerCampData,
     loadStaffSummerCampData,
     loadParentAttendanceHistory,
@@ -13377,6 +14030,28 @@ export default function App() {
     loadParentTimeline,
     loadRecipientMessages,
   ]);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (screen === 'owner-home') {
+      loadOwnerDashboardData();
+    }
+  }, [authLoading, loadOwnerDashboardData, screen]);
+
+  useEffect(() => {
+    if (!ownerSummerCampSuccessMessage) {
+      return undefined;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setOwnerSummerCampSuccessMessage('');
+    }, 2500);
+
+    return () => clearTimeout(timeoutId);
+  }, [ownerSummerCampSuccessMessage]);
 
   useEffect(() => {
     if (authLoading) {
@@ -13517,11 +14192,22 @@ export default function App() {
     setOwnerSummerCampLoading(true);
     setOwnerSummerCampError('');
     setOwnerSummerCampSavingChildId('');
+    setOwnerSummerCampSuccessMessage('');
     setOwnerSummerCampGroupPickerChildId('');
     setOwnerSummerCampSelectedGroupByChildId({});
     setStaffSummerCampSelectedGroup('Blue Group');
     setStaffSummerCampOwnerStatus({});
     setOwnerSummerCampSummary(OWNER_SUMMER_CAMP_INITIAL_SUMMARY);
+    setOwnerDashboardStats({
+      studentsPresent: 0,
+      checkedOut: 0,
+      pendingPickups: 0,
+      staffClockedIn: 0,
+      dailyNotesSubmitted: 0,
+      staffHoursPending: 0,
+      unreadMessages: 0,
+    });
+    setOwnerDashboardActivityFeed([]);
     setStaffDailyNotesSavedEntries([]);
     setOwnerStaffRows([]);
     setOwnerStaffLoading(true);
@@ -14104,13 +14790,53 @@ export default function App() {
         return;
       }
 
-      await loadOwnerSummerCampData();
+      const selectedGroup = ownerSummerCampGroups.find((group) => group.id === selectedGroupId) || null;
+      const assignedGroupName =
+        getCampGroupDisplayName(selectedGroup) || selectedGroup?.name || child.assignedGroupName || '';
+
+      setOwnerSummerCampChildren((current) =>
+        current.map((entry) =>
+          entry.id === childId
+            ? {
+                ...entry,
+                status: 'Checked In',
+                checkInStatus: 'Checked In',
+                checkInTime: now,
+                lastUpdateTime: now,
+                campCheckInStatus: 'Checked In',
+                selectedGroupId,
+                assignedGroupName,
+                sessionRow: {
+                  ...(entry.sessionRow || {}),
+                  child_id: childId,
+                  camp_group_id: selectedGroupId,
+                  checked_in_at: now,
+                  date: today,
+                  status: 'checked_in',
+                  camp_group: selectedGroup,
+                },
+              }
+            : entry
+        )
+      );
+      setOwnerSummerCampSummary((current) => {
+        const next = { ...current, total: Number(current.total || 0) + 1 };
+
+        if (assignedGroupName && Object.prototype.hasOwnProperty.call(next, assignedGroupName)) {
+          next[assignedGroupName] = Number(next[assignedGroupName] || 0) + 1;
+        }
+
+        return next;
+      });
+      setOwnerSummerCampGroupPickerChildId((current) => (current === childId ? '' : current));
       setOwnerSummerCampSavingChildId('');
-      Alert.alert(`${childName} checked into camp.`);
+      setOwnerSummerCampSuccessMessage(`${childName} checked in.`);
+      loadOwnerSummerCampData();
     },
     [
       loadOwnerSummerCampData,
       ownerSummerCampChildren,
+      ownerSummerCampGroups,
       ownerSummerCampSavingChildId,
       ownerSummerCampSelectedGroupByChildId,
     ]
@@ -14961,7 +15687,18 @@ export default function App() {
                   </View>
                 </View>
                 <View style={styles.profileList}>
-                  {CHILD_PROFILE.programEnrollment.map((item) => (
+                  {[
+                    {
+                      label: 'Summer Camp',
+                      value: getEnrollmentLabel(childProfileSelectedChild?.summer_camp_enrolled),
+                    },
+                    {
+                      label: 'Before & After Care',
+                      value: getEnrollmentLabel(
+                        childProfileSelectedChild?.before_after_care_enrolled
+                      ),
+                    },
+                  ].map((item) => (
                     <View key={item.label} style={styles.profileListRow}>
                       <View
                         style={[
@@ -15309,6 +16046,7 @@ export default function App() {
           loading={ownerSummerCampLoading}
           error={ownerSummerCampError}
           savingChildId={ownerSummerCampSavingChildId}
+          successMessage={ownerSummerCampSuccessMessage}
           selectedGroupByChildId={ownerSummerCampSelectedGroupByChildId}
           groupPickerChildId={ownerSummerCampGroupPickerChildId}
           onToggleGroupPicker={handleToggleOwnerSummerCampGroupPicker}
@@ -15343,6 +16081,9 @@ export default function App() {
           ownerBeforeAfterCounts={ownerBeforeAfterCounts}
           ownerBeforeAfterCountsLoading={ownerBeforeAfterCountsLoading}
           ownerBeforeAfterCountsError={ownerBeforeAfterCountsError}
+          ownerSummerCampChildren={ownerSummerCampChildren}
+          ownerDashboardStats={ownerDashboardStats}
+          ownerDashboardActivityFeed={ownerDashboardActivityFeed}
         />
       )}
     </SafeAreaView>
@@ -17419,6 +18160,209 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
   },
+  ownerSummerCampSuccessBanner: {
+    backgroundColor: COLORS.softGreen,
+    borderColor: '#BBF7D0',
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  ownerSummerCampSuccessBannerText: {
+    color: COLORS.success,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  ownerSummerCampSectionHeaderRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  ownerSummerCampSectionTitle: {
+    color: COLORS.text,
+    flexGrow: 1,
+    flexShrink: 1,
+    fontSize: 19,
+    fontWeight: '900',
+    minWidth: 160,
+  },
+  ownerSummerCampSectionSubtle: {
+    color: COLORS.blue,
+    flexShrink: 1,
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+    textAlign: 'right',
+  },
+  ownerSummerCampEmptyState: {
+    color: COLORS.muted,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  ownerSummerCampWaitingCard: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 14,
+  },
+  ownerSummerCampWaitingCardHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  ownerSummerCampWaitingGroupLabel: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  ownerSummerCampGroupChangeButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.lightBlue,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  ownerSummerCampGroupChangeButtonText: {
+    color: COLORS.blue,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  ownerSummerCampCheckInButton: {
+    alignItems: 'center',
+    backgroundColor: '#14B8A6',
+    borderRadius: 20,
+    justifyContent: 'center',
+    marginTop: 12,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  ownerSummerCampCheckInButtonText: {
+    color: COLORS.white,
+    fontSize: 15,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  ownerSummerCampRecentList: {
+    gap: 10,
+  },
+  ownerSummerCampRecentRow: {
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  ownerSummerCampRecentName: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  ownerSummerCampRecentMeta: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  ownerSummerCampAccordionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  ownerSummerCampAccordionHeading: {
+    flex: 1,
+    minWidth: 0,
+  },
+  ownerSummerCampAccordionContent: {
+    marginTop: 14,
+  },
+  ownerSummerCampSummaryPill: {
+    backgroundColor: '#E6FFFB',
+  },
+  ownerCommandCenterCard: {
+    backgroundColor: '#FFF1F2',
+    borderColor: '#FCA5A5',
+    borderRadius: 28,
+    borderWidth: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    shadowColor: '#7F1D1D',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 3,
+  },
+  ownerCommandCenterHeader: {
+    gap: 4,
+  },
+  ownerCommandCenterTitle: {
+    color: '#991B1B',
+    fontSize: 22,
+    fontWeight: '900',
+    lineHeight: 28,
+  },
+  ownerCommandCenterSubtitle: {
+    color: '#B42318',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  ownerCommandCenterStatsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 16,
+  },
+  ownerCommandCenterStatCard: {
+    backgroundColor: COLORS.white,
+    borderColor: '#FECACA',
+    borderRadius: 18,
+    borderWidth: 1,
+    flexGrow: 1,
+    minWidth: 92,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  ownerCommandCenterStatLabel: {
+    color: '#B42318',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  ownerCommandCenterStatValue: {
+    color: '#991B1B',
+    fontSize: 22,
+    fontWeight: '900',
+    lineHeight: 26,
+    marginTop: 6,
+  },
+  ownerCommandCenterButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.danger,
+    borderRadius: 999,
+    justifyContent: 'center',
+    marginTop: 16,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  ownerCommandCenterButtonText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+    textAlign: 'center',
+  },
   ownerSummerCampChildList: {
     gap: 12,
   },
@@ -17627,6 +18571,9 @@ const styles = StyleSheet.create({
   ownerQuickActionsList: {
     gap: 12,
   },
+  ownerQuickActionsVisibleList: {
+    marginTop: 14,
+  },
   ownerNavCard: {
     alignItems: 'center',
     backgroundColor: COLORS.white,
@@ -17759,6 +18706,56 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: 12,
     marginBottom: 8,
+  },
+  ownerEnrollmentToggleGrid: {
+    gap: 10,
+    marginTop: 2,
+  },
+  ownerEnrollmentToggle: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  ownerEnrollmentToggleActive: {
+    backgroundColor: COLORS.softBlue,
+    borderColor: '#B5CCFF',
+  },
+  ownerEnrollmentToggleCopy: {
+    flex: 1,
+  },
+  ownerEnrollmentToggleLabel: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  ownerEnrollmentToggleLabelActive: {
+    color: COLORS.blue,
+  },
+  ownerEnrollmentToggleHelper: {
+    color: COLORS.muted,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+  ownerEnrollmentToggleHelperActive: {
+    color: COLORS.blue,
+  },
+  ownerEnrollmentToggleState: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  ownerEnrollmentToggleStateActive: {
+    color: COLORS.blue,
   },
   ownerStudentCard: {
     backgroundColor: COLORS.background,
